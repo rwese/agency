@@ -103,13 +103,31 @@ class MockAgent:
 
 def main():
     parser = argparse.ArgumentParser(description="Mock Agent for Testing")
-    parser.add_argument("--memory-file", required=True, help="Path to memory file")
+    parser.add_argument("--memory-file", help="Path to memory file")
+    parser.add_argument("--session-dir", help="Session directory for memory")
     parser.add_argument("--source-dir", default=".", help="Source directory (unused)")
     parser.add_argument("--storage-dir", default=".", help="Storage directory (unused)")
 
     args = parser.parse_args()
 
-    agent = MockAgent(args.memory_file)
+    # Determine memory file location
+    if args.memory_file:
+        memory_file = args.memory_file
+    elif args.session_dir:
+        session_path = Path(args.session_dir)
+        # Find the session script to extract agent name
+        sessions = list(session_path.glob("agency-*.sh"))
+        if sessions:
+            import re
+            match = re.search(r"agency-([a-z-]+)-", sessions[0].name)
+            agent_name = match.group(1) if match else "mock"
+        else:
+            agent_name = "mock"
+        memory_file = session_path / f"{agent_name}.md"
+    else:
+        parser.error("Either --memory-file or --session-dir is required")
+
+    agent = MockAgent(memory_file)
     agent.run()
 
 

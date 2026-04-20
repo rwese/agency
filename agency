@@ -277,11 +277,8 @@ cmd_send() {
     return 1
   fi
 
-  # Escape special characters for tmux send-keys
-  local escaped
-  escaped="$(printf '%s' "$msg" | sed "s/'/\\\\'/g")"
-
-  tmux send-keys -t "$sess" "$escaped" Enter
+  # Send message - use send-keys with quoted string
+  tmux send-keys -t "$sess" "$msg" Enter
   log_info "Sent message to $sess"
 }
 
