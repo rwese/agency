@@ -15,3 +15,6 @@
 - [x] 13. Add shfmt config (included in .editorconfig)
 - [x] 14. Add shell completion (bash)
 - [x] 15. Add README
+- [x] 16. Add mock agent for testing
+- [x] 17. Add test suite
+- [x] 18. High-entropy session naming (wordlist-based)

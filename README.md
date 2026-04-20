@@ -54,16 +54,16 @@ agency start coder
 agency start coder --dir ~/projects/myapp
 
 # Send a message to a running agent
-agency send coder-20260420-1430 "Fix the authentication bug"
+agency send coder dark-wolf "Fix the authentication bug"
 
 # List running sessions
 agency list
 
 # Graceful shutdown (sends shutdown prompt, waits up to 30s)
-agency stop coder-20260420-1430
+agency stop coder dark-wolf
 
 # Force kill
-agency kill coder-20260420-1430
+agency kill coder dark-wolf
 agency kill-all
 ```
 
@@ -81,13 +81,13 @@ agency kill-all
 
 ## Session Names
 
-Sessions are named: `{prefix}{agent-name}-{timestamp}`
+Sessions are named: `{prefix}{agent-name}-{word1}-{word2}`
 
-Example: `agency-coder-20260420-1430`
+Example: `agency-coder-dark-wolf`
 
 - Prefix: `agency-`
 - Agent name: from config
-- Timestamp: `YYYYMMDD-HHMM`
+- Word pair: high-entropy 1-token words (59 words, 3481 combinations)
 
 ## Requirements
 
