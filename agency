@@ -219,34 +219,44 @@ cmd_start() {
   fi
 
   # Load config fields
-  local mem_file src_dir stor_dir work_dir
-  mem_file="$(load_config "$agent_name" "memory_file")" || return 1
-  src_dir="$(load_config "$agent_name" "source_dir")" || return 1
-  stor_dir="$(load_config "$agent_name" "storage_dir")" || return 1
+  local personality work_dir
+  personality="$(load_config "$agent_name" "personality")" || true
   work_dir="$(get_agent_dir "$cfg" "$override_dir")"
 
   # Expand tildes
-  mem_file="${mem_file/#\~/$HOME}"
-  src_dir="${src_dir/#\~/$HOME}"
-  stor_dir="${stor_dir/#\~/$HOME}"
   work_dir="${work_dir/#\~/$HOME}"
 
-  # Ensure directories exist
-  mkdir -p "$(dirname "$mem_file")" "$src_dir" "$stor_dir" "$work_dir"
+  # Ensure working directory exists
+  mkdir -p "$work_dir"
 
   # Generate session name
   local sess_name
   sess_name="$(make_session_name "$agent_name")"
 
-  # Build the agent command with config
+  # Build the agent command
   local agent_bin
   agent_bin="$(get_agent_cmd)"
-  local agent_cmd
-  agent_cmd="$agent_bin --memory-file '$mem_file' --source-dir '$src_dir' --storage-dir '$stor_dir'"
+  
+  # Build pi command with session dir and optional personality
+  # Use a temp script to avoid shell escaping issues with personality text
+  local -r agent_script="$AGENCY_DIR/sessions/${sess_name}.sh"
+  mkdir -p "$(dirname "$agent_script")"
+  
+  {
+    echo '#!/bin/bash'
+    if [[ -n "$personality" ]]; then
+      # Escape double quotes for safe embedding
+      local escaped="${personality//\"/\\\"}"
+      echo "exec $agent_bin --session-dir '$AGENCY_DIR/sessions' --append-system-prompt \\\"$escaped\\\"" 
+    else
+      echo "exec $agent_bin --session-dir '$AGENCY_DIR/sessions'"
+    fi
+  } > "$agent_script"
+  chmod +x "$agent_script"
 
   # Create session and run agent with graceful stop handler
   tmux new-session -d -s "$sess_name" -c "$work_dir" \
-    "trap 'echo \"$SHUTDOWN_MESSAGE\"' SIGTERM SIGINT; eval $agent_cmd"
+    "trap 'echo \"$SHUTDOWN_MESSAGE\"' SIGTERM SIGINT; $agent_script"
 
   log_info "Started session: $sess_name"
   printf '%s' "$sess_name"
