@@ -1,0 +1,384 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC1090,SC2086,SC2164,SC2317
+
+set -euo pipefail
+
+# -------------------------------------------------------------------
+# Agency - AI Agent Session Manager
+#
+# A simple tmux-based session manager for AI agents.
+# Each agent runs in an isolated tmux session with persistent memory.
+# -------------------------------------------------------------------
+
+# Constants
+readonly AGENCY_VERSION="0.1.0"
+readonly AGENCY_DIR="${XDG_CONFIG_HOME:-$HOME/.config/agency}"
+readonly AGENTS_DIR="$AGENCY_DIR/agents"
+readonly SESSION_PREFIX="agency-"
+
+# Graceful shutdown message sent to agents
+readonly SHUTDOWN_MESSAGE="Please wrap up, save your memories to your memory file, then exit gracefully. Say 'Goodbye' when done."
+
+# Graceful stop timeout (seconds)
+readonly STOP_TIMEOUT=30
+
+# -------------------------------------------------------------------
+# Usage
+# -------------------------------------------------------------------
+
+usage() {
+  cat <<EOF
+Agency - AI Agent Session Manager v$AGENCY_VERSION
+
+USAGE:
+  agency <command> [arguments]
+
+COMMANDS:
+  init                   Create config skeleton in $AGENCY_DIR
+  start <name> [--dir <path>]
+                          Start an agent named <name>
+                          Optionally specify working directory
+  send <session> <msg>   Send a message to <session>
+  list                   List all running agency sessions
+  stop <session>         Gracefully stop <session> (waits up to 30s)
+  kill <session>         Force kill <session>
+  kill-all               Kill all agency sessions
+  help                   Show this help message
+  version                Show version
+
+EXAMPLES:
+  agency init
+  agency start coder --dir ~/projects/myapp
+  agency send coder-20260420-1430 "Fix the authentication bug"
+  agency list
+  agency stop coder-20260420-1430
+  agency kill-all
+
+EOF
+}
+
+# -------------------------------------------------------------------
+# Helpers
+# -------------------------------------------------------------------
+
+log_info() {
+  printf '[INFO] %s\n' "$*"
+}
+
+log_error() {
+  printf '[ERROR] %s\n' "$*" >&2
+}
+
+# Generate session name: {prefix}{name}-{timestamp}
+make_session_name() {
+  local -r name="$1"
+  local -r timestamp
+  timestamp="$(date +'%Y%m%d-%H%M')"
+  printf '%s%s-%s' "$SESSION_PREFIX" "$name" "$timestamp"
+}
+
+# Check if a tmux session exists
+session_exists() {
+  local -r session="$1"
+  tmux has-session -t "$session" 2>/dev/null
+}
+
+# Get working directory from config or default
+get_agent_dir() {
+  local -r config_path="$1"
+  local -r override_dir="${2:-}"
+
+  if [[ -n "$override_dir" ]]; then
+    printf '%s' "$override_dir"
+  elif [[ -f "$config_path" ]] && command -v yq >/dev/null 2>&1; then
+    yq -r '.working_dir // .dir // empty' "$config_path" 2>/dev/null || printf '%s' "$HOME"
+  else
+    printf '%s' "$HOME"
+  fi
+}
+
+# Load agent config and extract field
+load_config() {
+  local -r agent_name="$1"
+  local -r field="$2"
+  local -r config_path="$AGENTS_DIR/${agent_name}.yaml"
+
+  if [[ ! -f "$config_path" ]]; then
+    log_error "Config not found: $config_path"
+    return 1
+  fi
+
+  if command -v yq >/dev/null 2>&1; then
+    yq -r ".$field // empty" "$config_path" 2>/dev/null
+  else
+    # Fallback: simple grep-based extraction
+    grep "^${field}:" "$config_path" 2>/dev/null | cut -d':' -f2- | sed 's/^ *//'
+  fi
+}
+
+# Wait for session to exit with timeout
+wait_for_exit() {
+  local -r session="$1"
+  local -r timeout="$2"
+  local -r interval=2
+  local elapsed=0
+
+  while ((elapsed < timeout)); do
+    if ! session_exists "$session"; then
+      return 0
+    fi
+    sleep "$interval"
+    elapsed=$((elapsed + interval))
+  done
+
+  return 1
+}
+
+# -------------------------------------------------------------------
+# Commands
+# -------------------------------------------------------------------
+
+cmd_init() {
+  log_info "Initializing agency config in $AGENCY_DIR"
+
+  mkdir -p "$AGENTS_DIR"
+
+  local -r example_config="$AGENTS_DIR/example.yaml"
+  cat > "$example_config" <<'EOF'
+name: example
+memory_file: ~/.agency/memory/example.md
+source_dir: ~/.agency/agents/example
+storage_dir: ~/.agency/storage/example
+working_dir: ~
+EOF
+
+  mkdir -p \
+    "$HOME/.agency/memory/example" \
+    "$HOME/.agency/storage/example"
+
+  log_info "Created example config: $example_config"
+  log_info "Edit the config and run: agency start example"
+}
+
+cmd_start() {
+  local agent_name=""
+  local override_dir="$HOME"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dir)
+        override_dir="$2"
+        shift 2
+        ;;
+      *)
+        agent_name="$1"
+        shift
+        ;;
+    esac
+  done
+
+  if [[ -z "$agent_name" ]]; then
+    log_error "Agent name required"
+    log_error "Usage: agency start <name> [--dir <path>]"
+    return 1
+  fi
+
+  local -r config_path="$AGENTS_DIR/${agent_name}.yaml"
+
+  if [[ ! -f "$config_path" ]]; then
+    log_error "Config not found: $config_path"
+    log_error "Run 'agency init' first or create $config_path"
+    return 1
+  fi
+
+  # Load config fields
+  local memory_file source_dir storage_dir working_dir
+  memory_file="$(load_config "$agent_name" "memory_file")" || return 1
+  source_dir="$(load_config "$agent_name" "source_dir")" || return 1
+  storage_dir="$(load_config "$agent_name" "storage_dir")" || return 1
+  working_dir="$(get_agent_dir "$config_path" "$override_dir")"
+
+  # Expand tildes
+  memory_file="${memory_file/#\~/$HOME}"
+  source_dir="${source_dir/#\~/$HOME}"
+  storage_dir="${storage_dir/#\~/$HOME}"
+  working_dir="${working_dir/#\~/$HOME}"
+
+  # Ensure directories exist
+  mkdir -p "$(dirname "$memory_file")" "$source_dir" "$storage_dir" "$working_dir"
+
+  # Generate session name
+  local -r session
+  session="$(make_session_name "$agent_name")"
+
+  # Build the pi command with agent config
+  local -r pi_cmd="pi --memory-file $memory_file --source-dir $source_dir --storage-dir $storage_dir"
+
+  # Create session and run pi with graceful stop handler
+  tmux new-session -d -s "$session" -c "$working_dir" \
+    "trap 'echo \"$SHUTDOWN_MESSAGE\"' SIGTERM SIGINT; $pi_cmd"
+
+  log_info "Started session: $session"
+  printf '%s\n' "$session"
+}
+
+cmd_send() {
+  local session="$1"
+  local message="$2"
+
+  if [[ -z "$session" ]] || [[ -z "$message" ]]; then
+    log_error "Session and message required"
+    log_error "Usage: agency send <session> <message>"
+    return 1
+  fi
+
+  if ! session_exists "$session"; then
+    log_error "Session not found: $session"
+    return 1
+  fi
+
+  # Escape special characters for tmux send-keys
+  local escaped
+  escaped="$(printf '%s' "$message" | sed "s/'/\\\\'/g")"
+
+  tmux send-keys -t "$session" "$escaped" Enter
+  log_info "Sent message to $session"
+}
+
+cmd_list() {
+  local session agent status
+  while IFS= read -r session; do
+    # Extract agent name from session (remove prefix and timestamp)
+    agent="${session#"$SESSION_PREFIX"}"
+    agent="${agent%-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9]}"
+
+    if session_exists "$session"; then
+      status="running"
+    else
+      status="exited"
+    fi
+
+    printf '%-22s %-15s %s\n' "$session" "$agent" "$status"
+  done < <(tmux list-sessions -F "#S" 2>/dev/null | grep "^$SESSION_PREFIX" || true)
+}
+
+cmd_stop() {
+  local -r session="$1"
+
+  if [[ -z "$session" ]]; then
+    log_error "Session required"
+    log_error "Usage: agency stop <session>"
+    return 1
+  fi
+
+  if ! session_exists "$session"; then
+    log_error "Session not found: $session"
+    return 1
+  fi
+
+  log_info "Sending graceful shutdown signal to $session..."
+
+  # Send shutdown message
+  tmux send-keys -t "$session" "$SHUTDOWN_MESSAGE" Enter
+
+  # Wait for exit
+  if wait_for_exit "$session" "$STOP_TIMEOUT"; then
+    log_info "Session $session stopped gracefully"
+  else
+    log_error "Session $session did not stop within ${STOP_TIMEOUT}s"
+    log_error "Use 'agency kill $session' to force kill"
+    return 1
+  fi
+}
+
+cmd_kill() {
+  local -r session="$1"
+
+  if [[ -z "$session" ]]; then
+    log_error "Session required"
+    log_error "Usage: agency kill <session>"
+    return 1
+  fi
+
+  if ! session_exists "$session"; then
+    log_error "Session not found: $session"
+    return 1
+  fi
+
+  log_info "Force killing $session..."
+  tmux kill-session -t "$session"
+  log_info "Session $session killed"
+}
+
+cmd_kill_all() {
+  local -r sessions
+  sessions="$(tmux list-sessions -F "#S" 2>/dev/null | grep "^$SESSION_PREFIX" || true)"
+
+  if [[ -z "$sessions" ]]; then
+    log_info "No agency sessions running"
+    return 0
+  fi
+
+  local count=0
+  while IFS= read -r session; do
+    tmux kill-session -t "$session" 2>/dev/null || true
+    count=$((count + 1))
+  done <<< "$sessions"
+
+  log_info "Killed $count session(s)"
+}
+
+cmd_version() {
+  printf 'agency version %s\n' "$AGENCY_VERSION"
+}
+
+# -------------------------------------------------------------------
+# Main
+# -------------------------------------------------------------------
+
+main() {
+  if [[ $# -eq 0 ]]; then
+    usage
+    exit 1
+  fi
+
+  local -r command="${1:-}"
+  shift 2>/dev/null || true
+
+  case "$command" in
+    init)
+      cmd_init "$@"
+      ;;
+    start)
+      cmd_start "$@"
+      ;;
+    send)
+      cmd_send "$@"
+      ;;
+    list)
+      cmd_list "$@"
+      ;;
+    stop)
+      cmd_stop "$@"
+      ;;
+    kill)
+      cmd_kill "$@"
+      ;;
+    kill-all)
+      cmd_kill_all "$@"
+      ;;
+    help|--help|-h)
+      usage
+      ;;
+    version|--version|-v)
+      cmd_version
+      ;;
+    *)
+      log_error "Unknown command: $command"
+      usage
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"

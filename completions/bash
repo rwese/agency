@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC1090
+
+# Agency Bash Completion
+
+_agency_complete() {
+  local -r cur="${COMP_WORDS[COMP_CWORD]}"
+  local -r prev="${COMP_WORDS[COMP_CWORD - 1]:-}"
+  local -r agency_dir="${XDG_CONFIG_HOME:-$HOME/.config/agency}"
+  local -r agents_dir="$agency_dir/agents"
+
+  local -r commands="init start send list stop kill kill-all help version"
+
+  case "$prev" in
+    agency)
+      COMPREPLY=($(compgen -W "$commands" -- "$cur"))
+      return
+      ;;
+    start|stop|kill|send)
+      # Complete with agent names or running sessions
+      if [[ -d "$agents_dir" ]]; then
+        local -r configs=("$agents_dir"/*.yaml)
+        if [[ "${#configs[@]}" -gt 0 ]] && [[ -f "${configs[0]}" ]]; then
+          local -r names=("${configs[@]##*/}")
+          names=("${names[@]%.yaml}")
+          COMPREPLY=($(compgen -W "${names[*]}" -- "$cur"))
+        fi
+      fi
+      # Also add running sessions
+      if command -v tmux >/dev/null 2>&1; then
+        local -r sessions
+        sessions="$(tmux list-sessions -F '#S' 2>/dev/null | grep '^agency-' || true)"
+        if [[ -n "$sessions" ]]; then
+          local session
+          while IFS= read -r session; do
+            COMPREPLY+=("$session")
+          done <<< "$sessions"
+        fi
+      fi
+      ;;
+    --dir)
+      # Complete with directories
+      _filedir -d
+      ;;
+    *)
+      COMPREPLY=($(compgen -W "$commands" -- "$cur"))
+      ;;
+  esac
+}
+
+complete -F _agency_complete agency

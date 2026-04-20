@@ -1,0 +1,5 @@
+name: example
+memory_file: ~/.agency/memory/example.md
+source_dir: ~/.agency/agents/example
+storage_dir: ~/.agency/storage/example
+working_dir: ~
