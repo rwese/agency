@@ -125,6 +125,7 @@ When a manager receives a task not addressed to a specific agent:
 | `kill-all` | Kill all agency sessions |
 | `tasks list` | List all tracked tasks |
 | `tasks show <task_id>` | Show task details |
+| `completions <shell>` | Print shell completion script (bash/zsh/fish) |
 
 ## Configuration
 
@@ -207,6 +208,63 @@ agency/
 ├── pyproject.toml        # uv/pip project config
 ├── test_agency.sh        # Integration tests
 └── completions/          # Shell completions
+```
+
+## Shell Completions
+
+Smart shell completions for bash, zsh, and fish.
+
+### Quick Install
+
+```bash
+# Print and install bash completions
+agency completions bash >> ~/.bashrc
+
+# Print and install zsh completions
+agency completions zsh >> ~/.zshrc
+
+# Print and install fish completions
+agency completions fish > ~/.config/fish/completions/agency.fish
+```
+
+### Manual Install
+
+#### Bash
+
+```bash
+# Source in .bashrc or .profile
+source /path/to/agency/completions/bash
+
+# Or install system-wide
+sudo cp completions/bash /usr/local/etc/bash_completion.d/agency
+```
+
+### Zsh
+
+```bash
+# Add to .zshrc
+fpath=(~/path/to/agency/completions/zsh $fpath)
+autoload -Uz _agency
+compdef _agency agency
+
+# Or copy completion file
+cp completions/zsh ~/.config/zsh/completions/_agency
+```
+
+### Fish
+
+```bash
+# Copy completion file
+cp completions/fish ~/.config/fish/completions/agency.fish
+```
+
+### Just Recipes
+
+```bash
+just completions-bash     # Install bash completions
+just completions-zsh      # Install zsh completions  
+just completions-fish     # Install fish completions
+just completions          # Install all
 ```
 
 ## Testing

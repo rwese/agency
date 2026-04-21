@@ -1,51 +1,157 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC1090
+# Agency - Bash Smart Completions
+# source this file: source /path/to/completions/bash
 
-# Agency Bash Completion
-
-_agency_complete() {
-  local -r cur="${COMP_WORDS[COMP_CWORD]}"
-  local -r prev="${COMP_WORDS[COMP_CWORD - 1]:-}"
-  local -r agency_dir="${XDG_CONFIG_HOME:-$HOME/.config/agency}"
-  local -r agents_dir="$agency_dir/agents"
-
-  local -r commands="init start send list stop kill kill-all help version"
-
-  case "$prev" in
-    agency)
-      COMPREPLY=($(compgen -W "$commands" -- "$cur"))
-      return
-      ;;
-    start|stop|kill|send)
-      # Complete with agent names or running sessions
-      if [[ -d "$agents_dir" ]]; then
-        local -r configs=("$agents_dir"/*.yaml)
-        if [[ "${#configs[@]}" -gt 0 ]] && [[ -f "${configs[0]}" ]]; then
-          local -r names=("${configs[@]##*/}")
-          names=("${names[@]%.yaml}")
-          COMPREPLY=($(compgen -W "${names[*]}" -- "$cur"))
-        fi
-      fi
-      # Also add running sessions
-      if command -v tmux >/dev/null 2>&1; then
-        local -r sessions
-        sessions="$(tmux list-sessions -F '#S' 2>/dev/null | grep '^agency-' || true)"
-        if [[ -n "$sessions" ]]; then
-          local session
-          while IFS= read -r session; do
-            COMPREPLY+=("$session")
-          done <<< "$sessions"
-        fi
-      fi
-      ;;
-    --dir)
-      # Complete with directories
-      _filedir -d
-      ;;
-    *)
-      COMPREPLY=($(compgen -W "$commands" -- "$cur"))
-      ;;
-  esac
+_agency_get_running_sessions() {
+    tmux -L agency list-sessions -F '#S' 2>/dev/null | grep '^agency-' || true
 }
 
+_agency_get_manager_sessions() {
+    tmux -L agency list-sessions -F '#S' 2>/dev/null | grep '^agency-manager-' || true
+}
+
+_agency_get_running_agents() {
+    local session="$1"
+    [[ -z "$session" ]] && return
+    tmux -L agency list-windows -t "$session" -F '#W' 2>/dev/null | grep -v '^zsh$' || true
+}
+
+_agency_get_agent_configs() {
+    local -r agency_dir="${XDG_CONFIG_HOME:-$HOME/.config/agency}"
+    local -r agents_dir="$agency_dir/agents"
+    [[ ! -d "$agents_dir" ]] && return
+    find "$agents_dir" -maxdepth 1 -name '*.yaml' -type f 2>/dev/null | xargs -I{} basename {} .yaml | sort || true
+}
+
+_agency_get_manager_configs() {
+    local -r agency_dir="${XDG_CONFIG_HOME:-$HOME/.config/agency}"
+    local -r managers_dir="$agency_dir/managers"
+    [[ ! -d "$managers_dir" ]] && return
+    find "$managers_dir" -maxdepth 1 -name '*.yaml' -type f 2>/dev/null | xargs -I{} basename {} .yaml | sort || true
+}
+
+_agency_get_task_ids() {
+    local -r agency_dir="${XDG_CONFIG_HOME:-$HOME/.config/agency}"
+    local -r tasks_file="$agency_dir/sessions/tasks.json"
+    [[ ! -f "$tasks_file" ]] && return
+    python3 -c "import json,sys; [print(k) for k in json.load(open('$tasks_file')).keys()]" 2>/dev/null || true
+}
+
+_agency_complete() {
+    local -r cur="${COMP_WORDS[COMP_CWORD]}"
+    local -r prev="${COMP_WORDS[COMP_CWORD - 1]:-}"
+    local -r word="${COMP_WORDS[COMP_CWORD - 2]:-}"
+
+    local -r commands="init start start-manager list list-managers send stop kill kill-all attach attach-manager stop-manager tasks completions help version"
+    local -r stop_actions=""
+
+    # Main command completion
+    if [[ $COMP_CWORD -eq 1 ]]; then
+        COMPREPLY=($(compgen -W "$commands" -- "$cur"))
+        compopt -o nospace
+        return
+    fi
+
+    # Subcommand completions
+    case "$word" in
+        init|kill-all|list|list-managers|help|version)
+            # These take no arguments
+            ;;
+        start)
+            # agency start <agent> --dir <path>
+            case "$prev" in
+                --dir)
+                    compopt -o dirnames
+                    ;;
+                *)
+                    COMPREPLY=($(compgen -W "$(_agency_get_agent_configs)" -- "$cur"))
+                    compopt -o nospace
+                    ;;
+            esac
+            ;;
+        start-manager)
+            # agency start-manager <manager> --dir <path>
+            case "$prev" in
+                --dir)
+                    compopt -o dirnames
+                    ;;
+                *)
+                    COMPREPLY=($(compgen -W "$(_agency_get_manager_configs)" -- "$cur"))
+                    compopt -o nospace
+                    ;;
+            esac
+            ;;
+        send)
+            # agency send <session> [agent] <message...>
+            case "$prev" in
+                send)
+                    # Complete session names
+                    COMPREPLY=($(compgen -W "$(_agency_get_running_sessions)" -- "$cur"))
+                    ;;
+                *)
+                    # Could be agent name or message - complete agents if session valid
+                    if [[ -n "$prev" ]]; then
+                        # Check if prev looks like a session with :agent
+                        local session="$prev"
+                        if [[ "$prev" == *":"* ]]; then
+                            session="${prev%:*}"
+                            local agent="${prev#*:}"
+                            # Complete agents for this session
+                            COMPREPLY=($(compgen -W "$(_agency_get_running_agents "$session")" -P "${session}:" -- "$cur"))
+                        else
+                            # Check if it's a valid session
+                            local agents
+                            agents=$(_agency_get_running_agents "$prev")
+                            if [[ -n "$agents" ]]; then
+                                COMPREPLY=($(compgen -W "$agents" -P "${prev} " -- "$cur"))
+                            fi
+                        fi
+                    fi
+                    compopt -o nospace
+                    ;;
+            esac
+            ;;
+        stop|kill|attach)
+            # agency stop/kill/attach <session>[:agent]
+            local sessions
+            sessions=$(_agency_get_running_sessions)
+            if [[ "$prev" == *":"* ]]; then
+                # Complete agent names for session
+                local session="${prev%:*}"
+                COMPREPLY=($(compgen -W "$(_agency_get_running_agents "$session")" -P "${session}:" -- "$cur"))
+            else
+                COMPREPLY=($(compgen -W "$sessions" -- "$cur"))
+            fi
+            compopt -o nospace
+            ;;
+        attach-manager|stop-manager)
+            # agency attach-manager/stop-manager <manager-name>
+            # Extract manager names from running manager sessions
+            local managers
+            managers=$(echo "$(_agency_get_manager_sessions)" | sed 's/^agency-manager-//' | sort -u)
+            COMPREPLY=($(compgen -W "$managers" -- "$cur"))
+            compopt -o nospace
+            ;;
+        tasks)
+            # agency tasks <action> [task_id]
+            local -r task_commands="list show create update"
+            case "$prev" in
+                tasks)
+                    COMPREPLY=($(compgen -W "$task_commands" -- "$cur"))
+                    ;;
+                show|update)
+                    COMPREPLY=($(compgen -W "$(_agency_get_task_ids)" -- "$cur"))
+                    ;;
+            esac
+            ;;
+        completions)
+            # agency completions <shell>
+            COMPREPLY=($(compgen -W "bash zsh fish" -- "$cur"))
+            ;;
+        *)
+            ;;
+    esac
+}
+
+# Register completion
 complete -F _agency_complete agency

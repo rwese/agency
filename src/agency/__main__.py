@@ -558,6 +558,22 @@ def cmd_stop_manager(manager_name: str, force: bool = False) -> None:
     log_info(f"{session_name} killed")
 
 
+def cmd_completions(shell: str) -> None:
+    """Output shell completion script."""
+    import sys
+    
+    # Get the directory containing this script
+    agency_dir = Path(__file__).parent.parent.parent
+    completion_file = agency_dir / "completions" / shell
+    
+    if not completion_file.exists():
+        log_error(f"Unknown shell: {shell}")
+        log_error("Supported shells: bash, zsh, fish")
+        sys.exit(1)
+    
+    print(completion_file.read_text())
+
+
 def cmd_tasks(action: str, task_id: Optional[str] = None) -> None:
     """Manage tasks - list, show, or update task status."""
     tasks = load_tasks()
@@ -936,6 +952,10 @@ Examples:
     tasks_parser.add_argument("action", choices=["list", "show", "create"], help="Action")
     tasks_parser.add_argument("task_id", nargs="?", help="Task ID")
     
+    # completions
+    comp_parser = subparsers.add_parser("completions", help="Print shell completion script")
+    comp_parser.add_argument("shell", choices=["bash", "zsh", "fish"], help="Shell type")
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -970,6 +990,8 @@ Examples:
         cmd_stop_manager(args.name)
     elif args.command == "tasks":
         cmd_tasks(args.action, args.task_id)
+    elif args.command == "completions":
+        cmd_completions(args.shell)
     else:
         parser.print_help()
         sys.exit(1)

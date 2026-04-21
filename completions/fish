@@ -1,0 +1,109 @@
+# Agency - Fish Smart Completions
+#
+# Install: Copy to ~/.config/fish/completions/agency.fish
+# Or: ln -s completions/fish ~/.config/fish/completions/agency.fish
+
+function __agency_get_running_sessions
+    tmux -L agency list-sessions -F '#S' 2>/dev/null | grep '^agency-' || true
+end
+
+function __agency_get_manager_sessions
+    tmux -L agency list-sessions -F '#S' 2>/dev/null | grep '^agency-manager-' || true
+end
+
+function __agency_get_running_agents
+    set -l session $argv[1]
+    [ -z "$session" ] && return
+    tmux -L agency list-windows -t "$session" -F '#W' 2>/dev/null | grep -v '^zsh$' || true
+end
+
+function __agency_get_agent_configs
+    set -l agency_dir (string replace -r '^(XDG_CONFIG_HOME=.+)\$' '$1' $HOME/.config/agency)
+    set -l agency_dir (string replace 'XDG_CONFIG_HOME' '' $XDG_CONFIG_HOME)
+    [ -z "$XDG_CONFIG_HOME" ]; and set -l agency_dir "$HOME/.config/agency"
+    set -l agents_dir "$agency_dir/agents"
+    [ ! -d "$agents_dir" ]; and return
+    for f in $agents_dir/*.yaml
+        string replace -r '.*/(.+)\.yaml' '$1' "$f"
+    end | sort
+end
+
+function __agency_get_manager_configs
+    set -l agency_dir
+    if set -q XDG_CONFIG_HOME; and test -n "$XDG_CONFIG_HOME"
+        set agency_dir "$XDG_CONFIG_HOME/agency"
+    else
+        set agency_dir "$HOME/.config/agency"
+    end
+    set -l managers_dir "$agency_dir/managers"
+    [ ! -d "$managers_dir" ]; and return
+    for f in $managers_dir/*.yaml
+        string replace -r '.*/(.+)\.yaml' '$1' "$f"
+    end | sort
+end
+
+function __agency_get_task_ids
+    set -l agency_dir
+    if set -q XDG_CONFIG_HOME; and test -n "$XDG_CONFIG_HOME"
+        set agency_dir "$XDG_CONFIG_HOME/agency"
+    else
+        set agency_dir "$HOME/.config/agency"
+    end
+    set -l tasks_file "$agency_dir/sessions/tasks.json"
+    [ ! -f "$tasks_file" ]; and return
+    python3 -c "import json,sys; [print(k) for k in json.load(open('$tasks_file')).keys()]" 2>/dev/null || true
+end
+
+# Main completion function
+complete -c agency -f
+
+# No-arg commands
+complete -c agency -n '__fish_use_subcommand' -a 'init' -d 'Initialize agency config'
+complete -c agency -n '__fish_use_subcommand' -a 'kill-all' -d 'Kill all agency sessions'
+complete -c agency -n '__fish_use_subcommand' -a 'list' -d 'List running sessions'
+complete -c agency -n '__fish_use_subcommand' -a 'list-managers' -d 'List available managers'
+complete -c agency -n '__fish_use_subcommand' -a 'help' -d 'Show help'
+complete -c agency -n '__fish_use_subcommand' -a 'version' -d 'Show version'
+complete -c agency -n '__fish_use_subcommand' -a 'completions' -d 'Print shell completion script'
+
+# Commands with arguments
+complete -c agency -n '__fish_use_subcommand' -a 'start' -d 'Start an agent'
+complete -c agency -n '__fish_seen_subcommand_from start' -a '(__agency_get_agent_configs)' -f
+
+complete -c agency -n '__fish_use_subcommand' -a 'start-manager' -d 'Start a manager'
+complete -c agency -n '__fish_seen_subcommand_from start-manager' -a '(__agency_get_manager_configs)' -f
+
+complete -c agency -n '__fish_use_subcommand' -a 'send' -d 'Send message to agent'
+complete -c agency -n '__fish_seen_subcommand_from send' -a '(__agency_get_running_sessions)' -f
+complete -c agency -n '__fish_seen_subcommand_from send' -a '(__agency_get_running_agents (commandline -opc)[3])' -f
+
+complete -c agency -n '__fish_use_subcommand' -a 'stop' -d 'Stop session gracefully'
+complete -c agency -n '__fish_seen_subcommand_from stop' -a '(__agency_get_running_sessions)' -f
+
+complete -c agency -n '__fish_use_subcommand' -a 'kill' -d 'Force kill session'
+complete -c agency -n '__fish_seen_subcommand_from kill' -a '(__agency_get_running_sessions)' -f
+
+complete -c agency -n '__fish_use_subcommand' -a 'attach' -d 'Attach to session'
+complete -c agency -n '__fish_seen_subcommand_from attach' -a '(__agency_get_running_sessions)' -f
+
+complete -c agency -n '__fish_use_subcommand' -a 'attach-manager' -d 'Attach to manager'
+complete -c agency -n '__fish_seen_subcommand_from attach-manager' -a '(__agency_get_manager_sessions | string replace "agency-manager-" "")' -f
+
+complete -c agency -n '__fish_use_subcommand' -a 'stop-manager' -d 'Stop manager gracefully'
+complete -c agency -n '__fish_seen_subcommand_from stop-manager' -a '(__agency_get_manager_sessions | string replace "agency-manager-" "")' -f
+
+# Tasks subcommand
+complete -c agency -n '__fish_use_subcommand' -a 'tasks' -d 'Manage tasks'
+complete -c agency -n '__fish_seen_subcommand_from tasks' -a 'list' -d 'List tasks'
+complete -c agency -n '__fish_seen_subcommand_from tasks' -a 'show' -d 'Show task details'
+complete -c agency -n '__fish_seen_subcommand_from tasks' -a 'create' -d 'Create task'
+complete -c agency -n '__fish_seen_subcommand_from tasks' -a '(__agency_get_task_ids)' -f
+
+# Completions subcommand
+complete -c agency -n '__fish_use_subcommand' -a 'completions' -d 'Print completion script'
+complete -c agency -n '__fish_seen_subcommand_from completions' -a 'bash' -d 'Bash completions'
+complete -c agency -n '__fish_seen_subcommand_from completions' -a 'zsh' -d 'Zsh completions'
+complete -c agency -n '__fish_seen_subcommand_from completions' -a 'fish' -d 'Fish completions'
+
+# --dir option
+complete -c agency -l dir -s d -r -d 'Working directory' -f -a '(for d in */; string trim --right -c / "$d"; end)'

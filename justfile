@@ -5,6 +5,9 @@ default: help
 # Install
 install:
     uv pip install -e .
+    @mkdir -p ~/.local/bin
+    @ln -sf {{justfile_directory()}}/.venv/bin/agency ~/.local/bin/agency
+    @echo "Installed: ~/.local/bin/agency"
 
 # Install with dev dependencies
 install-dev:
@@ -82,3 +85,24 @@ help:
     @echo "  start                Start agent"
     @echo "  start-manager        Start manager"
     @echo "  list                 List sessions"
+    @echo "  completions-bash     Install bash completions"
+    @echo "  completions-zsh      Install zsh completions"
+    @echo "  completions-fish     Install fish completions"
+    @echo "  completions          Install all completions"
+
+# Shell completions
+completions-bash:
+    mkdir -p ~/.config/fish/completions 2>/dev/null || true
+    cp completions/bash ~/.config/bash_completions/agency 2>/dev/null || \
+    cp completions/bash /usr/local/etc/bash_completion.d/agency
+
+completions-zsh:
+    mkdir -p ~/.config/zsh/completions 2>/dev/null || true
+    cp completions/zsh ~/.config/zsh/completions/_agency
+
+completions-fish:
+    mkdir -p ~/.config/fish/completions 2>/dev/null || true
+    cp completions/fish ~/.config/fish/completions/agency.fish
+
+completions: completions-bash completions-zsh completions-fish
+    @echo "Completions installed for bash, zsh, and fish"

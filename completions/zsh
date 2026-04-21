@@ -1,0 +1,158 @@
+#compdef agency
+# Agency - Zsh Smart Completions
+# Can be sourced directly or installed to fpath
+
+_agency_get_running_sessions() {
+    tmux -L agency list-sessions -F '#S' 2>/dev/null | grep '^agency-' || true
+}
+
+_agency_get_manager_sessions() {
+    tmux -L agency list-sessions -F '#S' 2>/dev/null | grep '^agency-manager-' || true
+}
+
+_agency_get_running_agents() {
+    local session="$1"
+    [[ -z "$session" ]] && return
+    tmux -L agency list-windows -t "$session" -F '#W' 2>/dev/null | grep -v '^zsh$' || true
+}
+
+_agency_get_agent_configs() {
+    local agency_dir="${XDG_CONFIG_HOME:-$HOME/.config/agency}"
+    local agents_dir="$agency_dir/agents"
+    [[ ! -d "$agents_dir" ]] && return
+    find "$agents_dir" -maxdepth 1 -name '*.yaml' -type f 2>/dev/null | xargs -I{} basename {} .yaml | sort || true
+}
+
+_agency_get_manager_configs() {
+    local agency_dir="${XDG_CONFIG_HOME:-$HOME/.config/agency}"
+    local managers_dir="$agency_dir/managers"
+    [[ ! -d "$managers_dir" ]] && return
+    find "$managers_dir" -maxdepth 1 -name '*.yaml' -type f 2>/dev/null | xargs -I{} basename {} .yaml | sort || true
+}
+
+_agency_get_task_ids() {
+    local agency_dir="${XDG_CONFIG_HOME:-$HOME/.config/agency}"
+    local tasks_file="$agency_dir/sessions/tasks.json"
+    [[ ! -f "$tasks_file" ]] && return
+    python3 -c "import json,sys; [print(k) for k in json.load(open('$tasks_file')).keys()]" 2>/dev/null || true
+}
+
+# Split output by newlines
+_agency_split() {
+    local IFS=$'\n'
+    read -A REPLY <<< "$1"
+}
+
+# Completion function - only runs when called by zsh completion system
+_agency() {
+    local -a commands agent_configs manager_configs sessions task_commands
+    commands=(
+        'init:Initialize agency config'
+        'start:Start an agent'
+        'start-manager:Start a manager'
+        'list:List running sessions'
+        'list-managers:List available managers'
+        'send:Send message to agent'
+        'stop:Stop session gracefully'
+        'kill:Force kill session'
+        'kill-all:Kill all agency sessions'
+        'attach:Attach to session'
+        'attach-manager:Attach to manager'
+        'stop-manager:Stop manager gracefully'
+        'tasks:Manage tasks'
+        'completions:Print shell completion script'
+        'help:Show help'
+        'version:Show version'
+    )
+
+    local _output
+    _output=$(_agency_get_agent_configs)
+    _agency_split "$_output"
+    agent_configs=("${REPLY[@]}")
+
+    _output=$(_agency_get_manager_configs)
+    _agency_split "$_output"
+    manager_configs=("${REPLY[@]}")
+
+    _output=$(_agency_get_running_sessions)
+    _agency_split "$_output"
+    sessions=("${REPLY[@]}")
+
+    task_commands=('list' 'show' 'create' 'update')
+
+    local -A opt_args
+    local state line word
+    word="${words[2]:-}"
+
+    _arguments -C \
+        '1: :->command' \
+        '2: :->arg' \
+        '3: :->arg2' \
+        '*:: :->args'
+
+    case "$state" in
+        command)
+            _describe 'command' commands
+            ;;
+        arg)
+            case "$word" in
+                start)
+                    _describe 'agent' agent_configs
+                    ;;
+                start-manager)
+                    _describe 'manager' manager_configs
+                    ;;
+                send|stop|kill|attach)
+                    _describe 'session' sessions
+                    ;;
+                attach-manager|stop-manager)
+                    local -a managers
+                    _output=$(_agency_get_manager_sessions | sed 's/^agency-manager-//')
+                    _agency_split "$_output"
+                    managers=("${REPLY[@]}")
+                    _describe 'manager' managers
+                    ;;
+                tasks)
+                    _describe 'action' task_commands
+                    ;;
+            esac
+            ;;
+        arg2)
+            case "$word" in
+                start|start-manager)
+                    _arguments '*:dir:_files -/'
+                    ;;
+                send|stop|kill|attach)
+                    if [[ -n "${words[3]:-}" ]]; then
+                        local -a agents
+                        local _session="${words[3]%:*/}"
+                        _output=$(_agency_get_running_agents "$_session")
+                        _agency_split "$_output"
+                        agents=("${REPLY[@]}")
+                        _describe 'agent' agents
+                    fi
+                    ;;
+                tasks)
+                    if [[ "${words[3]:-}" == "show" ]] || [[ "${words[3]:-}" == "update" ]]; then
+                        local -a task_ids
+                        _output=$(_agency_get_task_ids)
+                        _agency_split "$_output"
+                        task_ids=("${REPLY[@]}")
+                        _describe 'task' task_ids
+                    fi
+                    ;;
+                completions)
+                    local -a shells
+                    shells=('bash' 'zsh' 'fish')
+                    _describe 'shell' shells
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+# Register completion when sourced directly (not by compinit)
+# compinit automatically handles #compdef directive
+if [[ -n "$functions[compdef]" ]]; then
+    compdef _agency agency
+fi

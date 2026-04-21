@@ -11,6 +11,11 @@ NC='\033[0m'
 PASS=0
 FAIL=0
 
+# Use temp config dir for testing (avoids conflicts with user config)
+TEST_CONFIG_DIR="${TMPDIR:-/tmp}/agency-test-$$"
+mkdir -p "$TEST_CONFIG_DIR"
+export XDG_CONFIG_HOME="$TEST_CONFIG_DIR"
+
 pass() { printf "${GREEN}[PASS]${NC} %s\n" "$*"; PASS=$((PASS + 1)); }
 fail() { printf "${RED}[FAIL]${NC} %s\n" "$*"; FAIL=$((FAIL + 1)); }
 info() { printf "${YELLOW}[INFO]${NC} %s\n" "$*"; }
@@ -18,12 +23,12 @@ info() { printf "${YELLOW}[INFO]${NC} %s\n" "$*"; }
 cleanup() {
     info "Cleaning up..."
     tmux -L agency kill-session -t agency-* 2>/dev/null || true
-    rm -rf "$HOME/.config/agency" 2>/dev/null || true
+    rm -rf "$TEST_CONFIG_DIR" 2>/dev/null || true
 }
 
 create_config() {
-    mkdir -p "$HOME/.config/agency/agents"
-    cat > "$HOME/.config/agency/agents/${1}.yaml" <<EOF
+    mkdir -p "$TEST_CONFIG_DIR/agency/agents"
+    cat > "$TEST_CONFIG_DIR/agency/agents/${1}.yaml" <<EOF
 name: $1
 personality: |
   Test personality for $1
@@ -31,16 +36,16 @@ EOF
 }
 
 # Use uv run or direct python based on environment
-AGENCY_CMD="${AGENCY_CMD:-uv run -e . agency}"
+AGENCY_CMD="${AGENCY_CMD:-uv run agency}"
 MOCK_AGENT="src/agency/mock_agent.py"
 
 # Manual integration tests
 test_init() {
     info "Test: init"
-    rm -rf "$HOME/.config/agency"
+    rm -rf "$TEST_CONFIG_DIR/agency"
     $AGENCY_CMD init >/dev/null 2>&1
-    [[ -f "$HOME/.config/agency/agents/example.yaml" ]] && pass "init" || fail "init"
-    [[ -d "$HOME/.config/agency/managers" ]] && pass "init managers dir" || fail "init managers dir"
+    [[ -f "$TEST_CONFIG_DIR/agency/agents/example.yaml" ]] && pass "init" || fail "init"
+    [[ -d "$TEST_CONFIG_DIR/agency/managers" ]] && pass "init managers dir" || fail "init managers dir"
 }
 
 test_start() {
@@ -107,6 +112,16 @@ test_kill_all() {
     tmux kill-session -t "other" 2>/dev/null || true
 }
 
+test_completions() {
+    info "Test: completions"
+    out=$($AGENCY_CMD completions bash 2>&1)
+    echo "$out" | grep -q "_agency_complete" && pass "completions bash" || fail "completions bash: missing function"
+    out=$($AGENCY_CMD completions zsh 2>&1)
+    echo "$out" | grep -q "_agency" && pass "completions zsh" || fail "completions zsh: missing"
+    out=$($AGENCY_CMD completions fish 2>&1)
+    echo "$out" | grep -q "complete -c agency" && pass "completions fish" || fail "completions fish: missing"
+}
+
 main() {
     info "========================================"
     info "  Agency Test Suite"
@@ -123,11 +138,14 @@ main() {
     test_stop
     test_kill
     test_kill_all
+    test_completions
     
     cleanup
     echo
     info "Results: $PASS passed, $FAIL failed"
-    [[ $FAIL -gt 0 ]] && exit 1
+    if [[ $FAIL -gt 0 ]]; then
+        exit 1
+    fi
 }
 
 main "$@"
