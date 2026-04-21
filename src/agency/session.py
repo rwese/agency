@@ -24,32 +24,12 @@ BASE_PERSONALITY = """You are running in an Agency v2.0 tmux session.
 
 ## Agency Commands (run from project directory)
 
-### Task Management
-```bash
-agency tasks list                    # List pending tasks
-agency tasks add -d "description"    # Create task
-agency tasks show <id>              # View task details
-agency tasks assign <id> <agent>    # Assign to agent
-agency tasks complete <id> --result "..."  # Complete with result
-agency tasks update <id> --status <status>  # Update task status
-```
-
-### Session Management
+### Session Info
 ```bash
 agency members                       # List session members with status
 agency list                         # List all agency sessions
-agency attach                       # Attach to this session
-agency stop <session>              # Gracefully stop session
-agency kill <session>              # Force kill session
-```
-
-### Tmux Operations
-```bash
 agency tmux list                    # List windows in this session
-agency tmux send <window> <text>    # Send keys to window
-agency tmux new <name>             # Create new window
-agency tmux attach                 # Attach (opens new terminal)
-agency tmux run <window> <cmd>     # Run command in window
+agency attach                       # Attach to this session
 ```
 
 ## Windows in this session
@@ -57,14 +37,23 @@ agency tmux run <window> <cmd>     # Run command in window
 - **Agents**: `coder`, `developer`, etc.
 
 ## Communication Protocol
-- Use `agency tasks` for all task operations (not ad-hoc file manipulation)
-- Check `agency members` to see who's online before assigning tasks
-- Write task results to `tasks/<id>/result.json` for artifacts
+- Check `agency members` to see who's online
 - Use `agency tmux list` to see current windows and their status
 """
 
 # Manager-specific base additions
 MANAGER_BASE_ADDITION = """
+
+## Task Management Commands
+```bash
+agency tasks list                    # List pending tasks
+agency tasks add -d "description"    # Create task
+agency tasks show <id>              # View task details
+agency tasks assign <id> <agent>    # Assign to agent
+agency tasks complete <id> --result "..."  # Approve completed task
+agency tasks reject <id> --reason "..."  # Reject with reason
+agency tasks update <id> --status <status>  # Update task status
+```
 
 ## Manager Responsibilities
 - Poll `agency tasks list` regularly (check every few minutes)
@@ -77,6 +66,14 @@ MANAGER_BASE_ADDITION = """
 
 # Agent-specific base additions
 AGENT_BASE_ADDITION = """
+
+## Task Commands
+```bash
+agency tasks list                    # List tasks (check for assignment)
+agency tasks show <id>              # View task details
+agency tasks update <id> --status in_progress  # Mark as started
+agency tasks complete <id> --result "..."  # Complete task
+```
 
 ## Agent Responsibilities
 - Poll for assigned tasks: `agency tasks list`
