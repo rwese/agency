@@ -40,30 +40,13 @@ class AgentConfig:
     personality: str | None = None
 
 
-def _has_unresolved_vars(path: str) -> bool:
-    """Check if path contains unresolved ${VAR} or $VAR patterns.
-
-    Ignores AGENCY_* vars which are set at session start, not config load time.
-    """
-    import re
-
-    # Match ${VAR} or $VAR but not AGENCY_* vars (deferred to session start)
-    unresolved = re.findall(r"(?:\$\{([^}]+)\}|\$([A-Z_][A-Z0-9_]*))", path)
-    for var in unresolved:
-        full_var = var[0] or var[1]  # either ${VAR} or $VAR format
-        if not full_var.startswith("AGENCY_"):
-            return True
-    return False
-
-
 def load_agency_config(agency_dir: Path) -> AgencyConfig:
     """Load project configuration from .agency/config.yaml.
 
-    Environment variables in additional_context_files are expanded when loading.
-    Warns to stderr if referenced files don't exist after expansion.
+    additional_context_files are stored as-is - paths are resolved
+    relative to work_dir at session start.
     """
     import os
-    import sys
 
     config_path = agency_dir / "config.yaml"
 
@@ -74,26 +57,14 @@ def load_agency_config(agency_dir: Path) -> AgencyConfig:
     with open(config_path) as f:
         data = yaml.safe_load(f) or {}
 
-    # Expand environment variables in additional_context_files
+    # Expand ~ in paths (env vars like ${AGENCY_*} resolved at session start)
     context_files_raw = data.get("additional_context_files")
     context_files_expanded = None
     if context_files_raw:
         context_files_expanded = []
         for path in context_files_raw:
-            # Expand ~ and ${VAR} in paths
+            # Expand ~ but not ${VAR}
             expanded = os.path.expanduser(path)
-            expanded = os.path.expandvars(expanded)
-
-            # Check for unresolved vars (indicates missing env var)
-            if _has_unresolved_vars(expanded):
-                print(f"[WARN] Unresolved env var in context file: {path} -> {expanded}", file=sys.stderr)
-                continue
-
-            # Check if file exists (warn if not)
-            expanded_path = Path(expanded)
-            if not expanded_path.exists():
-                print(f"[WARN] Context file not found: {expanded}", file=sys.stderr)
-
             context_files_expanded.append(expanded)
 
     return AgencyConfig(

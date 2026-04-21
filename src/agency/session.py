@@ -442,23 +442,28 @@ def _generate_manager_launch_script(
     context_files = discover_context_files(work_dir, work_dir)  # Use work_dir as git_root for now
 
     # Add custom context files from config if specified
-    # Substitute AGENCY_* vars directly since they're known values
     if agency_config.additional_context_files:
         for cf in agency_config.additional_context_files:
-            # Substitute known AGENCY_* vars directly
+            # Substitute AGENCY_* vars
             cf_expanded = (
                 cf.replace("${AGENCY_DIR}", str(agency_dir))
                 .replace("${AGENCY_WORKDIR}", str(work_dir))
                 .replace("${AGENCY_PROJECT}", session_name)
             )
             cf_path = Path(cf_expanded)
-            if cf_path.is_absolute() and cf_path.exists():
-                context_files.append(cf_path)
-            elif not cf_path.is_absolute():
-                # Relative paths are relative to work_dir
-                rel_path = work_dir / cf_path
-                if rel_path.exists() and rel_path not in context_files:
-                    context_files.append(rel_path)
+            # Absolute paths used directly, relative paths resolved from work_dir
+            if cf_path.is_absolute():
+                if cf_path.exists():
+                    context_files.append(cf_path)
+                else:
+                    print(f"[WARN] Context file not found: {cf_expanded}")
+            else:
+                # Relative path - resolve from work_dir
+                abs_path = work_dir / cf_path
+                if abs_path.exists():
+                    context_files.append(abs_path)
+                else:
+                    print(f"[WARN] Context file not found: {abs_path}")
 
     context_args = format_context_args(context_files)
 
@@ -539,22 +544,28 @@ def _generate_agent_launch_script(
     context_files = discover_context_files(work_dir, work_dir)
 
     # Add custom context files from config if specified
-    # Substitute AGENCY_* vars directly since they're known values
     if agency_config.additional_context_files:
         for cf in agency_config.additional_context_files:
-            # Substitute known AGENCY_* vars directly
+            # Substitute AGENCY_* vars
             cf_expanded = (
                 cf.replace("${AGENCY_DIR}", str(agency_dir))
                 .replace("${AGENCY_WORKDIR}", str(work_dir))
                 .replace("${AGENCY_PROJECT}", session_name)
             )
             cf_path = Path(cf_expanded)
-            if cf_path.is_absolute() and cf_path.exists():
-                context_files.append(cf_path)
-            elif not cf_path.is_absolute():
-                rel_path = work_dir / cf_path
-                if rel_path.exists() and rel_path not in context_files:
-                    context_files.append(rel_path)
+            # Absolute paths used directly, relative paths resolved from work_dir
+            if cf_path.is_absolute():
+                if cf_path.exists():
+                    context_files.append(cf_path)
+                else:
+                    print(f"[WARN] Context file not found: {cf_expanded}")
+            else:
+                # Relative path - resolve from work_dir
+                abs_path = work_dir / cf_path
+                if abs_path.exists():
+                    context_files.append(abs_path)
+                else:
+                    print(f"[WARN] Context file not found: {abs_path}")
 
     context_args = format_context_args(context_files)
 

@@ -117,7 +117,7 @@ class TestLoadAgencyConfig:
         assert config.stop_timeout == 45
 
     def test_load_with_context_files(self, temp_agency_dir):
-        """Test loading config with additional_context_files and env var expansion."""
+        """Test loading config with additional_context_files (tildes expanded)."""
         config_file = temp_agency_dir / "config.yaml"
         config_file.write_text(
             yaml.dump(
@@ -136,10 +136,10 @@ class TestLoadAgencyConfig:
         assert config.project == "myapi"
         assert config.additional_context_files is not None
         assert len(config.additional_context_files) == 2
-        # Check that env vars and ~ are expanded
-        assert "${HOME}" not in config.additional_context_files[0]
-        assert str(Path.home()) in config.additional_context_files[0]
+        # ~ is expanded, ${HOME} stays (resolved at session start)
+        assert "${HOME}" in config.additional_context_files[0]
         assert "~" not in config.additional_context_files[1]
+        assert str(Path.home()) in config.additional_context_files[1]
 
 
 class TestLoadManagerConfig:
