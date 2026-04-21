@@ -1,6 +1,6 @@
 # Agency v2.0 - Implementation TODO
 
-**Status:** Stage 2: Completions COMPLETE
+**Status:** Stage 3: Integration Tests COMPLETE
 **Last Updated:** 2024-04-21
 
 ## Current Stage
@@ -18,11 +18,11 @@
 - [x] Enable Click shell completions
 - [x] Test with bash/zsh/fish
 
-### Stage 3: Integration Tests (Pending)
+### Stage 3: Integration Tests (DONE)
 
-- [ ] Set up pytest-tmux fixture
-- [ ] Test full workflow
-- [ ] Add GitHub Actions
+- [x] Set up pytest-tmux fixture
+- [x] Test full workflow
+- [x] Add GitHub Actions
 
 ---
 

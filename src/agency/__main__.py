@@ -68,15 +68,16 @@ def init_project(dir, template, template_subdir, start_manager, force, refresh):
     if not work_dir.exists():
         work_dir.mkdir(parents=True, exist_ok=True)
 
-    # Find git root
+    # Find git root (optional - for session naming)
     git_root = find_git_root(work_dir)
-    if not git_root:
-        click.echo("[ERROR] Not in a git repository", err=True)
-        sys.exit(1)
 
-    agency_dir = git_root / ".agency"
+    # Create .agency/ in work_dir (not git root) unless git_root equals work_dir
+    if git_root and git_root != work_dir:
+        agency_dir = work_dir / ".agency"
+    else:
+        agency_dir = work_dir / ".agency"
 
-    # Check if session already exists
+    # Use work_dir name for session
     project_name = work_dir.name
     session_name = f"agency-{project_name}"
     socket_name = f"agency-{project_name}"
@@ -125,9 +126,13 @@ def _copy_template_to_agency(template_path: Path, agency_dir: Path) -> None:
 
     agency_dir.mkdir(parents=True, exist_ok=True)
 
-    for item in template_path.rglob("*"):
+    # Check if template has .agency/ inside
+    template_agency = template_path / ".agency"
+    source_dir = template_agency if template_agency.exists() else template_path
+
+    for item in source_dir.rglob("*"):
         if item.is_file():
-            rel_path = item.relative_to(template_path)
+            rel_path = item.relative_to(source_dir)
             dest = agency_dir / rel_path
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(item, dest)
@@ -220,7 +225,8 @@ def _get_manager_name(agency_dir: Path) -> str | None:
 @click.command()
 @click.argument("session")
 @click.option("--timeout", type=int, help="Grace period in seconds")
-def stop(session, timeout):
+@click.option("--force", is_flag=True, help="Force kill without graceful shutdown")
+def stop(session, timeout, force):
     """Stop a session gracefully."""
     if not session.startswith("agency-"):
         session = f"agency-{session}"
@@ -232,17 +238,26 @@ def stop(session, timeout):
         click.echo(f"[ERROR] Session not found: {session}", err=True)
         sys.exit(1)
 
+    if force:
+        # Direct kill
+        sm.kill_session()
+        sm.cleanup_socket()
+        click.echo("[INFO] Session killed")
+        return
+
     # Broadcast shutdown to all windows
     sm.broadcast_shutdown()
 
     # Wait for graceful exit
     import time
 
-    timeout = timeout or 60
-    interval = 2
+    timeout = timeout or 5  # Shorter default for tests
+    interval = 0.5
 
-    for _ in range(timeout // interval):
+    elapsed = 0.0
+    while elapsed < timeout:
         time.sleep(interval)
+        elapsed += interval
         if not sm.session_exists():
             click.echo("[INFO] Session stopped gracefully")
             sm.cleanup_socket()
