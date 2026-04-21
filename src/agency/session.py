@@ -52,14 +52,6 @@ agency tmux attach                 # Attach (opens new terminal)
 agency tmux run <window> <cmd>     # Run command in window
 ```
 
-## Direct tmux Commands (via bash tool)
-For advanced operations, use tmux directly:
-```bash
-tmux -L {socket_name} list-windows -t {session_name}  # List windows
-tmux -L {socket_name} send-keys -t {session_name}:<window> "text" Enter
-tmux -L {socket_name} new-window -t {session_name}: -n <name>  # Create window
-```
-
 ## Windows in this session
 - **Manager**: `[MGR] coordinator` (or custom name)
 - **Agents**: `coder`, `developer`, etc.
