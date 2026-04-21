@@ -1,6 +1,6 @@
 """Shell completion scripts for agency."""
 
-BASH_COMPLETION = '''# bash completion for agency
+BASH_COMPLETION = """# bash completion for agency
 _agency_completions()
 {
     local cur prev words cword
@@ -33,9 +33,9 @@ _agency_completions()
 }
 
 complete -F _agency_completions agency
-'''
+"""
 
-ZSH_COMPLETION = '''# zsh completion for agency
+ZSH_COMPLETION = """# zsh completion for agency
 _agency() {
     local -a commands
     commands=(
@@ -91,9 +91,9 @@ _agency() {
 }
 
 compdef _agency agency
-'''
+"""
 
-FISH_COMPLETION = '''# fish completion for agency
+FISH_COMPLETION = """# fish completion for agency
 complete -c agency -n '__fish_use_subcommand' -a 'init-project' -d 'Create a new project'
 complete -c agency -n '__fish_use_subcommand' -a 'start' -d 'Start an agent or manager'
 complete -c agency -n '__fish_use_subcommand' -a 'stop' -d 'Stop a session'
@@ -115,7 +115,7 @@ complete -c agency -n '__fish_seen_subcommand_from tasks' -a 'reopen' -d 'Reopen
 complete -c agency -n '__fish_seen_subcommand_from tasks' -a 'update' -d 'Update task'
 complete -c agency -n '__fish_seen_subcommand_from tasks' -a 'delete' -d 'Delete task'
 complete -c agency -n '__fish_seen_subcommand_from tasks' -a 'history' -d 'Show history'
-'''
+"""
 
 
 def get_completion_script(shell: str) -> str:

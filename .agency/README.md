@@ -1,30 +1,23 @@
-# Agency - Local Configuration
+# Basic Agency Template
 
-This directory contains project-specific agency configuration.
+Minimal template for any project.
 
 ## Structure
 
 ```
 .agency/
-├── agents/         # Agent configurations
-│   └── example.yaml
-├── managers/       # Manager configurations
-│   └── coordinator.yaml
-└── README.md       # This file
+├── config.yaml     # Project configuration
+├── manager.yaml   # Manager personality
+├── agents.yaml    # Agent definitions
+└── agents/
+    └── developer/
+        └── personality.md
 ```
 
 ## Usage
 
 ```bash
-# Start an agent
-agency start example --dir .
-
-# Start the coordinator manager
-agency start-manager coordinator --dir .
+agency init-project --dir ~/projects/myapp \
+  --template https://github.com/rwese/agency-templates/tree/main/basic \
+  --start-manager coordinator
 ```
-
-## Notes
-
-- Local configs take precedence over global configs
-- This directory should be committed to version control
-- See ~/.config/agency/ for global configuration

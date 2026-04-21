@@ -1,6 +1,5 @@
 """End-to-end integration tests for agency."""
 
-import json
 import os
 import subprocess
 import time
@@ -62,7 +61,7 @@ class TestInitProject:
     def test_init_project_creates_agency_dir(self, unique_project):
         """Test that init-project creates .agency/ directory."""
         result = run_agency(
-            ["init-project", "--dir", str(unique_project)],
+            ["init", "--dir", str(unique_project)],
             check=False,
         )
 
@@ -78,7 +77,7 @@ class TestInitProject:
         """Test init-project with template."""
         result = run_agency(
             [
-                "init-project",
+                "init",
                 "--dir", str(unique_project),
                 "--template", "https://github.com/rwese/agency-templates",
                 "--template-subdir", "basic",
@@ -265,7 +264,7 @@ class TestStopSession:
 
         # Run init
         subprocess.run(
-            ["agency", "init-project", "--dir", str(project_dir)],
+            ["agency", "init", "--dir", str(project_dir)],
             capture_output=True,
         )
 
@@ -281,7 +280,7 @@ class TestStopSession:
 
     def test_stop_session(self, clean_session):
         """Test stopping a session."""
-        result = run_agency(["stop", clean_session], check=False)
+        result = run_agency(["stop", clean_session, "--force"], check=False)
 
         # Give tmux time to clean up
         time.sleep(1)

@@ -21,18 +21,23 @@ agency-<project>                    # tmux session + socket
 
 ```bash
 # Create project
-agency init-project --dir ~/projects/api --start-manager coordinator
+cd ~/projects/api
+agency init
 
-# Add agents
-agency start coder --dir ~/projects/api
-agency start tester --dir ~/projects/api
+# Start manager + agents
+agency start
 
-# Manage tasks
+# Manage tasks (run from project dir)
+cd ~/projects/api
 agency tasks add -d "Implement auth API"
 agency tasks assign swift-bear-a3f2 coder
 
-# Attach and work
-agency attach api
+# Tmux operations
+agency tmux list
+agency tmux attach
+
+# When done
+agency stop agency-api
 ```
 
 ## Commands
@@ -41,12 +46,24 @@ agency attach api
 
 | Command | Description |
 |---------|-------------|
-| `agency init-project --dir <path>` | Create project + session + `.agency/` |
-| `agency start <name> --dir <path>` | Start agent in project |
-| `agency stop <session>` | Shutdown session gracefully |
-| `agency resume <session>` | Resume from halt |
-| `agency attach <session>` | Attach to session |
-| `agency list` | List sessions |
+| `agency init` | Create project + session + `.agency/` |
+| `agency start` | Start the agency (manager + all agents) |
+| `agency members` | Show all configured members with status |
+| `agency stop <session>` | Stop session gracefully |
+| `agency kill <session>` | Force kill session |
+| `agency resume` | Resume a halted session |
+| `agency attach` | Attach to project session (auto-detected) |
+| `agency list` | List all agency sessions |
+
+### Tmux Operations
+
+| Command | Description |
+|---------|-------------|
+| `agency tmux list` | List windows in current project |
+| `agency tmux send <window> <text>` | Send keys to window |
+| `agency tmux new <name>` | Create new window |
+| `agency tmux attach` | Attach to session (new terminal) |
+| `agency tmux run <window> <cmd>` | Run command in window |
 
 ### Task Management
 
@@ -158,16 +175,16 @@ uv pip install -e .
 uv run pytest
 
 # Lint
-uvx ruff check src/
-uvx ruff format src/
+uv run ruff check src/
+uv run ruff format src/
 
-# Debug tmux
-tmux -L agency-api list-sessions
-tmux -L agency-api list-windows -t <session>
+# Tmux debugging (use project socket)
+tmux -L agency-<project> list-windows -t agency-<project>
+tmux -L agency-<project> list-sessions
 
 # Test with mock
 AGENCY_AGENT_CMD="python3 src/agency/mock_agent.py" \
-  uv run agency start coder --dir /tmp
+  agency start --dir /tmp
 ```
 
 ## Design Documents

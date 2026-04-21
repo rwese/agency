@@ -1,11 +1,10 @@
 """Pytest fixtures and configuration for agency tests."""
 
 import os
-import time
 import subprocess
-import tempfile
-from pathlib import Path
+import time
 from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
 
@@ -44,7 +43,7 @@ def tmp_project(tmp_path, tmux_socket):
     yield project_dir
 
     # Cleanup tmux session if exists
-    session_name = f"agency-testproject"
+    session_name = "agency-testproject"
     subprocess.run(
         ["tmux", "-L", tmux_socket, "kill-session", "-t", session_name],
         capture_output=True,

@@ -1,8 +1,6 @@
 """Tests for tasks CLI."""
 
 import argparse
-import tempfile
-from pathlib import Path
 
 import pytest
 

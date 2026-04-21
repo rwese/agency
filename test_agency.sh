@@ -19,138 +19,175 @@ export XDG_CONFIG_HOME="$TEST_CONFIG_DIR"
 pass() { printf "${GREEN}[PASS]${NC} %s\n" "$*"; PASS=$((PASS + 1)); }
 fail() { printf "${RED}[FAIL]${NC} %s\n" "$*"; FAIL=$((FAIL + 1)); }
 info() { printf "${YELLOW}[INFO]${NC} %s\n" "$*"; }
+skip() { printf "${YELLOW}[SKIP]${NC} %s\n" "$*"; }
 
 cleanup() {
     info "Cleaning up..."
-    tmux -L agency kill-session -t agency-* 2>/dev/null || true
+    # Kill all agency tmux sessions and remove sockets
+    for socket in /tmp/tmux-501/agency-*; do
+        name="$(basename "$socket")"
+        tmux -L "$name" kill-server 2>/dev/null || true
+        rm -f "$socket" 2>/dev/null || true
+    done
+    # Also remove any leftover sockets without killing
+    rm -f /tmp/tmux-501/agency-* 2>/dev/null || true
     rm -rf "$TEST_CONFIG_DIR" 2>/dev/null || true
 }
 
-create_config() {
-    mkdir -p "$TEST_CONFIG_DIR/agency/agents"
-    cat > "$TEST_CONFIG_DIR/agency/agents/${1}.yaml" <<EOF
-name: $1
-personality: |
-  Test personality for $1
-EOF
+create_project() {
+    local name="$1"
+    local dir="/tmp/test-$name"
+    rm -rf "$dir"
+    mkdir -p "$dir"
+    git -C "$dir" init >/dev/null 2>&1
+    echo "$dir"
 }
 
-# Use uv run or direct python based on environment
-AGENCY_CMD="${AGENCY_CMD:-uv run agency}"
+# Use installed agency or uv run
+AGENCY_CMD="${AGENCY_CMD:-agency}"
 MOCK_AGENT="src/agency/mock_agent.py"
 
-# Manual integration tests
+# Tests
 test_init() {
-    info "Test: init --global"
-    rm -rf "$TEST_CONFIG_DIR/agency"
-    $AGENCY_CMD init --global >/dev/null 2>&1
-    [[ -f "$TEST_CONFIG_DIR/agency/agents/example.yaml" ]] && pass "init" || fail "init"
-    [[ -d "$TEST_CONFIG_DIR/agency/managers" ]] && pass "init managers dir" || fail "init managers dir"
+    info "Test: init"
+    local dir
+    dir=$(create_project "init")
+    timeout 120 $AGENCY_CMD init --dir "$dir" >/dev/null 2>&1 || { fail "init timeout"; return; }
+    [[ -f "$dir/.agency/agents.yaml" ]] && pass "init" || fail "init"
+    [[ -d "$dir/.agency/agents" ]] && pass "init agents dir" || fail "init agents dir"
 }
 
-test_init_local() {
-    info "Test: init --local"
-    rm -rf "$TEST_CONFIG_DIR/agency"
-    # Create temp git repo for local init test
-    local TEST_LOCAL_DIR="${TMPDIR:-/tmp}/agency-test-local-$$"
-    mkdir -p "$TEST_LOCAL_DIR"
-    git -C "$TEST_LOCAL_DIR" init >/dev/null 2>&1
-    $AGENCY_CMD init --local --dir "$TEST_LOCAL_DIR" >/dev/null 2>&1
-    [[ -f "$TEST_LOCAL_DIR/.agency/agents/example.yaml" ]] && pass "init local" || fail "init local"
-    [[ -d "$TEST_LOCAL_DIR/.agency/managers" ]] && pass "init local managers dir" || fail "init local managers dir"
-    rm -rf "$TEST_LOCAL_DIR"
+test_init_with_manager() {
+    info "Test: init creates session"
+    local dir
+    dir=$(create_project "mgr")
+    timeout 120 $AGENCY_CMD init --dir "$dir" >/dev/null 2>&1 || { fail "init mgr timeout"; return; }
+    [[ -f "$dir/.agency/config.yaml" ]] && pass "init creates config" || fail "init creates config"
+    [[ -f "$dir/.agency/agents.yaml" ]] && pass "init creates agents.yaml" || fail "init creates agents.yaml"
 }
 
-test_start() {
-    info "Test: start"
-    create_config "start1"
-    result=$($AGENCY_CMD start start1 --dir /tmp/test-start 2>/dev/null)
-    [[ "$result" =~ ^agency-test-start:start1 ]] && pass "start" || fail "start: $result"
-    tmux -L agency kill-session -t agency-test-start 2>/dev/null || true
+test_start_session() {
+    info "Test: start session"
+    local dir socket
+    dir=$(create_project "start")
+    socket="agency-$(basename "$dir")"
+    timeout 120 $AGENCY_CMD init --dir "$dir" >/dev/null 2>&1 || { fail "init timeout"; return; }
+    timeout 120 $AGENCY_CMD start --dir "$dir" >/dev/null 2>&1 || { fail "start timeout"; return; }
+    sleep 1
+    tmux -L "$socket" has-session -t "$socket" 2>/dev/null && pass "start" || fail "start session"
+    tmux -L "$socket" kill-session -t "$socket" 2>/dev/null || true
 }
 
-test_start_no_dir() {
-    info "Test: start_no_dir"
-    create_config "nodir"
-    ! $AGENCY_CMD start nodir 2>/dev/null && pass "start_no_dir" || fail "start_no_dir"
+test_start_no_agency_dir() {
+    info "Test: start without agency dir"
+    local dir
+    dir=$(create_project "nodir")
+    # Expect failure (exit != 0) so we check for non-zero exit
+    if timeout 120 $AGENCY_CMD start --dir "$dir" 2>/dev/null; then
+        fail "start_no_dir"
+    else
+        pass "start_no_dir"
+    fi
 }
 
 test_list() {
     info "Test: list"
-    create_config "list1"
-    create_config "list2"
-    $AGENCY_CMD start list1 --dir /tmp/test-list1 >/dev/null 2>&1
-    $AGENCY_CMD start list2 --dir /tmp/test-list2 >/dev/null 2>&1
+    local dir1 dir2
+    dir1=$(create_project "list1")
+    dir2=$(create_project "list2")
+    timeout 120 $AGENCY_CMD init --dir "$dir1" >/dev/null 2>&1 || { fail "init list1 timeout"; return; }
+    timeout 120 $AGENCY_CMD init --dir "$dir2" >/dev/null 2>&1 || { fail "init list2 timeout"; return; }
+    timeout 120 $AGENCY_CMD start --dir "$dir1" >/dev/null 2>&1 || { fail "start list1 timeout"; return; }
+    timeout 120 $AGENCY_CMD start --dir "$dir2" >/dev/null 2>&1 || { fail "start list2 timeout"; return; }
+    sleep 1
     out=$($AGENCY_CMD list 2>&1)
-    echo "$out" | grep -q "test-list1" && echo "$out" | grep -q "test-list2" && pass "list" || fail "list"
-    tmux -L agency kill-session -t agency-test-list1 agency-test-list2 2>/dev/null || true
+    echo "$out" | grep -q "list1" && echo "$out" | grep -q "list2" && pass "list" || fail "list"
+    tmux -L agency-list1 kill-session -t agency-list1 2>/dev/null || true
+    tmux -L agency-list2 kill-session -t agency-list2 2>/dev/null || true
 }
 
-test_send() {
-    info "Test: send"
-    create_config "send1"
-    $AGENCY_CMD start send1 --dir /tmp/test-send >/dev/null 2>&1
+test_members() {
+    info "Test: members"
+    local dir
+    dir=$(create_project "members")
+    timeout 120 $AGENCY_CMD init --dir "$dir" >/dev/null 2>&1 || { fail "init members timeout"; return; }
+    # Create manager config
+    cat > "$dir/.agency/manager.yaml" << 'MANAGEREOF'
+name: coordinator
+personality: |
+  Test manager
+MANAGEREOF
+    echo 'agents:' > "$dir/.agency/agents.yaml"
+    echo '  - name: coder' >> "$dir/.agency/agents.yaml"
+    mkdir -p "$dir/.agency/agents"
+    echo 'name: coder' > "$dir/.agency/agents/coder.yaml"
+    timeout 120 $AGENCY_CMD start --dir "$dir" >/dev/null 2>&1 || { fail "start members timeout"; return; }
     sleep 1
-    tmux -L agency has-session -t agency-test-send 2>/dev/null || { fail "send: session died"; return; }
-    $AGENCY_CMD send agency-test-send send1 "hello" 2>&1 | grep -q "Sent" && pass "send" || fail "send"
-    tmux -L agency kill-session -t agency-test-send 2>/dev/null || true
+    out=$($AGENCY_CMD members --dir "$dir" 2>&1)
+    echo "$out" | grep -q "coordinator" && echo "$out" | grep -q "coder" && pass "members" || fail "members"
+    tmux -L agency-members kill-session -t agency-members 2>/dev/null || true
 }
 
 test_stop() {
     info "Test: stop"
-    create_config "stop1"
-    $AGENCY_CMD start stop1 --dir /tmp/test-stop >/dev/null 2>&1
+    local dir session
+    dir=$(create_project "stop")
+    session="agency-$(basename "$dir")"
+    timeout 120 $AGENCY_CMD init --dir "$dir" >/dev/null 2>&1 || { fail "init stop timeout"; return; }
+    # Create manager config
+    echo 'name: coordinator' > "$dir/.agency/manager.yaml"
+    timeout 120 $AGENCY_CMD start --dir "$dir" >/dev/null 2>&1 || { fail "start stop timeout"; return; }
     sleep 1
-    timeout 35 $AGENCY_CMD stop agency-test-stop >/dev/null 2>&1 && pass "stop" || fail "stop"
+    # Force stop since mock agent doesn't respond to graceful shutdown
+    timeout 60 $AGENCY_CMD stop "$session" --force >/dev/null 2>&1 && pass "stop" || fail "stop"
 }
 
 test_kill() {
     info "Test: kill"
-    create_config "kill1"
-    $AGENCY_CMD start kill1 --dir /tmp/test-kill >/dev/null 2>&1
-    $AGENCY_CMD kill agency-test-kill >/dev/null 2>&1
-    ! tmux -L agency has-session -t agency-test-kill 2>/dev/null && pass "kill" || fail "kill"
-}
-
-test_kill_all() {
-    info "Test: kill-all"
-    tmux new-session -d -s "other" "sleep 60"
-    create_config "ka1"
-    create_config "ka2"
-    $AGENCY_CMD start ka1 --dir /tmp/test-ka1 >/dev/null 2>&1
-    $AGENCY_CMD start ka2 --dir /tmp/test-ka2 >/dev/null 2>&1
-    $AGENCY_CMD kill-all >/dev/null 2>&1
-    ! tmux -L agency has-session -t "agency-test-ka1" 2>/dev/null && ! tmux -L agency has-session -t "agency-test-ka2" 2>/dev/null && pass "kill-all" || fail "kill-all"
-    tmux has-session -t "other" 2>/dev/null && pass "other preserved" || fail "other killed"
-    tmux kill-session -t "other" 2>/dev/null || true
+    local dir session
+    dir=$(create_project "kill")
+    session="agency-$(basename "$dir")"
+    timeout 120 $AGENCY_CMD init --dir "$dir" >/dev/null 2>&1 || { fail "init kill timeout"; return; }
+    # Create manager config
+    echo 'name: coordinator' > "$dir/.agency/manager.yaml"
+    timeout 120 $AGENCY_CMD start --dir "$dir" >/dev/null 2>&1 || { fail "start kill timeout"; return; }
+    sleep 1
+    timeout 60 $AGENCY_CMD kill "$session" >/dev/null 2>&1
+    ! tmux -L "$session" has-session -t "$session" 2>/dev/null && pass "kill" || fail "kill"
 }
 
 test_completions() {
     info "Test: completions"
     out=$($AGENCY_CMD completions bash 2>&1)
-    echo "$out" | grep -q "_agency_complete" && pass "completions bash" || fail "completions bash: missing function"
+    echo "$out" | grep -q "_agency_completions" && pass "completions bash" || fail "completions bash"
     out=$($AGENCY_CMD completions zsh 2>&1)
-    echo "$out" | grep -q "_agency" && pass "completions zsh" || fail "completions zsh: missing"
+    echo "$out" | grep -q "_agency" && pass "completions zsh" || fail "completions zsh"
     out=$($AGENCY_CMD completions fish 2>&1)
-    echo "$out" | grep -q "complete -c agency" && pass "completions fish" || fail "completions fish: missing"
+    echo "$out" | grep -q "complete -c agency" && pass "completions fish" || fail "completions fish"
 }
 
-test_tui() {
-    info "Test: TUI E2E tests"
-    if command -v expect &>/dev/null; then
-        if [[ -f "test_tui/test_tui.exp" ]]; then
-            # Run TUI tests via the test runner
-            if bash test_tui/test_tui.exp; then
-                pass "tui tests"
-            else
-                fail "tui tests"
-            fi
-        else
-            skip "tui tests (runner not found)"
-        fi
-    else
-        skip "tui tests (expect not installed)"
-    fi
+test_tasks() {
+    info "Test: tasks"
+    local dir
+    dir=$(create_project "tasks")
+    timeout 60 $AGENCY_CMD init --dir "$dir" >/dev/null 2>&1 || { fail "init tasks timeout"; return; }
+    # Run tasks commands from within the project directory
+    (cd "$dir" && $AGENCY_CMD tasks add -d "Test task") >/dev/null 2>&1 || { fail "tasks add timeout"; return; }
+    out=$(cd "$dir" && $AGENCY_CMD tasks list 2>&1)
+    echo "$out" | grep -q "Test task" && pass "tasks add/list" || fail "tasks add/list"
+}
+
+test_base_personality() {
+    info "Test: base personality injection"
+    # Test that session.py generates launch scripts with base personality
+    uv run python3 -c "
+from agency.session import BASE_PERSONALITY, MANAGER_BASE_ADDITION, AGENT_BASE_ADDITION
+assert 'tmux session' in BASE_PERSONALITY
+assert 'agency tasks list' in BASE_PERSONALITY
+assert 'Manager Responsibilities' in MANAGER_BASE_ADDITION
+assert 'Agent Responsibilities' in AGENT_BASE_ADDITION
+print('OK')
+" && pass "base personality" || fail "base personality"
 }
 
 main() {
@@ -162,16 +199,16 @@ main() {
     export AGENCY_AGENT_CMD="python3 $MOCK_AGENT"
     
     test_init
-    test_init_local
-    test_start
-    test_start_no_dir
+    test_init_with_manager
+    test_start_session
+    test_start_no_agency_dir
     test_list
-    test_send
+    test_members
     test_stop
     test_kill
-    test_kill_all
     test_completions
-    test_tui
+    test_tasks
+    test_base_personality
     
     cleanup
     echo

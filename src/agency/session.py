@@ -14,6 +14,63 @@ MANAGER_PREFIX = "[MGR] "
 HALTED_SUFFIX = "-HALTED"
 SHUTDOWN_MESSAGE = "Please wrap up, save your work, then exit gracefully. Say 'Goodbye' when done."
 
+# Base personality injected into all agents (always included)
+BASE_PERSONALITY = """You are running in an Agency v2.0 tmux session.
+
+## Environment
+- **tmux session**: `{session_name}` (socket: `{socket_name}`)
+- **Working directory**: `{work_dir}`
+- **Agency dir**: `{agency_dir}`
+
+## tmux Commands (via bash)
+Use `bash` tool for all tmux operations:
+```bash
+tmux -L {socket_name} list-windows -t {session_name}  # List windows
+tmux -L {socket_name} send-keys -t {session_name}:<window> "text" Enter  # Send to window
+tmux -L {socket_name} new-window -t {session_name} -n <name>  # Create window
+tmux -L {socket_name} attach -t {session_name}  # Attach (manual)
+```
+
+## Agency CLI (always use for task management)
+```bash
+agency tasks list                    # List pending tasks
+agency tasks add -d "description"    # Create task
+agency tasks show <id>              # View task details
+agency tasks assign <id> <agent>    # Assign to agent
+agency tasks complete <id> --result "..."  # Complete with result
+agency members                       # List session members
+```
+
+## Windows in this session
+- **Manager**: `[MGR] coordinator` (index 0)
+- **Agents**: `coder`, `tester`, etc. (index 1+)
+
+## Communication Protocol
+- Use `agency tasks` for all task operations (not ad-hoc file manipulation)
+- Check `agency members` to see who's online before assigning
+- Write task results to `tasks/<id>/result.json` for artifacts
+"""
+
+# Manager-specific base additions
+MANAGER_BASE_ADDITION = """
+
+## Manager Responsibilities
+- Poll `agency tasks list` regularly
+- Assign unassigned tasks to available agents
+- Review completed tasks and approve/reject
+- Monitor agent health via `agency members`
+"""
+
+# Agent-specific base additions
+AGENT_BASE_ADDITION = """
+
+## Agent Responsibilities
+- Poll for assigned tasks: `agency tasks list`
+- Update task status: `agency tasks update <id> --status in_progress`
+- Complete tasks: `agency tasks complete <id> --result "..."`
+- Read task details: `agency tasks show <id>`
+"""
+
 
 class SessionManager:
     """Manages a tmux session with dedicated socket."""
@@ -51,7 +108,11 @@ class SessionManager:
         result = self._tmux("list-windows", "-t", self.session_name, "-F", "#W")
         if result.returncode != 0:
             return []
-        return [w.strip() for w in result.stdout.strip().split("\n") if w.strip() and w != "zsh"]
+        return [
+            w.strip()
+            for w in result.stdout.strip().split("\n")
+            if w.strip() and w not in ("zsh", "tmux")
+        ]
 
     def send_keys(self, window_name: str, msg: str) -> None:
         """Send keys to a window."""
@@ -267,6 +328,11 @@ def start_agent_window(
     )
 
 
+def _escape_prompt(s: str) -> str:
+    """Escape string for shell prompt injection."""
+    return s.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`")
+
+
 def _generate_manager_launch_script(
     session_name: str,
     socket_name: str,
@@ -279,23 +345,30 @@ def _generate_manager_launch_script(
     scripts_dir.mkdir(parents=True, exist_ok=True)
     script_path = scripts_dir / f"manager-{manager_name}.sh"
 
-    # Get manager personality from config
+    # Get manager personality from config (user additions)
     manager_config_path = agency_dir / "manager.yaml"
-    personality_args = ""
+    user_personality = ""
 
     if manager_config_path.exists():
         import yaml
 
         config = yaml.safe_load(manager_config_path.read_text())
-        personality = config.get("personality", "")
-        if personality:
-            escaped = (
-                personality.replace("\\", "\\\\")
-                .replace('"', '\\"')
-                .replace("$", "\\$")
-                .replace("`", "\\`")
-            )
-            personality_args = f' --append-system-prompt "{escaped}"'
+        user_personality = config.get("personality", "")
+
+    # Build full personality: base + manager additions + user
+    full_personality = (
+        BASE_PERSONALITY.format(
+            session_name=session_name,
+            socket_name=socket_name,
+            work_dir=work_dir,
+            agency_dir=agency_dir,
+        )
+        + MANAGER_BASE_ADDITION
+        + ("\n\n## Custom Personality\n" + user_personality if user_personality else "")
+    )
+
+    escaped = _escape_prompt(full_personality)
+    personality_args = f' --append-system-prompt "{escaped}"'
 
     # Get agent command
     agent_cmd = os.environ.get("AGENCY_AGENT_CMD", "pi")
@@ -332,9 +405,9 @@ def _generate_agent_launch_script(
     scripts_dir.mkdir(parents=True, exist_ok=True)
     script_path = scripts_dir / f"agent-{agent_name}.sh"
 
-    # Get agent personality from config
+    # Get agent personality from config (user additions)
     agent_config_path = agency_dir / "agents" / f"{agent_name}.yaml"
-    personality_args = ""
+    user_personality = ""
 
     if agent_config_path.exists():
         import yaml
@@ -346,22 +419,24 @@ def _generate_agent_launch_script(
         if personality_ref and personality_ref.endswith(".md"):
             personality_file = agent_config_path.parent / personality_ref
             if personality_file.exists():
-                personality = personality_file.read_text()
-                escaped = (
-                    personality.replace("\\", "\\\\")
-                    .replace('"', '\\"')
-                    .replace("$", "\\$")
-                    .replace("`", "\\`")
-                )
-                personality_args = f' --append-system-prompt "{escaped}"'
+                user_personality = personality_file.read_text()
         elif personality_ref:
-            escaped = (
-                personality_ref.replace("\\", "\\\\")
-                .replace('"', '\\"')
-                .replace("$", "\\$")
-                .replace("`", "\\`")
-            )
-            personality_args = f' --append-system-prompt "{escaped}"'
+            user_personality = personality_ref
+
+    # Build full personality: base + agent additions + user
+    full_personality = (
+        BASE_PERSONALITY.format(
+            session_name=session_name,
+            socket_name=socket_name,
+            work_dir=work_dir,
+            agency_dir=agency_dir,
+        )
+        + AGENT_BASE_ADDITION
+        + ("\n\n## Custom Personality\n" + user_personality if user_personality else "")
+    )
+
+    escaped = _escape_prompt(full_personality)
+    personality_args = f' --append-system-prompt "{escaped}"'
 
     # Get agent command
     agent_cmd = os.environ.get("AGENCY_AGENT_CMD", "pi")
@@ -426,44 +501,49 @@ def resume_halted_session(
 
 
 def list_agency_sessions() -> list[dict]:
-    """List all agency sessions."""
+    """List all agency sessions across all sockets."""
     import subprocess
 
     sessions = []
+    tmux_sockets_dir = Path("/tmp") / f"tmux-{os.getuid()}"
 
-    # Try default socket first
-    result = subprocess.run(
-        ["tmux", "list-sessions", "-F", "#S"],
-        capture_output=True,
-        text=True,
-    )
+    # Discover all agency sockets
+    agency_sockets = []
+    if tmux_sockets_dir.exists():
+        for socket_file in tmux_sockets_dir.iterdir():
+            if socket_file.is_socket() and socket_file.name.startswith(SESSION_PREFIX):
+                agency_sockets.append(socket_file.name)
 
-    if result.returncode == 0:
-        for line in result.stdout.strip().split("\n"):
-            if line.startswith(SESSION_PREFIX):
-                session_name = line.strip()
-                socket_name = session_name  # Same for v2
-                sm = SessionManager(session_name, socket_name)
-                windows = []
+    # Check each socket for sessions
+    for socket_name in agency_sockets:
+        result = subprocess.run(
+            ["tmux", "-L", socket_name, "list-sessions", "-F", "#S"],
+            capture_output=True,
+            text=True,
+        )
 
-                for w in sm.list_windows():
-                    is_manager = w.startswith(MANAGER_PREFIX)
-                    clean_name = w.replace(MANAGER_PREFIX, "")
-                    windows.append(
+        if result.returncode == 0:
+            for line in result.stdout.strip().split("\n"):
+                if line.strip():
+                    session_name = line.strip()
+                    sm = SessionManager(session_name, socket_name)
+                    windows = []
+
+                    for w in sm.list_windows():
+                        is_manager = w.startswith(MANAGER_PREFIX)
+                        clean_name = w.replace(MANAGER_PREFIX, "")
+                        windows.append(
+                            {
+                                "name": clean_name,
+                                "is_manager": is_manager,
+                            }
+                        )
+
+                    sessions.append(
                         {
-                            "name": clean_name,
-                            "is_manager": is_manager,
+                            "name": session_name,
+                            "windows": windows,
                         }
                     )
-
-                sessions.append(
-                    {
-                        "name": session_name,
-                        "windows": windows,
-                    }
-                )
-
-    # Also check for project-specific sockets
-    # TODO: Implement socket discovery
 
     return sessions

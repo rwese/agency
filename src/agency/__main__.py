@@ -6,12 +6,18 @@ A tmux-based multi-agent orchestration tool.
 """
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 
 import click
 
 from agency import __version__
+from agency.config import (
+    load_agency_config,
+    load_agents_config,
+    load_manager_config,
+)
 from agency.session import (
     SessionManager,
     create_project_session,
@@ -55,14 +61,19 @@ def cli():
 
 
 @click.command()
-@click.option("--dir", required=True, type=click.Path(), help="Project directory")
+@click.option(
+    "--dir", "dir", type=click.Path(), default=".", help="Project directory (default: current)"
+)
 @click.option("--template", help="Template repository URL")
 @click.option("--template-subdir", help="Template subdirectory")
-@click.option("--start-manager", help="Start manager on init")
 @click.option("--force", is_flag=True, help="Overwrite existing")
 @click.option("--refresh", is_flag=True, help="Bypass template cache")
-def init_project(dir, template, template_subdir, start_manager, force, refresh):
-    """Create a new project with session and .agency/ directory."""
+def init_project(dir, template, template_subdir, force, refresh):
+    """Create a new project with session and .agency/ directory.
+
+    Creates .agency/ in the project directory. Use --dir to specify,
+    defaults to current directory.
+    """
     work_dir = Path(dir).expanduser().absolute()
 
     if not work_dir.exists():
@@ -113,11 +124,7 @@ def init_project(dir, template, template_subdir, start_manager, force, refresh):
 
     click.echo(f"[INFO] Created project session: {session_name}")
     click.echo(f"[INFO] .agency/ created at: {agency_dir}")
-
-    # Start manager if specified
-    if start_manager:
-        start_manager_window(session_name, socket_name, start_manager, agency_dir, work_dir)
-        click.echo(f"[INFO] Started manager: [MGR] {start_manager}")
+    click.echo("[INFO] Run 'agency start' to start agents")
 
 
 def _copy_template_to_agency(template_path: Path, agency_dir: Path) -> None:
@@ -163,14 +170,29 @@ def _create_default_agency_structure(agency_dir: Path) -> None:
 
 
 @click.command()
-@click.argument("name")
-@click.option("--dir", required=True, type=click.Path(), help="Project directory")
-@click.option("--manager", is_flag=True, help="Start as manager")
-def start(name, dir, manager):
-    """Start an agent or manager in the project session."""
-    work_dir = Path(dir).expanduser().absolute()
+@click.option(
+    "--dir",
+    "dir",
+    type=click.Path(),
+    default=None,
+    help="Project directory (auto-detected from .agency/)",
+)
+def start(dir):
+    """Start the agency (manager + all agents).
 
-    # Find git root
+    Auto-detects project directory from .agency/ if not specified.
+    """
+    # Auto-detect from .agency/ if --dir not provided
+    if dir:
+        work_dir = Path(dir).expanduser().absolute()
+    else:
+        agency_dir_path = find_agency_dir()
+        if not agency_dir_path:
+            click.echo("[ERROR] No .agency/ found", err=True)
+            click.echo("[ERROR] Run 'agency init' or use --dir", err=True)
+            sys.exit(1)
+        work_dir = agency_dir_path.parent
+
     git_root = find_git_root(work_dir)
     if not git_root:
         click.echo("[ERROR] Not in a git repository", err=True)
@@ -179,7 +201,7 @@ def start(name, dir, manager):
     agency_dir = git_root / ".agency"
     if not agency_dir.exists():
         click.echo(f"[ERROR] No .agency/ found in {git_root}", err=True)
-        click.echo("[ERROR] Run 'agency init-project --dir <path>' first", err=True)
+        click.echo("[ERROR] Run 'agency init' first", err=True)
         sys.exit(1)
 
     project_name = work_dir.name
@@ -193,28 +215,48 @@ def start(name, dir, manager):
         click.echo(f"[INFO] Creating new session: {session_name}")
         create_project_session(session_name, socket_name, work_dir)
 
-    # Check if it's a manager
-    is_manager = (
-        manager or (agency_dir / "manager.yaml").exists() and name == _get_manager_name(agency_dir)
-    )
+    # Start all members
+    _start_all_members(session_name, socket_name, agency_dir, work_dir, sm)
 
-    if is_manager:
+
+def _start_all_members(
+    session_name: str,
+    socket_name: str,
+    agency_dir: Path,
+    work_dir: Path,
+    sm: SessionManager,
+) -> None:
+    """Start all configured members (manager + agents)."""
+    # Load manager config
+    manager_config = load_manager_config(agency_dir)
+    manager_name = manager_config.name if manager_config else "coordinator"
+
+    # Load agents config
+    agents = load_agents_config(agency_dir)
+
+    if not manager_config and not agents:
+        click.echo("[WARN] No manager or agents configured", err=True)
+        return
+
+    click.echo(f"[INFO] Starting all members for {session_name}")
+
+    # Start manager first
+    if manager_config:
         if sm.manager_exists():
-            click.echo("[ERROR] Manager already exists in session", err=True)
-            sys.exit(1)
-        start_manager_window(session_name, socket_name, name, agency_dir, work_dir)
-        click.echo(f"[INFO] Started manager: [MGR] {name}")
-    else:
-        config_path = agency_dir / "agents" / f"{name}.yaml"
-        if not config_path.exists():
-            click.echo(f"[ERROR] Agent config not found: {config_path}", err=True)
-            sys.exit(1)
-
-        if sm.window_exists(name):
-            click.echo(f"[INFO] Agent '{name}' already running, attaching...", err=True)
+            click.echo(f"  [SKIP] Manager already running: [MGR] {manager_name}")
         else:
-            start_agent_window(session_name, socket_name, name, agency_dir, work_dir)
-            click.echo(f"[INFO] Started agent: {name}")
+            start_manager_window(session_name, socket_name, manager_name, agency_dir, work_dir)
+            click.echo(f"  [OK] Started: [MGR] {manager_name}")
+
+    # Start all agents
+    for agent in agents:
+        if sm.window_exists(agent.name):
+            click.echo(f"  [SKIP] Agent already running: {agent.name}")
+        else:
+            start_agent_window(session_name, socket_name, agent.name, agency_dir, work_dir)
+            click.echo(f"  [OK] Started: {agent.name}")
+
+    click.echo("[INFO] All members started")
 
 
 def _get_manager_name(agency_dir: Path) -> str | None:
@@ -223,12 +265,26 @@ def _get_manager_name(agency_dir: Path) -> str | None:
 
 
 @click.command()
-@click.argument("session")
-@click.option("--timeout", type=int, help="Grace period in seconds")
+@click.argument("session", required=False)
+@click.option("--timeout", type=int, help="Grace period in seconds (default: 300)")
 @click.option("--force", is_flag=True, help="Force kill without graceful shutdown")
 def stop(session, timeout, force):
-    """Stop a session gracefully."""
-    if not session.startswith("agency-"):
+    """Stop a session gracefully.
+
+    Auto-detects session from .agency/ if not specified.
+    """
+    # Auto-detect from .agency/ if session not provided
+    if not session:
+        agency_dir_path = find_agency_dir()
+        if not agency_dir_path:
+            click.echo("[ERROR] No .agency/ found", err=True)
+            click.echo(
+                "[ERROR] Use 'agency stop <session>' or run from project directory", err=True
+            )
+            sys.exit(1)
+        work_dir = agency_dir_path.parent
+        session = f"agency-{work_dir.name}"
+    elif not session.startswith("agency-"):
         session = f"agency-{session}"
 
     socket_name = session
@@ -251,7 +307,7 @@ def stop(session, timeout, force):
     # Wait for graceful exit
     import time
 
-    timeout = timeout or 5  # Shorter default for tests
+    timeout = timeout or 300  # 5 minutes default
     interval = 0.5
 
     elapsed = 0.0
@@ -271,30 +327,80 @@ def stop(session, timeout, force):
 
 
 @click.command()
-@click.argument("session")
-def resume(session):
-    """Resume a halted session."""
-    if not session.startswith("agency-"):
+@click.argument("session", required=False)
+def kill(session):
+    """Force kill a session immediately.
+
+    Auto-detects session from .agency/ if not specified.
+    """
+    # Auto-detect from .agency/ if session not provided
+    if not session:
+        agency_dir_path = find_agency_dir()
+        if not agency_dir_path:
+            click.echo("[ERROR] No .agency/ found", err=True)
+            click.echo(
+                "[ERROR] Use 'agency kill <session>' or run from project directory", err=True
+            )
+            sys.exit(1)
+        work_dir = agency_dir_path.parent
+        session = f"agency-{work_dir.name}"
+    elif not session.startswith("agency-"):
         session = f"agency-{session}"
 
     socket_name = session
+    sm = SessionManager(session, socket_name=socket_name)
 
-    # Find work dir for session (placeholder)
-    work_dir = _find_work_dir_for_session(session)
-    if not work_dir:
-        click.echo(f"[ERROR] Could not find project directory for {session}", err=True)
+    if not sm.session_exists():
+        click.echo(f"[ERROR] Session not found: {session}", err=True)
         sys.exit(1)
 
-    agency_dir = work_dir / ".agency"
+    sm.kill_session()
+    sm.cleanup_socket()
+    click.echo(f"[INFO] Session {session} killed")
+
+
+@click.command()
+@click.option(
+    "--dir",
+    "dir",
+    type=click.Path(),
+    default=None,
+    help="Project directory (auto-detected from .agency/)",
+)
+def resume(dir):
+    """Resume a halted session.
+
+    Auto-detects session from .agency/ if not specified.
+    """
+    # Auto-detect from .agency/ if --dir not provided
+    if dir:
+        work_dir = Path(dir).expanduser().absolute()
+    else:
+        agency_dir_path = find_agency_dir()
+        if not agency_dir_path:
+            click.echo("[ERROR] No .agency/ found", err=True)
+            sys.exit(1)
+        work_dir = agency_dir_path.parent
+
+    git_root = find_git_root(work_dir)
+    if not git_root:
+        click.echo("[ERROR] Not in a git repository", err=True)
+        sys.exit(1)
+
+    agency_dir = git_root / ".agency"
     halted_file = agency_dir / ".halted"
 
     if not halted_file.exists():
         click.echo("[WARN] No halt marker found. Session may not be halted.", err=True)
 
+    project_name = work_dir.name
+    session_name = f"agency-{project_name}"
+    socket_name = session_name
+
     from agency.session import resume_halted_session
 
-    if resume_halted_session(session, socket_name, agency_dir, work_dir):
-        click.echo(f"[INFO] Resumed session: {session}")
+    if resume_halted_session(session_name, socket_name, agency_dir, work_dir):
+        click.echo(f"[INFO] Resumed session: {session_name}")
     else:
         click.echo("[ERROR] Failed to resume session", err=True)
         sys.exit(1)
@@ -307,35 +413,182 @@ def _find_work_dir_for_session(session_name: str) -> Path | None:
 
 
 @click.command()
-@click.argument("session")
-def attach(session):
-    """Attach to a session."""
-    if not session.startswith("agency-"):
-        session = f"agency-{session}"
+@click.option(
+    "--dir",
+    "dir",
+    type=click.Path(),
+    default=None,
+    help="Project directory (auto-detected from .agency/)",
+)
+def attach(dir):
+    """Attach to the project session.
 
-    socket_name = session
+    Auto-detects session from .agency/ directory.
+    """
+    # Auto-detect from .agency/ if --dir not provided
+    if dir:
+        work_dir = Path(dir).expanduser().absolute()
+    else:
+        agency_dir_path = find_agency_dir()
+        if not agency_dir_path:
+            click.echo("[ERROR] No .agency/ found", err=True)
+            sys.exit(1)
+        work_dir = agency_dir_path.parent
+
+    git_root = find_git_root(work_dir)
+    if not git_root:
+        click.echo("[ERROR] Not in a git repository", err=True)
+        sys.exit(1)
+
+    agency_dir = git_root / ".agency"
+    if not agency_dir.exists():
+        click.echo(f"[ERROR] No .agency/ found in {git_root}", err=True)
+        sys.exit(1)
+
+    project_name = work_dir.name
+    session_name = f"agency-{project_name}"
 
     # Use tmux attach
-    os.execvp("tmux", ["tmux", "-L", socket_name, "attach-session", "-t", session])
+    os.execvp("tmux", ["tmux", "-L", session_name, "attach-session", "-t", session_name])
 
 
 @click.command()
-def list():
-    """List all agency sessions."""
+@click.option(
+    "--dir",
+    "dir",
+    type=click.Path(),
+    default=None,
+    help="Project directory (auto-detected from .agency/)",
+)
+def list(dir):
+    """List agency sessions.
+
+    Shows sessions from current project or all agency sessions.
+    """
+    # Check if we're in an agency project
+    if dir:
+        work_dir = Path(dir).expanduser().absolute()
+    else:
+        agency_dir_path = find_agency_dir()
+        work_dir = agency_dir_path.parent if agency_dir_path else None
+
+    # If in a project, show that session first
+    if work_dir and (work_dir / ".agency").exists():
+        project_name = work_dir.name
+        session_name = f"agency-{project_name}"
+        sm = SessionManager(session_name, socket_name=session_name)
+
+        if sm.session_exists():
+            click.echo(f"{session_name} (current)")
+            for w in sm.list_windows():
+                click.echo(f"  {w}")
+            click.echo("")
+
+    # Also show all sessions on default socket
     from agency.session import list_agency_sessions
 
     sessions = list_agency_sessions()
 
-    if not sessions:
+    if sessions:
+        click.echo("# All Sessions")
+        for session in sessions:
+            click.echo(f"{session['name']}")
+            for window in session.get("windows", []):
+                click.echo(f"  {window['name']}")
+    elif (
+        not work_dir
+        or not (work_dir / ".agency").exists()
+        or not SessionManager(
+            f"agency-{work_dir.name}", socket_name=f"agency-{work_dir.name}"
+        ).session_exists()
+    ):
         click.echo("[INFO] No agency sessions running")
-        return
 
-    for session in sessions:
-        click.echo(f"{session['name']}")
-        for window in session.get("windows", []):
-            is_manager = window.get("is_manager", False)
-            prefix = "  [MGR] " if is_manager else "  "
-            click.echo(f"{prefix}{window['name']}")
+
+@click.command()
+@click.option(
+    "--dir",
+    "dir",
+    type=click.Path(),
+    default=None,
+    help="Project directory (auto-detected from .agency/)",
+)
+def members(dir):
+    """Show all configured members (manager and agents)."""
+    # Auto-detect from .agency/ if --dir not provided
+    if dir:
+        work_dir = Path(dir).expanduser().absolute()
+    else:
+        agency_dir_path = find_agency_dir()
+        if not agency_dir_path:
+            click.echo("[ERROR] No .agency/ found", err=True)
+            click.echo("[ERROR] Run 'agency init-project' or use --dir", err=True)
+            sys.exit(1)
+        work_dir = agency_dir_path.parent
+
+    git_root = find_git_root(work_dir)
+    if not git_root:
+        click.echo("[ERROR] Not in a git repository", err=True)
+        sys.exit(1)
+
+    agency_dir = git_root / ".agency"
+    if not agency_dir.exists():
+        click.echo(f"[ERROR] No .agency/ found in {git_root}", err=True)
+        sys.exit(1)
+
+    # Load configs
+    manager_config = load_manager_config(agency_dir)
+    agents = load_agents_config(agency_dir)
+
+    # Get running status
+    project_name = work_dir.name
+    session_name = f"agency-{project_name}"
+    sm = SessionManager(session_name, socket_name=session_name)
+    running_windows = sm.list_windows() if sm.session_exists() else []
+
+    click.echo(f"# {project_name}")
+    click.echo("")
+
+    # Show manager
+    click.echo("## Manager")
+    click.echo("")
+    if manager_config:
+        is_running = any(w.startswith("[MGR]") for w in running_windows)
+        status = "🟢 running" if is_running else "⚪ stopped"
+        click.echo(f"- **Name**: {manager_config.name}")
+        click.echo(f"- **Status**: {status}")
+        if manager_config.personality:
+            preview = (
+                manager_config.personality[:50] + "..."
+                if len(manager_config.personality) > 50
+                else manager_config.personality
+            )
+            click.echo(f"- **Personality**: {preview}")
+    else:
+        click.echo("- _No manager configured_")
+    click.echo("")
+
+    # Show agents
+    click.echo("## Agents")
+    click.echo("")
+    if agents:
+        for agent in agents:
+            is_running = agent.name in running_windows
+            status = "🟢 running" if is_running else "⚪ stopped"
+            click.echo(f"### {agent.name}")
+            click.echo("")
+            click.echo(f"- **Status**: {status}")
+            if agent.personality:
+                preview = (
+                    agent.personality[:50] + "..."
+                    if len(agent.personality) > 50
+                    else agent.personality
+                )
+                click.echo(f"- **Personality**: {preview}")
+            click.echo("")
+    else:
+        click.echo("- _No agents configured_")
+        click.echo("")
 
 
 # === Task Commands ===
@@ -672,18 +925,176 @@ def tasks_history(agent):
 def completions(shell):
     """Print shell completion script."""
     from agency.completions import get_completion_script
+
     click.echo(get_completion_script(shell))
 
 
+# === Tmux Commands ===
+
+
+@click.group("tmux")
+def tmux_cmd():
+    """Tmux session operations via agency config."""
+    pass
+
+
+@tmux_cmd.command("list")
+@click.pass_context
+def tmux_list(ctx):
+    """List windows in the agency session."""
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        click.echo("[ERROR] Run 'agency init' or use --dir", err=True)
+        ctx.exit(1)
+
+    config = load_agency_config(agency_dir)
+    session_name = f"agency-{config.project}"
+    socket_name = f"agency-{config.project}"
+
+    sm = SessionManager(session_name, socket_name)
+    if not sm.session_exists():
+        click.echo(f"[ERROR] Session '{session_name}' not found", err=True)
+        ctx.exit(1)
+
+    click.echo(f"Session: {session_name} (socket: {socket_name})")
+    click.echo("")
+
+    for window in sm.list_windows():
+        is_mgr = window.startswith("[MGR]")
+        marker = " [MGR]" if is_mgr else ""
+        click.echo(f"  {window}{marker}")
+
+
+@tmux_cmd.command("send")
+@click.argument("window")
+@click.argument("text")
+@click.pass_context
+def tmux_send(ctx, window, text):
+    """Send keys to a window."""
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        ctx.exit(1)
+
+    config = load_agency_config(agency_dir)
+    session_name = f"agency-{config.project}"
+    socket_name = f"agency-{config.project}"
+
+    sm = SessionManager(session_name, socket_name)
+    if not sm.session_exists():
+        click.echo(f"[ERROR] Session '{session_name}' not found", err=True)
+        ctx.exit(1)
+
+    sm.send_keys(window, text)
+    click.echo(f"[OK] Sent to {window}: {text}")
+
+
+@tmux_cmd.command("new")
+@click.argument("name")
+@click.option("--command", "cmd", default=None, help="Command to run in window")
+@click.pass_context
+def tmux_new(ctx, name, cmd):
+    """Create a new window."""
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        ctx.exit(1)
+
+    config = load_agency_config(agency_dir)
+    session_name = f"agency-{config.project}"
+    socket_name = f"agency-{config.project}"
+    work_dir = agency_dir.parent
+
+    result = subprocess.run(
+        [
+            "tmux",
+            "-L",
+            socket_name,
+            "new-window",
+            "-d",
+            "-t",
+            session_name,
+            "-n",
+            name,
+            "-c",
+            str(work_dir),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        click.echo(f"[ERROR] Failed to create window: {result.stderr}", err=True)
+        ctx.exit(1)
+
+    if cmd:
+        sm = SessionManager(session_name, socket_name)
+        sm.send_keys(name, cmd)
+
+    click.echo(f"[OK] Created window: {name}")
+
+
+@tmux_cmd.command("attach")
+@click.pass_context
+def tmux_attach(ctx):
+    """Attach to the agency session (opens new terminal)."""
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        ctx.exit(1)
+
+    config = load_agency_config(agency_dir)
+    session_name = f"agency-{config.project}"
+    socket_name = f"agency-{config.project}"
+
+    # Detach any existing clients first
+    subprocess.run(
+        ["tmux", "-L", socket_name, "detach", "-s", session_name],
+        capture_output=True,
+    )
+
+    # Launch terminal with attach
+    os.execlp("tmux", "tmux", "-L", socket_name, "attach", "-t", session_name)
+
+
+@tmux_cmd.command("run")
+@click.argument("window")
+@click.argument("command")
+@click.pass_context
+def tmux_run(ctx, window, command):
+    """Run a command in a window."""
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        ctx.exit(1)
+
+    config = load_agency_config(agency_dir)
+    session_name = f"agency-{config.project}"
+    socket_name = f"agency-{config.project}"
+
+    sm = SessionManager(session_name, socket_name)
+    if not sm.session_exists():
+        click.echo(f"[ERROR] Session '{session_name}' not found", err=True)
+        ctx.exit(1)
+
+    # Send command with Enter
+    sm.send_keys(window, command)
+    click.echo(f"[OK] Running in {window}: {command}")
+
+
 # Register commands
-cli.add_command(init_project)
+cli.add_command(init_project, name="init")
 cli.add_command(start)
 cli.add_command(stop)
+cli.add_command(kill)
 cli.add_command(resume)
 cli.add_command(attach)
 cli.add_command(list)
+cli.add_command(members)
 cli.add_command(tasks)
 cli.add_command(completions)
+cli.add_command(tmux_cmd)
 
 
 def main():
