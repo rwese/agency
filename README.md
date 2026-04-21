@@ -202,13 +202,37 @@ agency/
 │   ├── tasks.py           # Task store
 │   ├── tasks_cli.py       # Task CLI
 │   ├── template.py        # Template download
-│   └── config.py          # Config loading
+│   ├── config.py          # Config loading
+│   ├── heartbeat.py       # Task monitoring & notification
+│   └── pi_inject.py      # pi-inject client
+├── extras/
+│   └── pi/extensions/
+│       └── pi-inject/     # pi-inject extension (submodule)
 ├── tests/
 │   ├── test_tasks.py
 │   ├── test_session.py
 │   └── test_config.py
 ├── docs/design/           # Design documents
 └── pyproject.toml
+```
+
+## pi-inject Integration
+
+Agency uses [pi-inject](https://github.com/rwese/pi-inject) for communication with pi agents:
+
+- **pi-inject extension** runs inside pi, creates a Unix socket server
+- **heartbeat.py** monitors tasks and sends notifications via socket
+- **pi_inject.py** Python client for socket communication
+
+Each agent/manager gets a unique socket: `.agency/injector-{name}.sock`
+
+### Socket Protocol
+
+```json
+{ "type": "steer", "message": "agency tasks list" }
+{ "type": "followup", "message": "do this after" }
+{ "type": "command", "command": "/reload" }
+{ "type": "ping" }
 ```
 
 ## Design Documents
