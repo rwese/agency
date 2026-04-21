@@ -48,8 +48,8 @@ class TaskBoard(Widget):
         ("enter", "select", "Select"),
     ]
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, id: str | None = None) -> None:
+        super().__init__(id=id)
         self.tasks: list[TaskInfo] = []
         self._cursor: int = 0
 

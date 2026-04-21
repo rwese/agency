@@ -13,7 +13,7 @@ from textual.message import Message
 from textual.timer import Timer
 from textual.widgets import Footer, Header, Input, Static, Log
 
-from agency.tui.widgets.task_board import TaskBoard, TaskInfo
+from agency.tui.widgets.task_board import TaskInfo
 
 
 TMUX_SOCKET = "agency"
@@ -213,6 +213,7 @@ class AgencyTUI(App):
         self._selected_session_index = 0
         self._selected_agent_index: int | None = None
         self._tasks: list[TaskInfo] = []
+        self._selected_task_index = 0
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -273,7 +274,7 @@ class AgencyTUI(App):
             else:
                 lines.append(f"    {icon} {s.display_name}")
             
-            # Agents line (always show first line)
+            # Agents line
             if is_selected:
                 lines.append(f"    {agents}")
             else:
@@ -301,8 +302,14 @@ class AgencyTUI(App):
             widget.update("[dim]No tasks[/dim]")
             return
         
+        # Reset index if out of bounds
+        if self._selected_task_index >= len(self._tasks):
+            self._selected_task_index = 0
+        
+        is_active = self._current_panel == Panel.TASKS
         lines = []
-        for t in self._tasks:
+        
+        for i, t in enumerate(self._tasks):
             icon = {
                 "pending": "⏳",
                 "in_progress": "🔄",
@@ -310,14 +317,24 @@ class AgencyTUI(App):
                 "failed": "❌"
             }.get(t.status, "❓")
             
-            # Truncate description
             desc = t.description
-            if len(desc) > 40:
-                desc = desc[:37] + "..."
+            if len(desc) > 38:
+                desc = desc[:35] + "..."
             
-            lines.append(f"{icon} [b]{t.task_id}:[/b] {desc}")
+            is_selected = i == self._selected_task_index
+            
+            if is_selected and is_active:
+                lines.append(f"[bold cyan]▌[/bold cyan] {icon} {t.task_id}: {desc}")
+            elif is_selected:
+                lines.append(f"[cyan]  {icon} {t.task_id}: {desc}[/cyan]")
+            else:
+                lines.append(f"    {icon} {t.task_id}: {desc}")
+            
             if t.assigned_to:
-                lines.append(f"    → {t.assigned_to}")
+                if is_selected:
+                    lines.append(f"[cyan]    → {t.assigned_to}[/cyan]")
+                else:
+                    lines.append(f"    [dim]→ {t.assigned_to}[/dim]")
         
         widget.update("\n".join(lines))
 
@@ -337,27 +354,22 @@ class AgencyTUI(App):
         """Update panel headers to show which is active."""
         left_panel = self.query_one("#left-panel", Vertical)
         
-        # Remove all panel classes
         left_panel.remove_class("panel-active")
         left_panel.remove_class("panel-active-tasks")
         
-        # Add active class based on current panel
         if self._current_panel == Panel.SESSIONS:
             left_panel.add_class("panel-active")
         elif self._current_panel == Panel.TASKS:
             left_panel.add_class("panel-active-tasks")
         
-        # Update header text
         sessions_h = self.query_one("#sessions-header", Static)
         tasks_h = self.query_one("#tasks-header", Static)
         main_h = self.query_one("#main-header", Static)
         
-        # Base text
         sessions_text = "[S] Sessions"
         tasks_text = "[T] Tasks"
         main_text = "[M] Send Message"
         
-        # Add markers for active panel
         if self._current_panel == Panel.SESSIONS:
             sessions_text = "[S] Sessions ◀"
         elif self._current_panel == Panel.TASKS:
@@ -400,6 +412,10 @@ class AgencyTUI(App):
                     self._selected_agent_index = 0
             self.refresh_sessions()
             self.update_target()
+        elif self._current_panel == Panel.TASKS:
+            if self._tasks and self._selected_task_index > 0:
+                self._selected_task_index -= 1
+                self.refresh_tasks()
 
     def action_nav_down(self) -> None:
         if self._current_panel == Panel.SESSIONS:
@@ -422,6 +438,10 @@ class AgencyTUI(App):
                     self._selected_session_index += 1
             self.refresh_sessions()
             self.update_target()
+        elif self._current_panel == Panel.TASKS:
+            if self._tasks and self._selected_task_index < len(self._tasks) - 1:
+                self._selected_task_index += 1
+                self.refresh_tasks()
 
     def action_select(self) -> None:
         if self._current_panel == Panel.SESSIONS and self._sessions:
@@ -433,6 +453,16 @@ class AgencyTUI(App):
                     self._selected_agent_index = None
                 self.refresh_sessions()
                 self.update_target()
+        elif self._current_panel == Panel.TASKS and self._tasks:
+            task = self._tasks[self._selected_task_index]
+            log = self.query_one("#activity-log", Log)
+            log.write_line(f"[cyan]Task:[/cyan] {task.task_id}")
+            log.write_line(f"  {task.description}")
+            log.write_line(f"  Status: {task.status}")
+            if task.assigned_to:
+                log.write_line(f"  Assigned: {task.assigned_to}")
+            if task.result:
+                log.write_line(f"  Result: {task.result}")
 
     def action_focus_input(self) -> None:
         self._current_panel = Panel.MAIN
@@ -442,8 +472,10 @@ class AgencyTUI(App):
     def action_clear_selection(self) -> None:
         self._current_panel = Panel.SESSIONS
         self._selected_agent_index = None
+        self._selected_task_index = 0
         self.update_panel_indicators()
         self.refresh_sessions()
+        self.refresh_tasks()
         self.update_target()
 
     def action_attach(self) -> None:
@@ -496,8 +528,8 @@ class AgencyTUI(App):
 [bold]Agency TUI - Keyboard Shortcuts[/bold]
 ─────────────────────────────────────
 [cyan]←/→[/cyan]    Switch panels (Sessions/Tasks/Main)
-[cyan]↑/↓[/cyan]    Navigate sessions & agents
-[cyan]Enter[/cyan]  Select/expand session
+[cyan]↑/↓[/cyan]    Navigate sessions & tasks
+[cyan]Enter[/cyan]  Select/expand session or show task details
 [cyan]a[/cyan]      Attach to session
 [cyan]s[/cyan]      Focus message input
 [cyan]n[/cyan]      New agent
