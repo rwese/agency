@@ -85,33 +85,33 @@
 ## Phase 2 Tasks ✅ COMPLETE
 
 ### 2.1 Task ID Generation
-- [ ] Implement wordlist-based ID generator
-- [ ] Collision detection
-- [ ] Unit tests
+- [x] Implement wordlist-based ID generator
+- [x] Collision detection
+- [x] Unit tests
 
 ### 2.2 tasks.json Management
-- [ ] Create `TasksStore` class
-- [ ] File locking with filelock
-- [ ] Version 2 schema
-- [ ] CRUD operations
+- [x] Create `TasksStore` class
+- [x] File locking with filelock
+- [x] Version 2 schema
+- [x] CRUD operations
 
 ### 2.3 tasks list
-- [ ] `cmd_tasks_list()` function
-- [ ] Markdown output
-- [ ] Filtering options
+- [x] `cmd_tasks_list()` function
+- [x] Markdown output
+- [x] Filtering options
 
 ### 2.4 tasks add
-- [ ] `cmd_tasks_add()` function
-- [ ] Directory creation
-- [ ] Task ID generation
+- [x] `cmd_tasks_add()` function
+- [x] Directory creation
+- [x] Task ID generation
 
 ### 2.5 tasks show
-- [ ] `cmd_tasks_show()` function
-- [ ] Markdown output
+- [x] `cmd_tasks_show()` function
+- [x] Markdown output
 
 ### 2.6 tasks assign
-- [ ] `cmd_tasks_assign()` function
-- [ ] Free agent validation
+- [x] `cmd_tasks_assign()` function
+- [x] Free agent validation
 
 ### 2.7 tasks complete
 - [ ] `cmd_tasks_complete()` function
@@ -218,7 +218,7 @@
 ## Template Repository
 
 ### agency-templates
-- [ ] Create github.com/rwese/agency-templates repo
-- [ ] Create `basic` template
-- [ ] Create `api` template
-- [ ] Document templates
+- [x] Create github.com/rwese/agency-templates repo
+- [x] Create `basic` template
+- [x] Create `api` template
+- [x] Document templates

@@ -348,7 +348,6 @@ class TestTaskStoreFileLocking:
         store = TaskStore(temp_agency_dir)
         store.add_task(description="Lock test")
 
-        lock_file = temp_agency_dir / ".tasks.lock"
         # Lock file may or may not exist depending on timing
         # The important thing is that operations complete without error
         assert True

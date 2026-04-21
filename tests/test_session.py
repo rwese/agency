@@ -7,12 +7,12 @@ from pathlib import Path
 import pytest
 
 from agency.session import (
-    SESSION_PREFIX,
     MANAGER_PREFIX,
+    SESSION_PREFIX,
     SessionManager,
     create_project_session,
-    start_manager_window,
     start_agent_window,
+    start_manager_window,
 )
 
 
@@ -23,6 +23,7 @@ class TestSessionManager:
     def temp_socket(self):
         """Create a unique socket name for testing."""
         import uuid
+
         return f"agency-test-{uuid.uuid4().hex[:8]}"
 
     @pytest.fixture
@@ -82,7 +83,9 @@ class TestSessionManager:
 
         # Manager window
         manager_name = "coordinator"
-        start_manager_window(session_name, temp_socket, manager_name, temp_dir / ".agency", temp_dir)
+        start_manager_window(
+            session_name, temp_socket, manager_name, temp_dir / ".agency", temp_dir
+        )
 
         assert sm.window_exists(f"{MANAGER_PREFIX}{manager_name}")
         assert sm.manager_exists()
@@ -110,6 +113,7 @@ class TestSessionManager:
 
         # Give tmux time to process
         import time
+
         time.sleep(0.5)
 
         # Cleanup
@@ -142,6 +146,7 @@ class TestTmuxIntegration:
     def temp_socket(self):
         """Create a unique socket name for testing."""
         import uuid
+
         return f"agency-test-{uuid.uuid4().hex[:8]}"
 
     @pytest.fixture

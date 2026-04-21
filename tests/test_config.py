@@ -8,15 +8,14 @@ import yaml
 
 from agency.config import (
     AgencyConfig,
-    ManagerConfig,
     AgentConfig,
+    ManagerConfig,
     load_agency_config,
-    load_manager_config,
     load_agents_config,
-    load_agent_config,
+    load_manager_config,
     save_agency_config,
-    save_manager_config,
     save_agents_config,
+    save_manager_config,
 )
 
 
@@ -96,12 +95,16 @@ class TestLoadAgencyConfig:
     def test_load_existing(self, temp_agency_dir):
         """Test loading existing configuration."""
         config_file = temp_agency_dir / "config.yaml"
-        config_file.write_text(yaml.dump({
-            "project": "myapi",
-            "shell": "zsh",
-            "template_url": "https://example.com",
-            "stop_timeout": 45,
-        }))
+        config_file.write_text(
+            yaml.dump(
+                {
+                    "project": "myapi",
+                    "shell": "zsh",
+                    "template_url": "https://example.com",
+                    "stop_timeout": 45,
+                }
+            )
+        )
 
         config = load_agency_config(temp_agency_dir)
 
@@ -131,13 +134,17 @@ class TestLoadManagerConfig:
     def test_load_existing(self, temp_agency_dir):
         """Test loading existing manager configuration."""
         config_file = temp_agency_dir / "manager.yaml"
-        config_file.write_text(yaml.dump({
-            "name": "coordinator",
-            "personality": "You are a manager.",
-            "poll_interval": 60,
-            "auto_approve": True,
-            "max_retries": 3,
-        }))
+        config_file.write_text(
+            yaml.dump(
+                {
+                    "name": "coordinator",
+                    "personality": "You are a manager.",
+                    "poll_interval": 60,
+                    "auto_approve": True,
+                    "max_retries": 3,
+                }
+            )
+        )
 
         config = load_manager_config(temp_agency_dir)
 
@@ -174,26 +181,38 @@ class TestLoadAgentsConfig:
 
         # Create agents.yaml
         agents_file = temp_agency_dir / "agents.yaml"
-        agents_file.write_text(yaml.dump({
-            "agents": [
-                {"name": "coder", "config": "agents/coder.yaml"},
-                {"name": "tester", "config": "agents/tester.yaml"},
-            ]
-        }))
+        agents_file.write_text(
+            yaml.dump(
+                {
+                    "agents": [
+                        {"name": "coder", "config": "agents/coder.yaml"},
+                        {"name": "tester", "config": "agents/tester.yaml"},
+                    ]
+                }
+            )
+        )
 
         # Create coder config
         coder_file = agents_dir / "coder.yaml"
-        coder_file.write_text(yaml.dump({
-            "name": "coder",
-            "personality": "Senior developer",
-        }))
+        coder_file.write_text(
+            yaml.dump(
+                {
+                    "name": "coder",
+                    "personality": "Senior developer",
+                }
+            )
+        )
 
         # Create tester config
         tester_file = agents_dir / "tester.yaml"
-        tester_file.write_text(yaml.dump({
-            "name": "tester",
-            "personality": "QA engineer",
-        }))
+        tester_file.write_text(
+            yaml.dump(
+                {
+                    "name": "tester",
+                    "personality": "QA engineer",
+                }
+            )
+        )
 
         agents = load_agents_config(temp_agency_dir)
 
