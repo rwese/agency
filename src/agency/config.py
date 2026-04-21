@@ -40,12 +40,21 @@ class AgentConfig:
     personality: str | None = None
 
 
+def _has_unresolved_vars(path: str) -> bool:
+    """Check if path contains unresolved ${VAR} or $VAR patterns."""
+    import re
+
+    return bool(re.search(r"\$\{[^}]+\}|\$[A-Z_][A-Z0-9_]*", path))
+
+
 def load_agency_config(agency_dir: Path) -> AgencyConfig:
     """Load project configuration from .agency/config.yaml.
 
     Environment variables in additional_context_files are expanded when loading.
+    Warns to stderr if referenced files don't exist after expansion.
     """
     import os
+    import sys
 
     config_path = agency_dir / "config.yaml"
 
@@ -65,6 +74,17 @@ def load_agency_config(agency_dir: Path) -> AgencyConfig:
             # Expand ~ and ${VAR} in paths
             expanded = os.path.expanduser(path)
             expanded = os.path.expandvars(expanded)
+
+            # Check for unresolved vars (indicates missing env var)
+            if _has_unresolved_vars(expanded):
+                print(f"[WARN] Unresolved env var in context file: {path} -> {expanded}", file=sys.stderr)
+                continue
+
+            # Check if file exists (warn if not)
+            expanded_path = Path(expanded)
+            if not expanded_path.exists():
+                print(f"[WARN] Context file not found: {expanded}", file=sys.stderr)
+
             context_files_expanded.append(expanded)
 
     return AgencyConfig(
@@ -72,7 +92,7 @@ def load_agency_config(agency_dir: Path) -> AgencyConfig:
         shell=data.get("shell", "bash"),
         template_url=data.get("template_url"),
         stop_timeout=data.get("stop_timeout", 30),
-        additional_context_files=context_files_expanded,
+        additional_context_files=context_files_expanded if context_files_expanded else None,
     )
 
 
