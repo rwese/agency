@@ -1,59 +1,89 @@
-# Agency - Project Agent Configuration
+# Agency - Agent Configuration
 
 ## Overview
 
-Simple tmux-based AI agent session manager. Single bash script, no dependencies beyond tmux/bash.
-
-## Architecture
-
-```
-agency/
-├── agency              # Main entry point (10KB)
-├── agents/             # YAML configs per agent
-├── completions/        # Shell completions
-├── mock_agent.py       # Test mock for development
-└── test_agency.sh      # Test suite (11 tests)
-```
+Simple tmux-based AI agent session manager. Single Python script, no external dependencies beyond tmux.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `agency init` | Create config skeleton in ~/.config/agency/ |
-| `agency start <name> [--dir <path>]` | Start agent in tmux |
-| `agency send <session> <msg>` | Send message to running session |
-| `agency list` | List running sessions |
-| `agency stop <session>` | Graceful shutdown (30s timeout) |
-| `agency kill <session>` | Force kill session |
-| `agency kill-all` | Kill all agency sessions |
+| `python3 agency.py init` | Create config skeleton in `~/.config/agency/` |
+| `python3 agency.py start <name> --dir <path>` | Start agent in session |
+| `python3 agency.py list` | List sessions with windows |
+| `python3 agency.py send <session> <agent> <msg>` | Send message |
+| `python3 agency.py stop <session>[:agent]` | Graceful shutdown |
+| `python3 agency.py kill <session>[:agent]` | Force kill |
+| `python3 agency.py kill-all` | Kill all agency sessions |
 
-## Config Schema
+## Session Model
 
-```yaml
-name: <agent-name>
-memory_file: <path-to-memory-file>
-source_dir: <path-to-source-directory>
-storage_dir: <path-to-storage-directory>
+- **Session** = one per project/directory (`agency-{basename}`)
+- **Window** = one per agent
+- **Rule** = unique agent names within session
+
+```
+agency start coder --dir ~/projects/api  # Creates session "api", window "coder"
+agency start tester --dir ~/projects/api # Adds window "tester" to "api"
+agency start coder --dir ~/projects/api  # ERROR: coder exists
 ```
 
-## Session Naming
+## Configuration
 
-`{agent}-{word1}-{word2}` e.g., `coder-dark-wolf`
+YAML files in `~/.config/agency/agents/`:
 
-- 59 curated 1-token words
-- 3,481 unique combinations
-- Set AGENCY_AGENT_CMD env var to override default `pi` command
+```yaml
+name: the-dude
+personality: |
+  Like The Dude from The Big Lebowski. Laid back.
+```
 
 ## Development
 
 ```bash
-./test_agency.sh          # Run test suite
-AGENCY_AGENT_CMD="python3 mock_agent.py" ./agency start test  # Test with mock
-shellcheck -S error agency  # Lint check
+# Run tests
+./test_agency.sh
+
+# Test with mock agent
+AGENCY_AGENT_CMD="python3 mock_agent.py" python3 agency.py start test --dir /tmp
+
+# Manual tmux debugging
+tmux list-sessions
+tmux list-windows -t <session>
+tmux capture-pane -t <session>:<window> -p
 ```
 
-## Quality Gates
+## Testing
 
-- [x] ShellCheck: zero errors
-- [x] Tests: 11/11 passing
-- [x] .editorconfig: consistent whitespace
+- `test_agency.sh` - Integration tests (9 tests)
+- `mock_agent.py` - Mock pi for testing
+- `generate_agent_script.py` - Helper for agent launch scripts
+
+## Structure
+
+```
+agency/
+├── agency.py                   # Main CLI
+├── generate_agent_script.py     # Agent script generator
+├── mock_agent.py              # Mock agent for testing
+├── test_agency.sh             # Test suite
+├── README.md                   # User documentation
+└── ~/.config/agency/          # Config directory
+    ├── agents/                # Agent YAML configs
+    └── sessions/              # Session scripts & state
+```
+
+## Boundaries
+
+**ALWAYS**
+- Run `./test_agency.sh` before committing
+- Use `python3 agency.py` not `./agency`
+- Clean up tmux sessions after tests
+
+**USUALLY**
+- Test with mock_agent before real pi
+- Verify tmux sessions are gone after tests
+
+**NEVER**
+- Commit with untested changes
+- Leave running tmux sessions
