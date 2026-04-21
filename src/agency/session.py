@@ -466,14 +466,15 @@ def _generate_manager_launch_script(
     # Build command
     cmd = (
         f'cd "{work_dir}" && '
+        f"export "
+        f"AGENCY_ROLE=MANAGER "
+        f"AGENCY_PROJECT={session_name} "
+        f"AGENCY_DIR=\"{agency_dir}\" "
+        f"AGENCY_WORKDIR=\"{work_dir}\" "
+        f"AGENCY_MANAGER={manager_name} && "
         f"{agent_cmd} "
         f'--session-dir "{agency_dir}" '
         f"--no-context-files "
-        f"AGENCY_ROLE=MANAGER "
-        f"AGENCY_PROJECT={session_name} "
-        f'AGENCY_DIR="{agency_dir}" '
-        f'AGENCY_WORKDIR="{work_dir}" '
-        f"AGENCY_MANAGER={manager_name} "
         f"{context_args}"
         f"{personality_args} "
     )
@@ -559,14 +560,15 @@ def _generate_agent_launch_script(
     # Build command
     cmd = (
         f'cd "{work_dir}" && '
+        f"export "
+        f"AGENCY_ROLE=AGENT "
+        f"AGENCY_PROJECT={session_name} "
+        f"AGENCY_DIR=\"{agency_dir}\" "
+        f"AGENCY_WORKDIR=\"{work_dir}\" "
+        f"AGENCY_AGENT={agent_name} && "
         f"{agent_cmd} "
         f'--session-dir "{agency_dir}" '
         f"--no-context-files "
-        f"AGENCY_ROLE=AGENT "
-        f"AGENCY_PROJECT={session_name} "
-        f'AGENCY_DIR="{agency_dir}" '
-        f'AGENCY_WORKDIR="{work_dir}" '
-        f"AGENCY_AGENT={agent_name} "
         f"{personality_args} "
         f"{context_args}"
     )
