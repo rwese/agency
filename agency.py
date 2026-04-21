@@ -6,6 +6,7 @@ A Python-based tmux session manager for AI agents.
 """
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -153,6 +154,27 @@ def load_agent_config(agent_name: str) -> Optional[dict]:
         return yaml.safe_load(f)
 
 
+def create_quiet_settings() -> None:
+    """Create .pi/settings.json with quiet startup for agency sessions."""
+    pi_dir = SESSIONS_DIR / ".pi"
+    pi_dir.mkdir(parents=True, exist_ok=True)
+    settings_path = pi_dir / "settings.json"
+    
+    # Only create if doesn't exist
+    if not settings_path.exists():
+        settings = {
+            "quietStartup": True,
+            "collapseChangelog": True,
+            "packages": [],
+            "extensions": [],
+            "skills": [],
+            "prompts": [],
+            "themes": []
+        }
+        with open(settings_path, 'w') as f:
+            json.dump(settings, f, indent=2)
+
+
 def generate_agent_script(
     session_name: str,
     window_name: str,
@@ -161,13 +183,18 @@ def generate_agent_script(
 ) -> Path:
     """Generate and write the agent launch script."""
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # Create quiet settings for agent sessions
+    create_quiet_settings()
+    
     script_path = SESSIONS_DIR / f"{session_name}-{window_name}.sh"
     
     agency_dir = Path(__file__).parent.absolute()
     
-    # Build command - use exec to replace shell so agent is main process
-    # This allows the window to close when agent exits
-    cmd = f'cd "{agency_dir}" && exec {agent_cmd} --session-dir "{SESSIONS_DIR}"'
+    # Build command with --no-context-files for clean persona
+    # PI_CODING_AGENT=true signals agent mode
+    base_cmd = f'{agent_cmd} --session-dir "{SESSIONS_DIR}" --no-context-files PI_CODING_AGENT=true'
+    cmd = f'cd "{agency_dir}" && exec {base_cmd}'
     if personality:
         # Escape personality for shell
         escaped = personality.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`")
@@ -317,7 +344,7 @@ def cmd_send(session_name: str, target: Optional[str], message: str) -> None:
     log_info(f"Sent message to {session_name}:{target}")
 
 
-def cmd_stop(input_str: str) -> None:
+def cmd_stop(input_str: str, force: bool = False) -> None:
     """Stop a session or window gracefully."""
     if not input_str:
         log_error("Session required")
@@ -337,21 +364,65 @@ def cmd_stop(input_str: str) -> None:
         sys.exit(1)
     
     if agent:
-        # Stop specific window - just send message, don't wait for tmux window to close
+        # Stop specific window
         if not window_exists(session_name, agent):
             log_error(f"Window '{agent}' not found in session '{session_name}'")
             sys.exit(1)
         
         log_info(f"Sending shutdown to {session_name}:{agent}...")
         send_keys(session_name, agent, SHUTDOWN_MESSAGE)
-        log_info(f"Shutdown sent to {session_name}:{agent}")
+        
+        if not force:
+            # Wait for graceful shutdown with timeout
+            if wait_for_exit(session_name, agent, STOP_TIMEOUT):
+                log_info(f"{session_name}:{agent} stopped gracefully")
+                return
+            log_info(f"{session_name}:{agent} did not exit gracefully, force killing...")
+        
+        tmux_or_raise("kill-window", "-t", f"{session_name}:{agent}")
+        log_info(f"{session_name}:{agent} killed")
     else:
         # Stop entire session - send to all windows
         log_info(f"Sending shutdown to {session_name}...")
         windows = list_windows(session_name)
         for win in windows:
             send_keys(session_name, win, SHUTDOWN_MESSAGE)
-        log_info(f"Shutdown sent to {len(windows)} window(s)")
+        
+        if not force:
+            # Wait for all windows to exit
+            all_exited = True
+            for win in windows:
+                if not wait_for_exit(session_name, win, STOP_TIMEOUT):
+                    all_exited = False
+            if all_exited and not session_exists(session_name):
+                log_info(f"{session_name} stopped gracefully")
+                return
+            log_info(f"Some windows did not exit gracefully, force killing...")
+        
+        tmux_or_raise("kill-session", "-t", session_name)
+        log_info(f"{session_name} killed")
+
+
+def wait_for_exit(session_name: str, window_name: str, timeout: int) -> bool:
+    """Wait for a window's process to exit within timeout."""
+    # Get the pane PID
+    result = tmux("list-panes", "-t", f"{session_name}:{window_name}", "-F", "#{pane_pid}")
+    if result.returncode != 0:
+        return False
+    
+    pane_pid = result.stdout.strip()
+    if not pane_pid:
+        return False
+    
+    # Wait for process to exit
+    for _ in range(timeout):
+        result = subprocess.run(["ps", "-p", pane_pid], capture_output=True)
+        if result.returncode != 0:
+            # Process exited
+            return True
+        time.sleep(1)
+    
+    return False
 
 
 def cmd_kill(input_str: str) -> None:
@@ -399,6 +470,23 @@ def cmd_kill_all() -> None:
         count += 1
     
     log_info(f"Killed {count} session(s)")
+
+
+def cmd_attach(session_name: str, target: Optional[str] = None) -> None:
+    """Attach to an agency session."""
+    if not session_exists(session_name):
+        log_error(f"Session not found: {session_name}")
+        sys.exit(1)
+    
+    if target:
+        if not window_exists(session_name, target):
+            log_error(f"Window '{target}' not found in session '{session_name}'")
+            sys.exit(1)
+        # Select the target window before attaching
+        tmux_or_raise("select-window", "-t", f"{session_name}:{target}")
+    
+    # Attach to the session - this replaces the current process with tmux
+    os.execvp("tmux", ["tmux", "-L", TMUX_SOCKET, "attach-session", "-t", session_name])
 
 
 def main() -> None:
@@ -449,6 +537,11 @@ Examples:
     # kill-all
     subparsers.add_parser("kill-all", help="Kill all agency sessions")
     
+    # attach
+    attach_parser = subparsers.add_parser("attach", help="Attach to an agency session")
+    attach_parser.add_argument("session", help="Session name")
+    attach_parser.add_argument("target", nargs="?", help="Agent/window name (optional)")
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -471,6 +564,8 @@ Examples:
         cmd_kill(args.session)
     elif args.command == "kill-all":
         cmd_kill_all()
+    elif args.command == "attach":
+        cmd_attach(args.session, args.target)
     else:
         parser.print_help()
         sys.exit(1)

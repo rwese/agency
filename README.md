@@ -51,9 +51,10 @@ agency start coder --dir ~/projects/api     # ERROR: "coder" already exists
 | `init` | Initialize config directory |
 | `start <name> --dir <path>` | Start agent in session |
 | `list` | List all sessions and windows |
-| `send <session> <agent> <msg>` | Send message to agent |
-| `stop <session>[:agent]` | Stop gracefully |
-| `kill <session>[:agent]` | Force kill |
+| `send <session> [agent] <msg>` | Send message to agent |
+| `attach <session> [agent]` | Attach to tmux session |
+| `stop <session>[:agent]` | Stop gracefully (30s timeout) |
+| `kill <session>[:agent]` | Force kill immediately |
 | `kill-all` | Kill all agency sessions |
 
 ## Configuration
@@ -71,6 +72,14 @@ personality: |
 
 - `AGENCY_AGENT_CMD` - Override the agent command (default: `pi`)
 - `XDG_CONFIG_HOME` - Config directory (default: `~/.config`)
+
+## Agent Configuration
+
+Agents are automatically configured for clean operation:
+
+- **Quiet startup**: `~/.config/agency/sessions/.pi/settings.json` with `quietStartup: true`
+- **Clean persona**: Uses `--no-context-files` to skip AGENTS.md/CLAUDE.md loading
+- **Session isolation**: Each agent stores session data in `~/.config/agency/sessions/`
 
 ## Installation
 

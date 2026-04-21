@@ -1,16 +1,33 @@
-# Agency Tmux Isolation - DONE ✅
+# Agency - Completed Tasks
 
-## Completed
+## All Tasks Complete ✅
 
-- [x] **1** Use isolated tmux socket - Agency uses `tmux -L agency` for separate server
-- [x] **2** Update agency.py to use socket flag
-- [x] **3** Update generate_agent_script.py if needed
-- [x] **4** Update tests pass with isolation
-- [x] **5** Verify user tmux still works normally
+- [x] **1** Research pi arguments for quiet startup
+- [x] **2** Research pi arguments for proper persona bootstrapping  
+- [x] **3** Validate lifecycle and shutdown
+- [x] **4** Add `attach` command to enter agency tmux session
 
-## Success Criteria - ALL MET ✅
+---
 
-- [x] `agency start coder --dir ~/project` uses agency tmux socket
-- [x] User can use their normal tmux with their config  
-- [x] All 9 tests pass
-- [x] Complete isolation verified
+## Implementation Summary
+
+### 1. Quiet Startup
+- Created `~/.config/agency/sessions/.pi/settings.json` with:
+  - `quietStartup: true`
+  - `collapseChangelog: true`
+  - Empty extensions/skills/prompts/themes for minimal loading
+
+### 2. Persona Bootstrapping  
+- Uses `--append-system-prompt` with personality text
+- Uses `--no-context-files` to skip AGENTS.md/CLAUDE.md
+- Sets `PI_CODING_AGENT=true` for agent mode
+
+### 3. Lifecycle & Shutdown
+- `stop` sends shutdown message and waits up to 30s
+- Falls back to force kill if agent doesn't exit
+- Graceful shutdown validated working
+
+### 4. Attach Command
+- `agency attach <session>` attaches to tmux session
+- `agency attach <session> <agent>` attaches and switches to window
+- Replaces process with tmux (full terminal interaction)
