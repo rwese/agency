@@ -8,7 +8,6 @@ A Python-based tmux session manager for AI agents.
 import argparse
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -18,13 +17,17 @@ from typing import Optional
 
 import yaml
 
-VERSION = "0.2.0"
+__version__ = "0.3.0"
+VERSION = "0.3.0"
 
 # Paths
 AGENCY_DIR = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "agency"
 AGENTS_DIR = AGENCY_DIR / "agents"
+MANAGERS_DIR = AGENCY_DIR / "managers"
 SESSIONS_DIR = AGENCY_DIR / "sessions"
+TASKS_FILE = SESSIONS_DIR / "tasks.json"
 SESSION_PREFIX = "agency-"
+MANAGER_SESSION_PREFIX = "agency-manager-"
 
 # Constants
 STOP_TIMEOUT = 30
@@ -58,6 +61,56 @@ class Session:
     name: str
     dir: str
     windows: list = field(default_factory=list)
+
+
+@dataclass
+class Task:
+    """Represents a delegated task with tracking."""
+    task_id: str
+    description: str
+    status: str  # pending, in_progress, completed, failed
+    assigned_to: Optional[str] = None
+    created_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    result: Optional[str] = None
+
+
+def load_tasks() -> dict[str, Task]:
+    """Load tasks from JSON file."""
+    if not TASKS_FILE.exists():
+        return {}
+    
+    with open(TASKS_FILE) as f:
+        data = json.load(f)
+    
+    return {
+        tid: Task(**tdata) for tid, tdata in data.items()
+    }
+
+
+def save_tasks(tasks: dict[str, Task]) -> None:
+    """Save tasks to JSON file."""
+    TASKS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    data = {
+        tid: {
+            "task_id": t.task_id,
+            "description": t.description,
+            "status": t.status,
+            "assigned_to": t.assigned_to,
+            "created_at": t.created_at,
+            "completed_at": t.completed_at,
+            "result": t.result,
+        }
+        for tid, t in tasks.items()
+    }
+    with open(TASKS_FILE, 'w') as f:
+        json.dump(data, f, indent=2)
+
+
+def generate_task_id() -> str:
+    """Generate a unique task ID (token for requesting party)."""
+    import uuid
+    return str(uuid.uuid4())[:8].upper()
 
 
 def log_info(msg: str) -> None:
@@ -154,6 +207,27 @@ def load_agent_config(agent_name: str) -> Optional[dict]:
         return yaml.safe_load(f)
 
 
+def load_manager_config(manager_name: str) -> Optional[dict]:
+    """Load manager configuration from YAML."""
+    config_path = MANAGERS_DIR / f"{manager_name}.yaml"
+    if not config_path.exists():
+        return None
+    
+    with open(config_path) as f:
+        return yaml.safe_load(f)
+
+
+def list_available_managers() -> list[str]:
+    """List available manager configurations."""
+    if not MANAGERS_DIR.exists():
+        return []
+    
+    managers = []
+    for f in MANAGERS_DIR.glob("*.yaml"):
+        managers.append(f.stem)
+    return sorted(managers)
+
+
 def create_quiet_settings() -> None:
     """Create .pi/settings.json with quiet startup for agency sessions."""
     pi_dir = SESSIONS_DIR / ".pi"
@@ -218,8 +292,10 @@ def cmd_init() -> None:
     """Initialize agency config directory."""
     AGENCY_DIR.mkdir(parents=True, exist_ok=True)
     AGENTS_DIR.mkdir(parents=True, exist_ok=True)
+    MANAGERS_DIR.mkdir(parents=True, exist_ok=True)
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
     
+    # Example agent config
     example_config = AGENTS_DIR / "example.yaml"
     with open(example_config, "w") as f:
         f.write("""name: example
@@ -228,9 +304,306 @@ personality: |
   Modify this to customize how the agent behaves.
 """)
     
+    # Example manager config
+    example_manager = MANAGERS_DIR / "coordinator.yaml"
+    with open(example_manager, "w") as f:
+        f.write("""name: coordinator
+description: |-
+  A project coordinator manager. Reviews incoming tasks and delegates
+  to specialized agents. Tracks task progress and reports back.
+badge: "[MGR]"
+badge_color: brightblue
+personality: |
+  You are a project coordinator for an AI agent team. Your role is to:
+  
+  ## Monitoring
+  - Use `agency list` to see all active sessions and their agents
+  - Track which agents are available and their specialties
+  
+  ## Task Management
+  - Review incoming tasks not addressed to specific agents
+  - Assign tasks to appropriate agents using `agency send <session> <agent> <task>`
+  - Generate unique task IDs using the task tracking system
+  
+  ## Task IDs
+  - When delegating, create a task ID and track it
+  - Return task IDs to requesting parties immediately
+  - Use `agency tasks` to track task status
+  
+  ## Delegation
+  - Match tasks to agents based on their personalities/specialties
+  - Break large tasks into smaller, delegable pieces
+  - Follow up on pending tasks
+  
+  ## Communication
+  - Report task status to requesting parties
+  - Provide clear updates on progress
+
+# Badge options:
+# badge: Text prefix shown in tmux window name (e.g., "[MGR]", "⭐")
+# badge_color: Color for the tmux status bar:
+#   brightblue, brightgreen, brightred, brightyellow, brightmagenta, brightcyan
+#   Or standard colors: blue, green, red, yellow, magenta, cyan, white
+""")
+    
     log_info(f"Initialized agency config in {AGENCY_DIR}")
-    log_info(f"Created example config: {example_config}")
-    log_info("Edit the config and run: agency start example --dir ~/projects")
+    log_info(f"Created example agent config: {example_config}")
+    log_info(f"Created example manager config: {example_manager}")
+    log_info("Edit configs and run: agency start-manager coordinator --dir ~/projects")
+
+
+def cmd_start_manager(manager_name: str, work_dir: str) -> str:
+    """Start a manager in its own session."""
+    if not manager_name:
+        log_error("Manager name required")
+        log_error("Usage: agency start-manager <name> --dir <path>")
+        sys.exit(1)
+    
+    if not work_dir:
+        log_error("Working directory required")
+        log_error("Usage: agency start-manager <name> --dir <path>")
+        sys.exit(1)
+    
+    # Expand tildes
+    work_dir = os.path.expanduser(work_dir)
+    
+    # Create directory if needed
+    Path(work_dir).mkdir(parents=True, exist_ok=True)
+    
+    # Load config
+    config = load_manager_config(manager_name)
+    if not config:
+        log_error(f"Manager config not found: {MANAGERS_DIR / f'{manager_name}.yaml'}")
+        log_error("Run 'agency init' first or create manager config")
+        log_error("Use 'agency list-managers' to see available managers")
+        sys.exit(1)
+    
+    personality = config.get("personality")
+    badge = config.get("badge", "[MGR]")
+    badge_color = config.get("badge_color", "brightblue")
+    
+    # Manager gets its own session (not shared with regular agents)
+    session_name = f"{MANAGER_SESSION_PREFIX}{manager_name}"
+    
+    # Check if manager already running
+    if session_exists(session_name):
+        log_error(f"Manager '{manager_name}' already running in session '{session_name}'")
+        log_error("Use 'agency attach-manager <name>' to attach")
+        sys.exit(1)
+    
+    # Apply badge to window name if configured
+    window_name = manager_name
+    if badge:
+        window_name = f"{badge} {manager_name}"
+    
+    # Get agent command
+    agent_cmd = get_agent_cmd()
+    
+    # Generate launch script with manager-specific enhancements
+    script_path = generate_manager_script(
+        session_name, window_name, agent_cmd, personality, manager_name
+    )
+    
+    # Create session with window
+    tmux_or_raise("new-session", "-d", "-s", session_name, "-c", work_dir)
+    tmux_or_raise("new-window", "-d", "-t", session_name, "-n", window_name, "-c", work_dir)
+    
+    # Apply manager badge styling if configured
+    if badge_color:
+        color_map = {
+            "brightblue": "blue",
+            "brightgreen": "green",
+            "brightred": "red",
+            "brightyellow": "yellow",
+            "brightmagenta": "magenta",
+            "brightcyan": "cyan",
+            "brightwhite": "white",
+            "blue": "blue",
+            "green": "green",
+            "red": "red",
+            "yellow": "yellow",
+            "magenta": "magenta",
+            "cyan": "cyan",
+            "white": "white",
+        }
+        tmux_color = color_map.get(badge_color, "blue")
+        # Set window status style for this window
+        tmux("set-window-option", "-t", f"{session_name}:{window_name}", 
+             "window-status-style", f"fg=black,bg={tmux_color},bold")
+        tmux("set-window-option", "-t", f"{session_name}:{window_name}",
+             "window-status-current-style", f"fg=black,bg={tmux_color},bold")
+    
+    log_info(f"Created manager session '{session_name}' with window '{window_name}'")
+    
+    # Send command to run manager
+    send_keys(session_name, window_name, str(script_path))
+    
+    # Return session:window to stdout
+    print(f"{session_name}:{window_name}")
+
+
+def generate_manager_script(
+    session_name: str,
+    window_name: str,
+    agent_cmd: str,
+    personality: Optional[str] = None,
+    manager_name: Optional[str] = None,
+) -> Path:
+    """Generate and write the manager launch script."""
+    SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # Create quiet settings for agency sessions
+    create_quiet_settings()
+    
+    script_path = SESSIONS_DIR / f"{session_name}-{window_name}.sh"
+    
+    agency_dir = Path(__file__).parent.absolute()
+    
+    # Build command - managers get agency command wrappers
+    base_cmd = f'{agent_cmd} --session-dir "{SESSIONS_DIR}" --no-context-files PI_CODING_AGENT=true PI_AGENCY_MANAGER=true'
+    
+    if manager_name:
+        base_cmd += f' PI_AGENCY_MANAGER_NAME={manager_name}'
+    
+    cmd = f'cd "{agency_dir}" && exec {base_cmd}'
+    
+    if personality:
+        escaped = personality.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`")
+        cmd += f' --append-system-prompt "{escaped}"'
+    
+    with open(script_path, "w") as f:
+        f.write("#!/bin/bash\n")
+        f.write(f"{cmd}\n")
+    
+    script_path.chmod(0o755)
+    return script_path
+
+
+def cmd_list_managers() -> None:
+    """List available manager configurations."""
+    managers = list_available_managers()
+    
+    if not managers:
+        log_info("No manager configs found")
+        log_info(f"Create configs in: {MANAGERS_DIR}")
+        log_info("Run 'agency init' to create example manager config")
+        return
+    
+    for mgr in managers:
+        config = load_manager_config(mgr)
+        desc = config.get("description", "No description") if config else ""
+        print(f"{mgr:<20} {desc}")
+
+
+def cmd_list_manager_sessions() -> None:
+    """List running manager sessions."""
+    sessions = list_sessions()
+    managers_running = [s for s in sessions if s.startswith(MANAGER_SESSION_PREFIX)]
+    
+    if not managers_running:
+        log_info("No manager sessions running")
+        return
+    
+    for session in managers_running:
+        windows = list_windows(session)
+        windows_str = ",".join(windows)
+        print(f"{session:<25} [{windows_str}]")
+
+
+def cmd_attach_manager(manager_name: str) -> None:
+    """Attach to a manager session."""
+    session_name = f"{MANAGER_SESSION_PREFIX}{manager_name}"
+    
+    if not session_exists(session_name):
+        log_error(f"Manager session not found: {session_name}")
+        log_error("Run 'agency start-manager <name> --dir <path>' first")
+        sys.exit(1)
+    
+    # Attach to the session
+    os.execvp("tmux", ["tmux", "-L", TMUX_SOCKET, "attach-session", "-t", session_name])
+
+
+def cmd_stop_manager(manager_name: str, force: bool = False) -> None:
+    """Stop a manager session."""
+    session_name = f"{MANAGER_SESSION_PREFIX}{manager_name}"
+    
+    if not session_exists(session_name):
+        log_error(f"Manager session not found: {session_name}")
+        sys.exit(1)
+    
+    # Get the actual window name (may have badge prefix)
+    windows = list_windows(session_name)
+    # Filter out zsh shell windows to find the manager window
+    manager_window = None
+    for w in windows:
+        # Window name might be "[MGR] manager" or just "manager"
+        if w == manager_name or w.endswith(f" {manager_name}") or w.endswith("/zsh"):
+            if not w.endswith("/zsh"):
+                manager_window = w
+                break
+    
+    if not manager_window:
+        manager_window = manager_name
+    
+    log_info(f"Sending shutdown to {session_name}...")
+    send_keys(session_name, manager_window, SHUTDOWN_MESSAGE)
+    
+    if not force:
+        if wait_for_exit(session_name, manager_window, STOP_TIMEOUT):
+            log_info(f"{session_name} stopped gracefully")
+            return
+        log_info(f"{session_name} did not exit gracefully, force killing...")
+    
+    tmux_or_raise("kill-session", "-t", session_name)
+    log_info(f"{session_name} killed")
+
+
+def cmd_tasks(action: str, task_id: Optional[str] = None) -> None:
+    """Manage tasks - list, show, or update task status."""
+    tasks = load_tasks()
+    
+    if action == "list":
+        if not tasks:
+            log_info("No tasks tracked")
+            return
+        
+        print("Task ID   Status       Assigned To   Description")
+        print("-" * 70)
+        for tid, task in sorted(tasks.items()):
+            desc = task.description[:40] + "..." if len(task.description) > 40 else task.description
+            print(f"{task.task_id:<10} {task.status:<12} {str(task.assigned_to or ''):<13} {desc}")
+    
+    elif action == "show" and task_id:
+        if task_id not in tasks:
+            log_error(f"Task not found: {task_id}")
+            sys.exit(1)
+        
+        task = tasks[task_id]
+        print(f"Task ID:      {task.task_id}")
+        print(f"Status:       {task.status}")
+        print(f"Assigned To:  {task.assigned_to or 'Unassigned'}")
+        print(f"Created:      {task.created_at or 'Unknown'}")
+        print(f"Completed:    {task.completed_at or 'In progress'}")
+        print(f"Description:  {task.description}")
+        if task.result:
+            print(f"Result:       {task.result}")
+    
+    elif action == "create" and task_id:
+        # Create a new task
+        from datetime import datetime
+        new_task = Task(
+            task_id=task_id,
+            description="Task created",
+            status="pending",
+            created_at=datetime.now().isoformat()
+        )
+        tasks[task_id] = new_task
+        save_tasks(tasks)
+        log_info(f"Created task: {task_id}")
+    
+    elif action == "update" and task_id:
+        # This would be called by the manager to update task status
+        log_info("Use agency send to communicate with manager for task updates")
 
 
 def cmd_start(agent_name: str, work_dir: str) -> str:
@@ -397,7 +770,7 @@ def cmd_stop(input_str: str, force: bool = False) -> None:
             if all_exited and not session_exists(session_name):
                 log_info(f"{session_name} stopped gracefully")
                 return
-            log_info(f"Some windows did not exit gracefully, force killing...")
+            log_info("Some windows did not exit gracefully, force killing...")
         
         tmux_or_raise("kill-session", "-t", session_name)
         log_info(f"{session_name} killed")
@@ -517,7 +890,15 @@ Examples:
     start_parser.add_argument("name", help="Agent name")
     start_parser.add_argument("--dir", required=True, help="Working directory")
     
-    # list
+    # start-manager
+    start_mgr_parser = subparsers.add_parser("start-manager", help="Start a manager")
+    start_mgr_parser.add_argument("name", help="Manager name")
+    start_mgr_parser.add_argument("--dir", required=True, help="Working directory")
+    
+    # list-managers
+    subparsers.add_parser("list-managers", help="List available manager configs")
+    
+    # list-sessions (new name for clarity - shows all sessions including managers)
     subparsers.add_parser("list", help="List running sessions")
     
     # send
@@ -542,6 +923,19 @@ Examples:
     attach_parser.add_argument("session", help="Session name")
     attach_parser.add_argument("target", nargs="?", help="Agent/window name (optional)")
     
+    # attach-manager
+    attach_mgr_parser = subparsers.add_parser("attach-manager", help="Attach to a manager session")
+    attach_mgr_parser.add_argument("name", help="Manager name")
+    
+    # stop-manager
+    stop_mgr_parser = subparsers.add_parser("stop-manager", help="Stop a manager gracefully")
+    stop_mgr_parser.add_argument("name", help="Manager name")
+    
+    # tasks
+    tasks_parser = subparsers.add_parser("tasks", help="Manage tasks")
+    tasks_parser.add_argument("action", choices=["list", "show", "create"], help="Action")
+    tasks_parser.add_argument("task_id", nargs="?", help="Task ID")
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -552,6 +946,10 @@ Examples:
         cmd_init()
     elif args.command == "start":
         cmd_start(args.name, args.dir)
+    elif args.command == "start-manager":
+        cmd_start_manager(args.name, args.dir)
+    elif args.command == "list-managers":
+        cmd_list_managers()
     elif args.command == "list":
         cmd_list()
     elif args.command == "send":
@@ -566,6 +964,12 @@ Examples:
         cmd_kill_all()
     elif args.command == "attach":
         cmd_attach(args.session, args.target)
+    elif args.command == "attach-manager":
+        cmd_attach_manager(args.name)
+    elif args.command == "stop-manager":
+        cmd_stop_manager(args.name)
+    elif args.command == "tasks":
+        cmd_tasks(args.action, args.task_id)
     else:
         parser.print_help()
         sys.exit(1)

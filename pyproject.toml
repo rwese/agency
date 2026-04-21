@@ -1,0 +1,35 @@
+[project]
+name = "agency"
+version = "0.3.0"
+description = "AI Agent Session Manager - tmux-based multi-agent orchestration"
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "rwese" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+agency = "agency.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agency"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/README.md",
+    "/AGENTS.md",
+    "/pyproject.toml",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0",
+]
