@@ -14,6 +14,7 @@ from textual.containers import Horizontal, Vertical
 from textual.message import Message
 from textual.timer import Timer
 from textual.widgets import Footer, Header, Input, Static, Log
+from rich.text import Text
 
 from agency.tui.widgets.task_board import TaskInfo
 
@@ -236,7 +237,7 @@ class AgencyTUI(App):
                     yield Input(placeholder="Type message...", id="message-input")
                 with Vertical(id="activity-section"):
                     yield Static("Activity Log", classes="panel-header")
-                    yield Log(id="activity-log", highlight=False)
+                    yield Log(id="activity-log")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -470,13 +471,13 @@ class AgencyTUI(App):
         elif self._current_panel == Panel.TASKS and self._tasks:
             task = self._tasks[self._selected_task_index]
             log = self.query_one("#activity-log", Log)
-            log.write_line(f"[cyan]Task:[/cyan] {task.task_id}")
-            log.write_line(f"  {task.description}")
-            log.write_line(f"  Status: {task.status}")
+            self.log_msg(f"[cyan]Task:[/cyan] {task.task_id}")
+            self.log_msg(f"  {task.description}")
+            self.log_msg(f"  Status: {task.status}")
             if task.assigned_to:
-                log.write_line(f"  Assigned: {task.assigned_to}")
+                self.log_msg(f"  Assigned: {task.assigned_to}")
             if task.result:
-                log.write_line(f"  Result: {task.result}")
+                self.log_msg(f"  Result: {task.result}")
 
     def action_focus_input(self) -> None:
         self._current_panel = Panel.MAIN
@@ -495,34 +496,34 @@ class AgencyTUI(App):
     def action_attach(self) -> None:
         if not self._sessions:
             log = self.query_one("#activity-log", Log)
-            log.write_line("[yellow]No session selected[/yellow]")
+            self.log_msg("[yellow]No session selected[/yellow]")
             return
         s = self._sessions[self._selected_session_index]
         target = None
         if self._selected_agent_index is not None and self._selected_agent_index < len(s.windows):
             target = s.windows[self._selected_agent_index]
         log = self.query_one("#activity-log", Log)
-        log.write_line(f"[cyan]Attaching to {s.display_name}...[/cyan]")
+        self.log_msg(f"[cyan]Attaching to {s.display_name}...[/cyan]")
         self.post_message(AttachSession(s.name, target))
 
     def action_start_agent(self) -> None:
         agents = list_available_agents()
         if not agents:
             log = self.query_one("#activity-log", Log)
-            log.write_line("[red]No agents. Run 'agency init' first.[/red]")
+            self.log_msg("[red]No agents. Run 'agency init' first.[/red]")
             return
         log = self.query_one("#activity-log", Log)
-        log.write_line(f"[cyan]Starting agent '{agents[0]}'...[/cyan]")
+        self.log_msg(f"[cyan]Starting agent '{agents[0]}'...[/cyan]")
         self.post_message(StartAgent(agents[0], os.getcwd()))
 
     def action_start_manager(self) -> None:
         managers = list_available_managers()
         if not managers:
             log = self.query_one("#activity-log", Log)
-            log.write_line("[red]No managers. Run 'agency init' first.[/red]")
+            self.log_msg("[red]No managers. Run 'agency init' first.[/red]")
             return
         log = self.query_one("#activity-log", Log)
-        log.write_line(f"[cyan]Starting manager '{managers[0]}'...[/cyan]")
+        self.log_msg(f"[cyan]Starting manager '{managers[0]}'...[/cyan]")
         self.post_message(StartManager(managers[0], os.getcwd()))
 
     def action_stop_agent(self) -> None:
@@ -533,7 +534,7 @@ class AgencyTUI(App):
             return
         agent = s.windows[self._selected_agent_index]
         log = self.query_one("#activity-log", Log)
-        log.write_line(f"[yellow]Stopping {agent}...[/yellow]")
+        self.log_msg(f"[yellow]Stopping {agent}...[/yellow]")
         self.post_message(StopAgent(s.name, agent))
 
     def _get_tasks_file(self) -> Path:
@@ -595,18 +596,17 @@ class AgencyTUI(App):
         tasks[task_id] = task
         self._save_tasks(tasks)
         
-        log.write_line(f"[green]Created task:[/green] {task_id}")
+        self.log_msg(f"[green]Created task:[/green] {task_id}")
         if assigned_to:
-            log.write_line(f"  Assigned to: {assigned_to}")
+            self.log_msg(f"  Assigned to: {assigned_to}")
         
         self.refresh_tasks()
 
     def action_update_task(self) -> None:
         """Update status of selected task (cycles through statuses)."""
-        log = self.query_one("#activity-log", Log)
         
         if not self._tasks:
-            log.write_line("[yellow]No tasks to update[/yellow]")
+            self.log_msg("[yellow]No tasks to update[/yellow]")
             return
         
         task = self._tasks[self._selected_task_index]
@@ -624,7 +624,7 @@ class AgencyTUI(App):
                 tasks[task.task_id]["completed_at"] = None
             self._save_tasks(tasks)
         
-        log.write_line(f"[cyan]Updated:[/cyan] {task.task_id} -> {new_status}")
+        self.log_msg(f"[cyan]Updated:[/cyan] {task.task_id} -> {new_status}")
         self.refresh_tasks()
 
     def action_delete_task(self) -> None:
@@ -632,7 +632,7 @@ class AgencyTUI(App):
         log = self.query_one("#activity-log", Log)
         
         if not self._tasks:
-            log.write_line("[yellow]No tasks to delete[/yellow]")
+            self.log_msg("[yellow]No tasks to delete[/yellow]")
             return
         
         task = self._tasks[self._selected_task_index]
@@ -641,7 +641,7 @@ class AgencyTUI(App):
         if task.task_id in tasks:
             del tasks[task.task_id]
             self._save_tasks(tasks)
-            log.write_line(f"[red]Deleted task:[/red] {task.task_id}")
+            self.log_msg(f"[red]Deleted task:[/red] {task.task_id}")
         
         # Adjust index if needed
         if self._selected_task_index >= len(self._tasks) - 1:
@@ -650,9 +650,7 @@ class AgencyTUI(App):
         self.refresh_tasks()
 
     def action_toggle_help(self) -> None:
-        log = self.query_one("#activity-log", Log)
-        log.write_line("""
-[bold]Agency TUI - Keyboard Shortcuts[/bold]
+        self.log_msg("""[bold]Agency TUI - Keyboard Shortcuts[/bold]
 ─────────────────────────────────────
 [cyan]←/→[/cyan]    Switch panels (Sessions/Tasks/Main)
 [cyan]↑/↓[/cyan]    Navigate sessions & tasks
@@ -679,7 +677,7 @@ class AgencyTUI(App):
         msg = event.value.strip()
         log = self.query_one("#activity-log", Log)
         target = agent if agent else s.display_name
-        log.write_line(f"[cyan]→ {target}:[/cyan] {msg}")
+        self.log_msg(f"[cyan]→ {target}:[/cyan] {msg}")
         self.post_message(SendMessage(s.name, agent, msg))
         event.input.value = ""
 
@@ -693,7 +691,7 @@ class AgencyTUI(App):
             if sess and sess.windows:
                 send_keys(event.session, sess.windows[0], event.message)
         log = self.query_one("#activity-log", Log)
-        log.write_line(f"[green]✓ Sent to {event.session}[/green]")
+        self.log_msg(f"[green]✓ Sent to {event.session}[/green]")
 
     def on_attach_session(self, event: AttachSession) -> None:
         if event.target:
@@ -704,37 +702,36 @@ class AgencyTUI(App):
         from agency.tui.commands import start_agent
         try:
             start_agent(event.agent_name, event.work_dir)
-            log = self.query_one("#activity-log", Log)
-            log.write_line(f"[green]✓ Started {event.agent_name}[/green]")
+            self.log_msg(f"[green]✓ Started {event.agent_name}[/green]")
             self.refresh_sessions()
         except Exception as e:
-            log = self.query_one("#activity-log", Log)
-            log.write_line(f"[red]✗ {e}[/red]")
+            self.log_msg(f"[red]✗ {e}[/red]")
 
     def on_start_manager(self, event: StartManager) -> None:
         from agency.tui.commands import start_manager
         try:
             start_manager(event.manager_name, event.work_dir)
-            log = self.query_one("#activity-log", Log)
-            log.write_line(f"[green]✓ Manager {event.manager_name} started[/green]")
+            self.log_msg(f"[green]✓ Manager {event.manager_name} started[/green]")
             self.refresh_sessions()
         except Exception as e:
-            log = self.query_one("#activity-log", Log)
-            log.write_line(f"[red]✗ {e}[/red]")
+            self.log_msg(f"[red]✗ {e}[/red]")
 
     def on_stop_agent(self, event: StopAgent) -> None:
         from agency.tui.commands import stop_agent
         try:
             stop_agent(event.session, event.agent)
-            log = self.query_one("#activity-log", Log)
-            log.write_line(f"[green]✓ {event.agent} stopped[/green]")
+            self.log_msg(f"[green]✓ {event.agent} stopped[/green]")
             self.refresh_sessions()
         except Exception as e:
-            log = self.query_one("#activity-log", Log)
-            log.write_line(f"[red]✗ {e}[/red]")
+            self.log_msg(f"[red]✗ {e}[/red]")
 
     def action_quit(self) -> None:
         self.exit()
+
+    def log_msg(self, message: str) -> None:
+        """Write a message with Rich markup to the activity log."""
+        log_widget = self.query_one("#activity-log", Log)
+        log_widget.write_line(Text.from_markup(message))
 
 
 def save_message(session: str, agent: str | None, content: str, direction: str, timestamp: str) -> None:
