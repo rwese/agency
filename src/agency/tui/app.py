@@ -8,8 +8,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from textual.app import App, ComposeResult
-from textual.binding import Binding
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Horizontal, Vertical
 from textual.message import Message
 from textual.timer import Timer
 from textual.widgets import Footer, Header, Input, Static, Log
@@ -152,13 +151,39 @@ class StopAgent(Message):
 class AgencyTUI(App):
     CSS = """
     Screen { background: $surface; }
-    .panel-header { height: 1; padding: 0 1; background: $accent 20%; text-style: bold; }
-    #left-panel { width: 60; dock: left; background: $panel; }
+    
+    /* Panel styling */
+    #left-panel { width: 64; dock: left; background: $panel; }
     #main-col { width: 1fr; }
-    #left-content { padding: 1 2; }
+    
+    /* Header styling */
+    .panel-header { height: 1; padding: 0 1; text-style: bold; }
+    #sessions-header { background: $accent 20%; color: $text; }
+    #tasks-header { background: $secondary 20%; color: $text; }
+    #main-header { background: $success 20%; color: $text; }
+    
+    /* Active panel indicator */
+    .panel-active #sessions-header,
+    .panel-active-tasks #tasks-header,
+    .panel-active-main #main-header {
+        background: $accent 40%;
+        text-style: bold;
+    }
+    
+    /* Content areas */
+    #sessions-content { padding: 1 2; }
+    #tasks-content { padding: 1 2; }
+    
+    /* Message area */
     #message-row { height: 3; padding: 1 2; background: $panel; }
-    #target-display { width: 20; color: $accent; text-style: bold; }
-    #activity-log { height: 1fr; }
+    #target-label { width: 5; color: $text-muted; }
+    #target-display { width: 22; color: $accent; text-style: bold; }
+    
+    /* Input */
+    #message-input { width: 1fr; }
+    
+    /* Activity log */
+    #activity-section { height: 1fr; }
     """
 
     BINDINGS = [
@@ -193,17 +218,17 @@ class AgencyTUI(App):
         yield Header()
         with Horizontal():
             with Vertical(id="left-panel"):
-                yield Static("Sessions", classes="panel-header")
-                yield Static("Loading...", id="left-content", markup=False)
-                yield Static("Tasks", classes="panel-header")
-                yield Static("No tasks", id="tasks-content", markup=False)
+                yield Static("[S] Sessions", id="sessions-header", classes="panel-header")
+                yield Static("", id="sessions-content")
+                yield Static("[T] Tasks", id="tasks-header", classes="panel-header")
+                yield Static("", id="tasks-content")
             with Vertical(id="main-col"):
-                yield Static("Send Message", classes="panel-header")
+                yield Static("[M] Send Message", id="main-header", classes="panel-header")
                 with Horizontal(id="message-row"):
                     yield Static("To:", id="target-label")
                     yield Static("-", id="target-display")
                     yield Input(placeholder="Type message...", id="message-input")
-                with Vertical(id="activity-log"):
+                with Vertical(id="activity-section"):
                     yield Static("Activity Log", classes="panel-header")
                     yield Log(id="activity-log", highlight=False)
         yield Footer()
@@ -213,6 +238,7 @@ class AgencyTUI(App):
         self.sub_title = "AI Agent Session Manager"
         self._refresh_timer = self.set_interval(2.0, self.refresh_all)
         self.refresh_all()
+        self.update_panel_indicators()
 
     def on_unmount(self) -> None:
         if self._refresh_timer:
@@ -224,36 +250,75 @@ class AgencyTUI(App):
 
     def refresh_sessions(self) -> None:
         self._sessions = list_agency_sessions()
-        widget = self.query_one("#left-content", Static)
+        widget = self.query_one("#sessions-content", Static)
+        
+        is_active = self._current_panel == Panel.SESSIONS
+        
         if not self._sessions:
-            widget.update("No sessions")
+            widget.update("[dim]No sessions[/dim]")
             return
+        
         lines = []
         for i, s in enumerate(self._sessions):
+            is_selected = i == self._selected_session_index
             icon = s.status_icon
-            agents = ", ".join(s.windows) if s.windows else "no agents"
-            prefix = "→ " if i == self._selected_session_index else "  "
-            lines.append(f"{prefix}{icon} {s.display_name}")
-            lines.append(f"   {agents}")
-            if i == self._selected_session_index and s.windows:
+            agents = ", ".join(s.windows) if s.windows else "[dim]no agents[/dim]"
+            
+            # Session line
+            if is_selected:
+                if is_active:
+                    lines.append(f"[bold cyan]▌ {icon} {s.display_name}[/bold cyan]")
+                else:
+                    lines.append(f"[cyan]  {icon} {s.display_name}[/cyan]")
+            else:
+                lines.append(f"    {icon} {s.display_name}")
+            
+            # Agents line (always show first line)
+            if is_selected:
+                lines.append(f"    {agents}")
+            else:
+                lines.append(f"  [dim]{agents}[/dim]")
+            
+            # Expand agents if selected
+            if is_selected and s.windows:
                 for j, agent in enumerate(s.windows):
-                    marker = " →" if j == self._selected_agent_index else "   "
-                    lines.append(f"{marker}• {agent}")
+                    is_agent_selected = j == self._selected_agent_index
+                    if is_agent_selected:
+                        if is_active:
+                            lines.append(f"[bold yellow]▌   └ {agent}[/bold yellow]")
+                        else:
+                            lines.append(f"[yellow]      {agent}[/yellow]")
+                    else:
+                        lines.append(f"        {agent}")
+        
         widget.update("\n".join(lines))
 
     def refresh_tasks(self) -> None:
         self._tasks = load_tasks()
         widget = self.query_one("#tasks-content", Static)
+        
         if not self._tasks:
-            widget.update("No tasks")
+            widget.update("[dim]No tasks[/dim]")
             return
+        
         lines = []
         for t in self._tasks:
-            icon = {"pending": "⏳", "in_progress": "🔄", "completed": "✅", "failed": "❌"}.get(t.status, "❓")
-            desc = t.description[:35] + "..." if len(t.description) > 35 else t.description
-            lines.append(f"{icon} {t.task_id}: {desc}")
+            icon = {
+                "pending": "⏳",
+                "in_progress": "🔄",
+                "completed": "✅",
+                "failed": "❌"
+            }.get(t.status, "❓")
+            
+            # Truncate description
+            desc = t.description
+            if len(desc) > 40:
+                desc = desc[:37] + "..."
+            
+            lines.append(f"{icon} [b]{t.task_id}:[/b] {desc}")
             if t.assigned_to:
-                lines.append(f"   → {t.assigned_to}")
+                lines.append(f"    → {t.assigned_to}")
+        
         widget.update("\n".join(lines))
 
     def update_target(self) -> None:
@@ -263,9 +328,46 @@ class AgencyTUI(App):
             return
         s = self._sessions[self._selected_session_index]
         if self._selected_agent_index is not None and self._selected_agent_index < len(s.windows):
-            display.update(f"{s.display_name}/{s.windows[self._selected_agent_index]}")
+            agent = s.windows[self._selected_agent_index]
+            display.update(f"{s.display_name}/{agent}")
         else:
             display.update(s.display_name)
+
+    def update_panel_indicators(self) -> None:
+        """Update panel headers to show which is active."""
+        left_panel = self.query_one("#left-panel", Vertical)
+        
+        # Remove all panel classes
+        left_panel.remove_class("panel-active")
+        left_panel.remove_class("panel-active-tasks")
+        
+        # Add active class based on current panel
+        if self._current_panel == Panel.SESSIONS:
+            left_panel.add_class("panel-active")
+        elif self._current_panel == Panel.TASKS:
+            left_panel.add_class("panel-active-tasks")
+        
+        # Update header text
+        sessions_h = self.query_one("#sessions-header", Static)
+        tasks_h = self.query_one("#tasks-header", Static)
+        main_h = self.query_one("#main-header", Static)
+        
+        # Base text
+        sessions_text = "[S] Sessions"
+        tasks_text = "[T] Tasks"
+        main_text = "[M] Send Message"
+        
+        # Add markers for active panel
+        if self._current_panel == Panel.SESSIONS:
+            sessions_text = "[S] Sessions ◀"
+        elif self._current_panel == Panel.TASKS:
+            tasks_text = "[T] Tasks ◀"
+        elif self._current_panel == Panel.MAIN:
+            main_text = "[M] Send Message ◀"
+        
+        sessions_h.update(sessions_text)
+        tasks_h.update(tasks_text)
+        main_h.update(main_text)
 
     # Navigation
     def action_panel_left(self) -> None:
@@ -273,12 +375,14 @@ class AgencyTUI(App):
             self._current_panel = Panel.TASKS
         elif self._current_panel == Panel.TASKS:
             self._current_panel = Panel.SESSIONS
+        self.update_panel_indicators()
 
     def action_panel_right(self) -> None:
         if self._current_panel == Panel.SESSIONS:
             self._current_panel = Panel.TASKS
         elif self._current_panel == Panel.TASKS:
             self._current_panel = Panel.MAIN
+        self.update_panel_indicators()
 
     def action_nav_up(self) -> None:
         if self._current_panel == Panel.SESSIONS:
@@ -296,8 +400,6 @@ class AgencyTUI(App):
                     self._selected_agent_index = 0
             self.refresh_sessions()
             self.update_target()
-        elif self._current_panel == Panel.MAIN:
-            pass  # Input doesn't navigate
 
     def action_nav_down(self) -> None:
         if self._current_panel == Panel.SESSIONS:
@@ -320,8 +422,6 @@ class AgencyTUI(App):
                     self._selected_session_index += 1
             self.refresh_sessions()
             self.update_target()
-        elif self._current_panel == Panel.MAIN:
-            pass
 
     def action_select(self) -> None:
         if self._current_panel == Panel.SESSIONS and self._sessions:
@@ -336,33 +436,47 @@ class AgencyTUI(App):
 
     def action_focus_input(self) -> None:
         self._current_panel = Panel.MAIN
+        self.update_panel_indicators()
         self.query_one("#message-input", Input).focus()
 
     def action_clear_selection(self) -> None:
         self._current_panel = Panel.SESSIONS
         self._selected_agent_index = None
+        self.update_panel_indicators()
         self.refresh_sessions()
         self.update_target()
 
     def action_attach(self) -> None:
         if not self._sessions:
+            log = self.query_one("#activity-log", Log)
+            log.write_line("[yellow]No session selected[/yellow]")
             return
         s = self._sessions[self._selected_session_index]
         target = None
         if self._selected_agent_index is not None and self._selected_agent_index < len(s.windows):
             target = s.windows[self._selected_agent_index]
+        log = self.query_one("#activity-log", Log)
+        log.write_line(f"[cyan]Attaching to {s.display_name}...[/cyan]")
         self.post_message(AttachSession(s.name, target))
 
     def action_start_agent(self) -> None:
         agents = list_available_agents()
         if not agents:
+            log = self.query_one("#activity-log", Log)
+            log.write_line("[red]No agents. Run 'agency init' first.[/red]")
             return
+        log = self.query_one("#activity-log", Log)
+        log.write_line(f"[cyan]Starting agent '{agents[0]}'...[/cyan]")
         self.post_message(StartAgent(agents[0], os.getcwd()))
 
     def action_start_manager(self) -> None:
         managers = list_available_managers()
         if not managers:
+            log = self.query_one("#activity-log", Log)
+            log.write_line("[red]No managers. Run 'agency init' first.[/red]")
             return
+        log = self.query_one("#activity-log", Log)
+        log.write_line(f"[cyan]Starting manager '{managers[0]}'...[/cyan]")
         self.post_message(StartManager(managers[0], os.getcwd()))
 
     def action_stop_agent(self) -> None:
@@ -372,18 +486,26 @@ class AgencyTUI(App):
         if self._selected_agent_index is None or self._selected_agent_index >= len(s.windows):
             return
         agent = s.windows[self._selected_agent_index]
+        log = self.query_one("#activity-log", Log)
+        log.write_line(f"[yellow]Stopping {agent}...[/yellow]")
         self.post_message(StopAgent(s.name, agent))
 
     def action_toggle_help(self) -> None:
         log = self.query_one("#activity-log", Log)
         log.write_line("""
-[b]Agency TUI[/b]
-←/→ Switch panels
-↑/↓ Navigate
-a Attach  s Send
-n Agent  m Manager
-x Stop  r Refresh
-? Help  q Quit""")
+[bold]Agency TUI - Keyboard Shortcuts[/bold]
+─────────────────────────────────────
+[cyan]←/→[/cyan]    Switch panels (Sessions/Tasks/Main)
+[cyan]↑/↓[/cyan]    Navigate sessions & agents
+[cyan]Enter[/cyan]  Select/expand session
+[cyan]a[/cyan]      Attach to session
+[cyan]s[/cyan]      Focus message input
+[cyan]n[/cyan]      New agent
+[cyan]m[/cyan]      New manager
+[cyan]x[/cyan]      Stop agent
+[cyan]r[/cyan]      Refresh
+[cyan]?[/cyan]      Help
+[cyan]q[/cyan]      Quit""")
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if not self._sessions or not event.value.strip():
@@ -395,7 +517,7 @@ x Stop  r Refresh
         msg = event.value.strip()
         log = self.query_one("#activity-log", Log)
         target = agent if agent else s.display_name
-        log.write_line(f"[cyan]→ {target}: {msg}[/cyan]")
+        log.write_line(f"[cyan]→ {target}:[/cyan] {msg}")
         self.post_message(SendMessage(s.name, agent, msg))
         event.input.value = ""
 
@@ -405,9 +527,11 @@ x Stop  r Refresh
         if event.agent:
             send_keys(event.session, event.agent, event.message)
         else:
-            s = next((x for x in list_agency_sessions() if x.name == event.session), None)
-            if s and s.windows:
-                send_keys(event.session, s.windows[0], event.message)
+            sess = next((x for x in list_agency_sessions() if x.name == event.session), None)
+            if sess and sess.windows:
+                send_keys(event.session, sess.windows[0], event.message)
+        log = self.query_one("#activity-log", Log)
+        log.write_line(f"[green]✓ Sent to {event.session}[/green]")
 
     def on_attach_session(self, event: AttachSession) -> None:
         if event.target:
