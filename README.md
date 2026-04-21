@@ -150,14 +150,35 @@ agents:
 
 ## Environment Variables
 
+Agency sets these variables when starting agents:
+
 | Variable | Description |
 |----------|-------------|
-| `AGENCY_PROJECT` | Project name |
-| `AGENCY_DIR` | Path to `.agency/` |
-| `AGENCY_AGENT` | Agent name |
-| `AGENCY_MANAGER` | Manager name |
-| `AGENCY_ROLE` | Set for agents |
-| `AGENCY_ROLE` | Set for manager |
+| `AGENCY_PROJECT` | Project name (session name) |
+| `AGENCY_DIR` | Absolute path to `.agency/` directory |
+| `AGENCY_WORKDIR` | Working directory (project root) |
+| `AGENCY_AGENT` | Agent name (set for agents) |
+| `AGENCY_MANAGER` | Manager name (set for manager) |
+| `AGENCY_ROLE` | `MANAGER` or `AGENT` |
+
+### Using Variables in Config
+
+The `additional_context_files` config supports environment variable expansion using `${VAR}` syntax:
+
+```yaml
+# config.yaml
+project: api
+shell: bash
+additional_context_files:
+  - ${HOME}/.agents/AGENTS.md
+  - ${AGENCY_DIR}/context/project-rules.md
+  - ${AGENCY_WORKDIR}/CLAUDE.md
+```
+
+Common use cases:
+- `${HOME}/.agents/AGENTS.md` - Global agent config
+- `${AGENCY_DIR}/context/local.md` - Project-specific context in `.agency/`
+- `${AGENCY_WORKDIR}/CLAUDE.md` - Claude config from project root
 
 ## Testing
 
