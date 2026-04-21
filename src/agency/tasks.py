@@ -209,6 +209,11 @@ class TaskStore:
 
             self._write_tasks_json(data)
 
+            # Update task.json in task directory
+            task_json_path = self.agency_dir / TASKS_DIR / task_id / "task.json"
+            if task_json_path.exists():
+                task_json_path.write_text(json.dumps(tasks[task_id], indent=2))
+
             return True
 
     def complete_task(
@@ -285,6 +290,11 @@ class TaskStore:
             task["status"] = "completed"
             self._write_tasks_json(data)
 
+            # Update task.json in task directory
+            task_json_path = self.agency_dir / TASKS_DIR / task_id / "task.json"
+            if task_json_path.exists():
+                task_json_path.write_text(json.dumps(task, indent=2))
+
             return True
 
     def reject_task(self, task_id: str, reason: str, suggestions: list | None = None) -> bool:
@@ -321,6 +331,11 @@ class TaskStore:
             task["status"] = "failed"
             task["completed_at"] = None  # Clear completion time
             self._write_tasks_json(data)
+
+            # Update task.json in task directory
+            task_json_path = self.agency_dir / TASKS_DIR / task_id / "task.json"
+            if task_json_path.exists():
+                task_json_path.write_text(json.dumps(task, indent=2))
 
             return True
 
@@ -386,7 +401,11 @@ class TaskStore:
                 }
             )
 
-        return sorted(history, key=lambda x: x["task"].get("completed_at", ""), reverse=True)
+        return sorted(
+            history,
+            key=lambda x: x["task"].get("completed_at") or "",
+            reverse=True,
+        )
 
     def _generate_task_id(self, data: dict) -> str:
         """Generate a unique task ID."""

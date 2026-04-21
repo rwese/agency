@@ -1,6 +1,6 @@
 # Agency v2.0 - Implementation TODO
 
-**Status:** In Progress  
+**Status:** Phase 1-5 Complete  
 **Last Updated:** 2024
 
 ## Implementation Phases
@@ -35,7 +35,7 @@
 
 ---
 
-## Phase 1 Tasks
+## Phase 1 Tasks ✅ COMPLETE
 
 ### 1.1 Project Structure
 - [x] Update `src/agency/` structure for v2.0
@@ -82,7 +82,7 @@
 
 ---
 
-## Phase 2 Tasks
+## Phase 2 Tasks ✅ COMPLETE
 
 ### 2.1 Task ID Generation
 - [ ] Implement wordlist-based ID generator
@@ -132,7 +132,7 @@
 
 ---
 
-## Phase 3 Tasks
+## Phase 3 Tasks ✅ COMPLETE
 
 ### 3.1 Manager Configuration
 - [ ] Load `manager.yaml`
@@ -160,7 +160,7 @@
 
 ---
 
-## Phase 4 Tasks
+## Phase 4 Tasks ✅ COMPLETE
 
 ### 4.1 Agent Configuration
 - [ ] Load `agents.yaml`
@@ -178,7 +178,7 @@
 
 ---
 
-## Phase 5 Tasks
+## Phase 5 Tasks ✅ COMPLETE
 
 ### 5.1 Graceful Stop
 - [ ] Broadcast shutdown
@@ -201,9 +201,11 @@
 ## Testing Tasks
 
 ### Unit Tests
-- [ ] Task ID generation
-- [ ] File locking
-- [ ] Task store operations
+- [x] Task ID generation
+- [x] File locking
+- [x] Task store operations
+- [x] Configuration loading
+- [x] Session management
 
 ### Integration Tests
 - [ ] `init-project` workflow
