@@ -1,36 +1,26 @@
-# Agency TUI - v1.1 Fixes
+# Agency TUI - Complete
 
-## Critical Fixes
+## ✅ All Critical Fixes Implemented
 
-- [ ] Fix message targeting: send to selected agent, not first
-- [ ] Add `m` keybinding to start managers
-- [ ] Fix cursor navigation: ←/→ switch panels, ↑/↓ navigate within
+### Fixed Issues:
+1. **Message targeting** - Navigate to specific agent, press Enter to expand, then send
+2. **Panel navigation** - ←/→ switch panels, ↑/↓ navigate within
+3. **Start manager** - Press 'm' to start managers
 
-## v2 (Deferred)
+### Keybindings:
+| Key | Action |
+|-----|--------|
+| ←/→ | Switch panels (Sessions/Tasks/Main) |
+| ↑/↓ | Navigate within panel |
+| Enter | Expand session to show agents |
+| a | Attach to selected session/agent |
+| s | Focus message input |
+| n | Start new agent |
+| m | Start new manager |
+| x | Stop selected agent |
+| r | Refresh all |
+| ? | Help |
+| q | Quit |
 
-- [ ] Agent status indicators (idle/busy)
-- [ ] Message history panel
-- [ ] Session uptime display
-
-## Fixed: Message Targeting
-
-**Current behavior:** Always sends to first agent in session
-
-**Desired behavior:**
-1. User navigates session list with j/k
-2. Each session shows its agents as sub-items
-3. User selects specific agent/window
-4. Press `s` to send message to that specific agent
-
-## Fixed: Cursor Navigation
-
-**Current:** j/k bindings conflict between SessionList and TaskBoard widgets
-
-**Desired:**
-- `←` / `→` - switch focus between panels
-- `↑` / `↓` - navigate within focused panel
-- `Enter` - select/confirm in focused panel
-
-## Fixed: Start Manager
-
-**Add:** `m` keybinding to start a manager (similar to `n` for agents)
+## Screenshot
+See `docs/agency-tui-screenshot.png`
