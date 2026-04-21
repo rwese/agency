@@ -72,10 +72,14 @@ def get_agent_cmd() -> str:
     return os.environ.get("AGENCY_AGENT_CMD", "pi")
 
 
+# Tmux socket for isolation - uses separate server from user's tmux
+TMUX_SOCKET = "agency"
+
+
 def tmux(*args: str) -> subprocess.CompletedProcess:
-    """Run a tmux command."""
+    """Run a tmux command with agency socket."""
     result = subprocess.run(
-        ["tmux"] + list(args),
+        ["tmux", "-L", TMUX_SOCKET] + list(args),
         capture_output=True,
         text=True,
     )

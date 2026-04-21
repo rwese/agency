@@ -17,7 +17,7 @@ info() { printf "${YELLOW}[INFO]${NC} %s\n" "$*"; }
 
 cleanup() {
     info "Cleaning up..."
-    tmux kill-session -t agency-* 2>/dev/null || true
+    tmux -L agency kill-session -t agency-* 2>/dev/null || true
     rm -rf "$HOME/.config/agency" 2>/dev/null || true
 }
 
@@ -53,7 +53,7 @@ test_start() {
     create_config "start1"
     result=$(python3 agency.py start start1 --dir /tmp/test-start 2>/dev/null)
     [[ "$result" =~ ^agency-test-start:start1 ]] && pass "start" || fail "start: $result"
-    tmux kill-session -t agency-test-start 2>/dev/null || true
+    tmux -L agency kill-session -t agency-test-start 2>/dev/null || true
 }
 
 test_start_no_dir() {
@@ -70,7 +70,7 @@ test_list() {
     python3 agency.py start list2 --dir /tmp/test-list2 >/dev/null 2>&1
     out=$(python3 agency.py list 2>&1)
     echo "$out" | grep -q "test-list1" && echo "$out" | grep -q "test-list2" && pass "list" || fail "list"
-    tmux kill-session -t agency-test-list1 agency-test-list2 2>/dev/null || true
+    tmux -L agency kill-session -t agency-test-list1 agency-test-list2 2>/dev/null || true
 }
 
 test_send() {
@@ -78,9 +78,9 @@ test_send() {
     create_config "send1"
     python3 agency.py start send1 --dir /tmp/test-send >/dev/null 2>&1
     sleep 1
-    tmux has-session -t agency-test-send 2>/dev/null || { fail "send: session died"; return; }
+    tmux -L agency has-session -t agency-test-send 2>/dev/null || { fail "send: session died"; return; }
     python3 agency.py send agency-test-send send1 "hello" 2>&1 | grep -q "Sent" && pass "send" || fail "send"
-    tmux kill-session -t agency-test-send 2>/dev/null || true
+    tmux -L agency kill-session -t agency-test-send 2>/dev/null || true
 }
 
 test_stop() {
@@ -96,7 +96,7 @@ test_kill() {
     create_config "kill1"
     python3 agency.py start kill1 --dir /tmp/test-kill >/dev/null 2>&1
     python3 agency.py kill agency-test-kill >/dev/null 2>&1
-    ! tmux has-session -t agency-test-kill 2>/dev/null && pass "kill" || fail "kill"
+    ! tmux -L agency has-session -t agency-test-kill 2>/dev/null && pass "kill" || fail "kill"
 }
 
 test_kill_all() {
@@ -107,7 +107,7 @@ test_kill_all() {
     python3 agency.py start ka1 --dir /tmp/test-ka1 >/dev/null 2>&1
     python3 agency.py start ka2 --dir /tmp/test-ka2 >/dev/null 2>&1
     python3 agency.py kill-all >/dev/null 2>&1
-    ! tmux has-session -t "agency-test-ka1" 2>/dev/null && ! tmux has-session -t "agency-test-ka2" 2>/dev/null && pass "kill-all" || fail "kill-all"
+    ! tmux -L agency has-session -t "agency-test-ka1" 2>/dev/null && ! tmux -L agency has-session -t "agency-test-ka2" 2>/dev/null && pass "kill-all" || fail "kill-all"
     tmux has-session -t "other" 2>/dev/null && pass "other preserved" || fail "other killed"
     tmux kill-session -t "other" 2>/dev/null || true
 }
