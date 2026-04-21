@@ -13,6 +13,9 @@
 - [ ] 2.2 Message log storage (messages.json)
 - [ ] 2.3 Attach action (jump to tmux)
 - [ ] 2.4 Status indicators (color-coded)
+- [ ] 2.2 Message log storage (messages.json)
+- [ ] 2.3 Attach action (jump to tmux)
+- [ ] 2.4 Status indicators (color-coded)
 
 ## Stage 3: Lifecycle Management
 
