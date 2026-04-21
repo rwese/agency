@@ -435,6 +435,7 @@ Examples:
     # send
     send_parser = subparsers.add_parser("send", help="Send message to agent")
     send_parser.add_argument("session", help="Session name")
+    send_parser.add_argument("target", nargs="?", help="Agent name (optional if single window)")
     send_parser.add_argument("message", nargs="+", help="Message to send")
     
     # stop
@@ -461,9 +462,9 @@ Examples:
     elif args.command == "list":
         cmd_list()
     elif args.command == "send":
-        # Handle message as multiple args
+        # Handle message as multiple args, target is optional
         message = " ".join(args.message)
-        cmd_send(args.session, None, message)
+        cmd_send(args.session, args.target, message)
     elif args.command == "stop":
         cmd_stop(args.session)
     elif args.command == "kill":
