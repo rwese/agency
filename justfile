@@ -89,6 +89,76 @@ help:
     @echo "  completions-zsh      Install zsh completions"
     @echo "  completions-fish     Install fish completions"
     @echo "  completions          Install all completions"
+    @echo ""
+    @echo "  E2E Test recipes:"
+    @echo "  e2e-test-init        Initialize e2e test directory"
+    @echo "  e2e-test-start       Start coordinator manager"
+    @echo "  e2e-test-attach      Attach to coordinator"
+    @echo "  e2e-test-clean       Clean e2e test artifacts"
+    @echo "  e2e-test-status      Check e2e test status"
+    @echo "  e2e-test-verify      Verify e2e test results"
+
+# E2E Test recipes
+e2e-test-init:
+    # Initialize e2e test directory with local agency config
+    rm -rf e2e/test-todo-app/.agency
+    mkdir -p e2e/test-todo-app/.agency
+    cp -r e2e/test-todo-app/agents e2e/test-todo-app/.agency/
+    cp -r e2e/test-todo-app/managers e2e/test-todo-app/.agency/
+    cp e2e/test-todo-app/README.md e2e/test-todo-app/.agency/
+    @echo "E2E test directory initialized: e2e/test-todo-app/.agency/"
+    @echo "To start: just e2e-test-start"
+
+e2e-test-start:
+    # Start coordinator manager for e2e test
+    # Copy e2e configs to global location for test
+    mkdir -p ~/.config/agency/managers
+    mkdir -p ~/.config/agency/agents
+    cp e2e/test-todo-app/.agency/managers/*.yaml ~/.config/agency/managers/
+    cp e2e/test-todo-app/.agency/agents/*.yaml ~/.config/agency/agents/
+    agency start-manager coordinator --dir e2e/test-todo-app
+    @echo "Coordinator started"
+    @echo "To attach: just e2e-test-attach"
+    @echo ""
+    @echo "Agent configs loaded from:"
+    @echo "  e2e/test-todo-app/.agency/agents/*.yaml"
+
+e2e-test-attach:
+    # Attach to coordinator manager
+    agency attach-manager coordinator
+
+e2e-test-clean:
+    # Clean up e2e test artifacts
+    rm -rf e2e/test-todo-app/.agency
+    rm -rf e2e/test-todo-app/todo.py
+    rm -rf e2e/test-todo-app/test_todo.py
+    rm -rf e2e/test-todo-app/todos.json
+    @echo "E2E test artifacts cleaned"
+
+e2e-test-status:
+    # Check e2e test status
+    agency list
+    @echo ""
+    @echo "Files in e2e/test-todo-app/:"
+    ls -la e2e/test-todo-app/
+
+e2e-test-verify:
+    # Verify e2e test results
+    @echo "=== E2E Test Verification ==="
+    @if [ -f e2e/test-todo-app/todo.py ]; then \
+        echo "✓ todo.py exists"; \
+    else \
+        echo "✗ todo.py missing"; \
+    fi
+    @if [ -f e2e/test-todo-app/test_todo.py ]; then \
+        echo "✓ test_todo.py exists"; \
+    else \
+        echo "✗ test_todo.py missing"; \
+    fi
+    @if [ -f e2e/test-todo-app/todo.py ]; then \
+        echo "Testing todo.py..."; \
+        cd e2e/test-todo-app && python todo.py list; \
+    fi
 
 # Shell completions
 completions-bash:
