@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
+from agency.tui.app import run_tui
 
 __version__ = "0.3.0"
 VERSION = "0.3.0"
@@ -1246,6 +1247,10 @@ Examples:
         description="Print shell completion script. Source or pipe to shell rc file.")
     comp_parser.add_argument("shell", choices=["bash", "zsh", "fish"], help="Shell: bash, zsh, or fish")
 
+    # tui
+    subparsers.add_parser("tui", help="Launch TUI",
+        description="Launch the terminal user interface for monitoring and managing agents.")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -1287,6 +1292,8 @@ Examples:
         cmd_tasks(args.action, args.task_id)
     elif args.command == "completions":
         cmd_completions(args.shell)
+    elif args.command == "tui":
+        run_tui()
     else:
         parser.print_help()
         sys.exit(1)

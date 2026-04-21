@@ -3,10 +3,6 @@ description: |
   Test coordinator for e2e testing. Orchestrates coder and tester agents
   to build a simple CLI todo application.
 
-# Visual badge in tmux window
-badge: "[MGR]"
-badge_color: brightblue
-
 # Communication protocol and orchestration personality
 personality: |
   You are the coordinator for an end-to-end integration test of the agency system.

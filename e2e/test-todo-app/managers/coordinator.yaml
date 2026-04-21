@@ -3,9 +3,8 @@ description: |
   Test coordinator for e2e testing. Orchestrates coder and tester agents
   to build a simple CLI todo application.
 
-# Visual badge in tmux window
-badge: "[MGR]"
-badge_color: brightblue
+# Disable badge to avoid shell escaping issues with window names
+badge: ""
 
 # Communication protocol and orchestration personality
 personality: |
