@@ -100,34 +100,31 @@ agency tasks reject <id> --reason "..."  # Reject with reason
 agency tasks update <id> --status <status>  # Update task status
 ```
 
-## Manager Responsibilities
-- Poll `agency tasks list` regularly (check every few minutes)
-- Assign unassigned tasks to available agents using `agency tasks assign`
-- Review completed tasks and approve with `agency tasks complete` or reject
-- Monitor agent health via `agency members`
-- Create new tasks with `agency tasks add -d "..."`
-- Use `agency tmux list` to monitor active windows
+## Coordinator Workflow
+After each response, ALWAYS check `agency tasks list` to see if work needs assignment.
+
+When tasks are unassigned:
+1. Assign to available agents using `agency tasks assign <id> <agent>`
+2. Distribute work evenly across agents
+
+When tasks are pending approval:
+1. Review with `agency tasks show <id>`
+2. Approve or reject with `agency tasks approve/reject <id>`
 """
 
 # Agent-specific base additions
 AGENT_BASE_ADDITION = """
 
-## Task Commands
-```bash
-agency tasks list                    # List tasks (check for assignment)
-agency tasks show <id>              # View task details
-agency tasks update <id> --status in_progress  # Mark as started
-agency tasks complete <id> --result "..."  # Complete task
-```
+## Task Workflow
+**After completing any action, always check `agency tasks list` for new work.**
 
-## Agent Responsibilities
-- Poll for assigned tasks: `agency tasks list`
-- When assigned a task:
-  1. Update status: `agency tasks update <id> --status in_progress`
-  2. Read details: `agency tasks show <id>`
-  3. Work on the task
-  4. Complete: `agency tasks complete <id> --result "..."`
-- Use `agency members` to see other agents and coordinate if needed
+If you have an assigned task:
+1. View it: `agency tasks show <id>`
+2. Mark in_progress: `agency tasks update <id> --status in_progress`
+3. Work on it
+4. Complete: `agency tasks complete <id> --result "..."`
+
+**ONE TASK AT A TIME** - finish current task before starting another.
 """
 
 
@@ -445,12 +442,16 @@ def _generate_manager_launch_script(
     # Add custom context files from config if specified
     if agency_config.additional_context_files:
         for cf in agency_config.additional_context_files:
-            # Substitute AGENCY_* vars
+            # Substitute AGENCY_* vars and expand ~ and ${HOME}
             cf_expanded = (
                 cf.replace("${AGENCY_DIR}", str(agency_dir))
                 .replace("${AGENCY_WORKDIR}", str(work_dir))
                 .replace("${AGENCY_PROJECT}", session_name)
+                .replace("${HOME}", str(Path.home()))
             )
+            # Expand ~ (after substituting other vars)
+            cf_expanded = os.path.expanduser(cf_expanded)
+
             cf_path = Path(cf_expanded)
             # Absolute paths used directly, relative paths resolved from work_dir
             if cf_path.is_absolute():
@@ -471,16 +472,56 @@ def _generate_manager_launch_script(
     # Get agent command
     agent_cmd = os.environ.get("AGENCY_AGENT_CMD", "pi")
 
-    # Build command
+    # Get poll interval and chunk size from config
+    poll_interval = 30
+    chunk_size = 1
+    if manager_config_path.exists():
+        import yaml
+        config = yaml.safe_load(manager_config_path.read_text())
+        poll_interval = config.get("poll_interval", 30)
+        chunk_size = config.get("chunk_size", 1)
+
+    # Get pi-inject extension path
+    inject_extension = os.environ.get(
+        "AGENCY_PI_INJECT_EXT",
+        str(Path.home() / ".pi" / "agent" / "extensions" / "pi-inject" / "extensions")
+    )
+
+    # Import heartbeat module for path
+    from agency import heartbeat as heartbeat_module
+    heartbeat_path = Path(heartbeat_module.__file__).parent / "heartbeat.py"
+
+    # Build command with heartbeat in background
+    # Use unique socket path per member
+    injector_socket = f"{agency_dir}/injector-{manager_name}.sock"
     cmd = (
         f'cd "{work_dir}" && '
-        f"export "
+        f"rm -f \"{injector_socket}\" && "
+        # Start heartbeat in background with all env vars
+        f"env "
+        f"AGENCY_ROLE=MANAGER "
+        f"AGENCY_DIR=\"{agency_dir}\" "
+        f"AGENCY_MANAGER={manager_name} "
+        f"AGENCY_SOCKET={socket_name} "
+        f"AGENCY_POLL_INTERVAL={poll_interval} "
+        f"AGENCY_CHUNK_SIZE={chunk_size} "
+        f"PI_INJECTOR_SOCKET=\"{injector_socket}\" "
+        f"python3 {heartbeat_path} > /dev/null 2>&1 & "
+        # Give heartbeat a moment to start
+        f"sleep 1 && "
+        # Use env to ensure all vars are passed to pi
+        f"env "
         f"AGENCY_ROLE=MANAGER "
         f"AGENCY_PROJECT={session_name} "
         f"AGENCY_DIR=\"{agency_dir}\" "
         f"AGENCY_WORKDIR=\"{work_dir}\" "
-        f"AGENCY_MANAGER={manager_name} && "
+        f"AGENCY_MANAGER={manager_name} "
+        f"AGENCY_SOCKET={socket_name} "
+        f"AGENCY_POLL_INTERVAL={poll_interval} "
+        f"AGENCY_CHUNK_SIZE={chunk_size} "
+        f"PI_INJECTOR_SOCKET=\"{injector_socket}\" "
         f"{agent_cmd} "
+        f'-e "{inject_extension}" '
         f'--session-dir "{agency_dir}" '
         f"--no-context-files "
         f"{context_args}"
@@ -573,16 +614,43 @@ def _generate_agent_launch_script(
     # Get agent command
     agent_cmd = os.environ.get("AGENCY_AGENT_CMD", "pi")
 
-    # Build command
+    # Get pi-inject extension path
+    inject_extension = os.environ.get(
+        "AGENCY_PI_INJECT_EXT",
+        str(Path.home() / ".pi" / "agent" / "extensions" / "pi-inject" / "extensions")
+    )
+
+    # Import heartbeat module for path
+    from agency import heartbeat as heartbeat_module
+    heartbeat_path = Path(heartbeat_module.__file__).parent / "heartbeat.py"
+
+    # Build command with heartbeat in background
+    # Use unique socket path per member
+    injector_socket = f"{agency_dir}/injector-{agent_name}.sock"
     cmd = (
         f'cd "{work_dir}" && '
-        f"export "
+        f"rm -f \"{injector_socket}\" && "
+        # Start heartbeat in background with all env vars
+        f"env "
+        f"AGENCY_ROLE=AGENT "
+        f"AGENCY_DIR=\"{agency_dir}\" "
+        f"AGENCY_AGENT={agent_name} "
+        f"AGENCY_SOCKET={socket_name} "
+        f"PI_INJECTOR_SOCKET=\"{injector_socket}\" "
+        f"python3 {heartbeat_path} > /dev/null 2>&1 & "
+        # Give heartbeat a moment to start
+        f"sleep 1 && "
+        # Use env to ensure all vars are passed to pi
+        f"env "
         f"AGENCY_ROLE=AGENT "
         f"AGENCY_PROJECT={session_name} "
         f"AGENCY_DIR=\"{agency_dir}\" "
         f"AGENCY_WORKDIR=\"{work_dir}\" "
-        f"AGENCY_AGENT={agent_name} && "
+        f"AGENCY_AGENT={agent_name} "
+        f"AGENCY_SOCKET={socket_name} "
+        f"PI_INJECTOR_SOCKET=\"{injector_socket}\" "
         f"{agent_cmd} "
+        f'-e "{inject_extension}" '
         f'--session-dir "{agency_dir}" '
         f"--no-context-files "
         f"{personality_args} "

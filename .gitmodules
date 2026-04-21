@@ -1,0 +1,3 @@
+[submodule "extras/pi/extensions/pi-inject"]
+	path = extras/pi/extensions/pi-inject
+	url = git@github.com:rwese/pi-inject.git
