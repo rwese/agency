@@ -58,6 +58,7 @@ def format_context_args(context_files: list[Path]) -> str:
         args.append(f'--append-system-prompt "<({f})"')
     return " ".join(args)
 
+
 # Base personality injected into all agents (always included)
 BASE_PERSONALITY = """You are running in an Agency v2.0 tmux session.
 
@@ -430,7 +431,7 @@ def _generate_manager_launch_script(
             agency_dir=agency_dir,
         )
         + MANAGER_BASE_ADDITION
-        + ("\n\n## Custom Personality\n" + user_personality if user_personality else "")
+        + ("\n\n## Who am i\n" + user_personality if user_personality else "")
     )
 
     escaped = _escape_prompt(full_personality)
@@ -441,8 +442,8 @@ def _generate_manager_launch_script(
     context_files = discover_context_files(work_dir, work_dir)  # Use work_dir as git_root for now
 
     # Add custom context files from config if specified
-    if agency_config.context_files:
-        for cf in agency_config.context_files:
+    if agency_config.additional_context_files:
+        for cf in agency_config.additional_context_files:
             cf_path = Path(cf)
             if cf_path.is_absolute() and cf_path.exists():
                 context_files.append(cf_path)
@@ -467,8 +468,8 @@ def _generate_manager_launch_script(
         f"AGENCY_PROJECT={session_name} "
         f'AGENCY_DIR="{agency_dir}" '
         f"AGENCY_MANAGER={manager_name} "
-        f"{personality_args} "
         f"{context_args}"
+        f"{personality_args} "
     )
 
     script_path.write_text(f"#!/bin/bash\n{cmd}\n")
@@ -529,8 +530,8 @@ def _generate_agent_launch_script(
     context_files = discover_context_files(work_dir, work_dir)
 
     # Add custom context files from config if specified
-    if agency_config.context_files:
-        for cf in agency_config.context_files:
+    if agency_config.additional_context_files:
+        for cf in agency_config.additional_context_files:
             cf_path = Path(cf)
             if cf_path.is_absolute() and cf_path.exists():
                 context_files.append(cf_path)

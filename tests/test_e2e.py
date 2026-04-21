@@ -53,6 +53,7 @@ class TestInitProject:
         """Create unique project per test to avoid session collisions."""
         # Use unique name based on test and random
         import uuid
+
         project_name = f"test-{uuid.uuid4().hex[:8]}"
         project_dir = tmp_path / project_name
         project_dir.mkdir()
@@ -78,9 +79,12 @@ class TestInitProject:
         result = run_agency(
             [
                 "init",
-                "--dir", str(unique_project),
-                "--template", "https://github.com/rwese/agency-templates",
-                "--template-subdir", "basic",
+                "--dir",
+                str(unique_project),
+                "--template",
+                "https://github.com/rwese/agency-templates",
+                "--template-subdir",
+                "basic",
             ],
             check=False,
         )
@@ -100,6 +104,7 @@ class TestTaskWorkflow:
     def project_with_agency(self, tmp_path):
         """Create project with .agency directory manually."""
         import uuid
+
         project_name = f"task-test-{uuid.uuid4().hex[:8]}"
         project_dir = tmp_path / project_name
         project_dir.mkdir()
@@ -258,6 +263,7 @@ class TestStopSession:
     def clean_session(self, tmp_path):
         """Ensure session is cleaned up after test."""
         import uuid
+
         project_name = f"stop-test-{uuid.uuid4().hex[:8]}"
         project_dir = tmp_path / project_name
         project_dir.mkdir()

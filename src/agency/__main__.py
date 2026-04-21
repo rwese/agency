@@ -50,6 +50,68 @@ def find_git_root(path: Path = Path.cwd()) -> Path | None:
     return None
 
 
+def resolve_path(path: str) -> Path:
+    """Expand ~ and ${VAR} environment variables in paths.
+
+    Args:
+        path: Path string that may contain ~ or ${VAR} patterns
+
+    Returns:
+        Expanded Path object
+    """
+    expanded = os.path.expanduser(path)
+    expanded = os.path.expandvars(expanded)
+    return Path(expanded)
+
+
+def discover_agent_files(project_name: str | None = None) -> dict[str, Path | None]:
+    """Discover common agent configuration files on the system.
+
+    Searches standard locations for:
+    - AGENTS.md (universal standard)
+    - CLAUDE.md (Claude Code specific)
+    - CLAUDE.local.md (personal project preferences)
+
+    Args:
+        project_name: Optional project name for ~/.claude/projects/<name>/ lookup
+
+    Returns:
+        Dict mapping file type to discovered Path or None
+    """
+    home = Path.home()
+    results: dict[str, Path | None] = {
+        "AGENTS.md": None,
+        "CLAUDE.md": None,
+        "CLAUDE.local.md": None,
+    }
+
+    # Discover AGENTS.md
+    agents_md_locations = [
+        home / ".agents" / "AGENTS.md",
+        home / ".agents" / "AGENTS.system.md",
+        home / "AGENTS.md",
+    ]
+    for loc in agents_md_locations:
+        if loc.exists() and loc.is_file():
+            results["AGENTS.md"] = loc
+            break
+
+    # Discover CLAUDE.md
+    claude_md_locations = [
+        home / ".claude" / "projects" / (project_name or "") / "CLAUDE.md",
+        home / ".claude" / "CLAUDE.md",
+    ]
+    for loc in claude_md_locations:
+        if loc.exists() and loc.is_file():
+            results["CLAUDE.md"] = loc
+            break
+
+    # CLAUDE.local.md is typically in project root, not discovered automatically
+    # but we note the expected location pattern
+
+    return results
+
+
 @click.group()
 @click.version_option(version=VERSION)
 @click.pass_context
@@ -72,11 +134,14 @@ def cli(ctx):
 @click.option("--template-subdir", help="Template subdirectory")
 @click.option("--force", is_flag=True, help="Overwrite existing")
 @click.option("--refresh", is_flag=True, help="Bypass template cache")
-def init_project(dir, template, template_subdir, force, refresh):
+@click.option("--no-context", is_flag=True, help="Skip context file discovery")
+def init_project(dir, template, template_subdir, force, refresh, no_context):
     """Create a new project with session and .agency/ directory.
 
     Creates .agency/ in the project directory. Use --dir to specify,
     defaults to current directory.
+
+    Optionally discovers and includes agent configuration files like AGENTS.md and CLAUDE.md.
     """
     work_dir = Path(dir).expanduser().absolute()
 
@@ -106,6 +171,11 @@ def init_project(dir, template, template_subdir, force, refresh):
             click.echo("[ERROR] Use --force to overwrite", err=True)
             sys.exit(1)
 
+    # Discover context files if not skipped
+    additional_context_files: list[str] = []
+    if not no_context:
+        additional_context_files = _prompt_context_files(work_dir, project_name)
+
     # Download template if specified
     template_url = template or "https://github.com/rwese/agency-templates"
 
@@ -117,16 +187,93 @@ def init_project(dir, template, template_subdir, force, refresh):
             _copy_template_to_agency(template_path, agency_dir)
         else:
             click.echo("[WARN] Could not download template, creating default structure", err=True)
-            _create_default_agency_structure(agency_dir)
+            _create_default_agency_structure(agency_dir, additional_context_files)
     else:
-        _create_default_agency_structure(agency_dir)
+        _create_default_agency_structure(agency_dir, additional_context_files)
 
     # Create tmux session with socket
     create_project_session(session_name, socket_name, work_dir)
 
     click.echo(f"[INFO] Created project session: {session_name}")
     click.echo(f"[INFO] .agency/ created at: {agency_dir}")
+    if additional_context_files:
+        click.echo(f"[INFO] Added {len(additional_context_files)} context files")
     click.echo("[INFO] Run 'agency start' to start agents")
+
+
+def _prompt_context_files(work_dir: Path, project_name: str) -> list[str]:
+    """Prompt user to select agent context files to include.
+
+    Discovers available files and asks user which to include.
+
+    Args:
+        work_dir: Project working directory
+        project_name: Project name for discovery lookups
+
+    Returns:
+        List of selected file paths
+    """
+    discovered = discover_agent_files(project_name)
+
+    # Build list of available files with descriptions
+    available: list[tuple[str, str, Path]] = []
+    file_types = [
+        ("AGENTS.md", "Universal agent config (Claude, Cursor, Copilot)"),
+        ("CLAUDE.md", "Claude Code memory file"),
+        ("CLAUDE.local.md", "Personal project preferences (git-ignored)"),
+    ]
+
+    for file_type, description in file_types:
+        path = discovered.get(file_type)
+        if path and path.exists():
+            available.append((file_type, description, path))
+
+    if not available:
+        click.echo("[INFO] No agent context files discovered")
+        return []
+
+    click.echo("\n[?] Discovered agent context files:")
+    click.echo("")
+    for i, (file_type, description, path) in enumerate(available, 1):
+        click.echo(f"  {i}. {file_type}")
+        click.echo(f"     {description}")
+        click.echo(f"     → {path}")
+        click.echo("")
+
+    click.echo("Select files to include (comma-separated or 'none'): ", nl=False)
+
+    try:
+        response = input().strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        click.echo("")
+        return []
+
+    if response in ("none", "n", ""):
+        return []
+
+    selected: list[str] = []
+    for part in response.replace(" ", "").split(","):
+        if part.isdigit():
+            idx = int(part) - 1
+            if 0 <= idx < len(available):
+                selected.append(str(available[idx][2]))
+        elif part in ("all", "a"):
+            selected = [str(p) for _, _, p in available]
+            break
+
+    # Also check for CLAUDE.local.md in project root
+    claude_local = work_dir / "CLAUDE.local.md"
+    if claude_local.exists() and str(claude_local) not in selected:
+        click.echo(f"\n[?] Include CLAUDE.local.md from project root? ({claude_local})")
+        click.echo("    (y/N): ", nl=False)
+        try:
+            response = input().strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            response = "n"
+        if response in ("y", "yes"):
+            selected.append(str(claude_local))
+
+    return selected
 
 
 def _copy_template_to_agency(template_path: Path, agency_dir: Path) -> None:
@@ -147,9 +294,13 @@ def _copy_template_to_agency(template_path: Path, agency_dir: Path) -> None:
             shutil.copy2(item, dest)
 
 
-def _create_default_agency_structure(agency_dir: Path) -> None:
-    """Create default .agency/ directory structure."""
+def _create_default_agency_structure(agency_dir: Path, additional_context_files: list[str] | None = None) -> None:
+    """Create default .agency/ directory structure.
 
+    Args:
+        agency_dir: Path to the .agency/ directory
+        additional_context_files: List of paths to agent context files to reference
+    """
     agency_dir.mkdir(parents=True, exist_ok=True)
     (agency_dir / "agents").mkdir(exist_ok=True)
     (agency_dir / "tasks").mkdir(exist_ok=True)
@@ -158,7 +309,11 @@ def _create_default_agency_structure(agency_dir: Path) -> None:
 
     config_path = agency_dir / "config.yaml"
     if not config_path.exists():
-        config_path.write_text("project: default\nshell: bash\n")
+        context_section = ""
+        if additional_context_files:
+            files_yaml = "\n".join(f"  - {f}" for f in additional_context_files)
+            context_section = f"\nadditional_context_files:\n{files_yaml}"
+        config_path.write_text(f"project: default\nshell: bash{context_section}\n")
 
     agents_path = agency_dir / "agents.yaml"
     if not agents_path.exists():

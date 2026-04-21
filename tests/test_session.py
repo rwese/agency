@@ -83,9 +83,7 @@ class TestSessionManager:
 
         # Manager window
         manager_name = "coordinator"
-        start_manager_window(
-            session_name, temp_socket, manager_name, temp_dir / ".agency", temp_dir
-        )
+        start_manager_window(session_name, temp_socket, manager_name, temp_dir / ".agency", temp_dir)
 
         assert sm.window_exists(f"{MANAGER_PREFIX}{manager_name}")
         assert sm.manager_exists()

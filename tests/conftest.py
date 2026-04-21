@@ -66,11 +66,19 @@ def tmux_session(socket_name: str, session_name: str, work_dir: Path):
     )
 
     # Create session
-    subprocess.run([
-        "tmux", "-L", socket_name, "new-session",
-        "-d", "-s", session_name,
-        "-c", str(work_dir),
-    ])
+    subprocess.run(
+        [
+            "tmux",
+            "-L",
+            socket_name,
+            "new-session",
+            "-d",
+            "-s",
+            session_name,
+            "-c",
+            str(work_dir),
+        ]
+    )
 
     try:
         yield
@@ -83,41 +91,73 @@ def tmux_session(socket_name: str, session_name: str, work_dir: Path):
 
 def run_in_tmux(socket_name: str, session_name: str, window_name: str, command: str):
     """Run a command in a new tmux window."""
-    subprocess.run([
-        "tmux", "-L", socket_name, "new-window",
-        "-t", f"{session_name}:",
-        "-n", window_name,
-        "-c", str(Path.home()),
-    ])
+    subprocess.run(
+        [
+            "tmux",
+            "-L",
+            socket_name,
+            "new-window",
+            "-t",
+            f"{session_name}:",
+            "-n",
+            window_name,
+            "-c",
+            str(Path.home()),
+        ]
+    )
 
     # Wait for window to be ready
     time.sleep(0.5)
 
     # Send command
-    subprocess.run([
-        "tmux", "-L", socket_name,
-        "send-keys", "-t", f"{session_name}:{window_name}",
-        command, "C-m",
-    ])
+    subprocess.run(
+        [
+            "tmux",
+            "-L",
+            socket_name,
+            "send-keys",
+            "-t",
+            f"{session_name}:{window_name}",
+            command,
+            "C-m",
+        ]
+    )
 
 
 def send_to_tmux(socket_name: str, session_name: str, window_name: str, text: str):
     """Send text to a tmux window."""
-    subprocess.run([
-        "tmux", "-L", socket_name,
-        "send-keys", "-t", f"{session_name}:{window_name}",
-        text, "C-m",
-    ])
+    subprocess.run(
+        [
+            "tmux",
+            "-L",
+            socket_name,
+            "send-keys",
+            "-t",
+            f"{session_name}:{window_name}",
+            text,
+            "C-m",
+        ]
+    )
 
 
 def wait_for_window(socket_name: str, session_name: str, window_name: str, timeout: int = 5):
     """Wait for a window to appear."""
     start = time.time()
     while time.time() - start < timeout:
-        result = subprocess.run([
-            "tmux", "-L", socket_name, "list-windows",
-            "-t", session_name, "-F", "#{window_name}",
-        ], capture_output=True, text=True)
+        result = subprocess.run(
+            [
+                "tmux",
+                "-L",
+                socket_name,
+                "list-windows",
+                "-t",
+                session_name,
+                "-F",
+                "#{window_name}",
+            ],
+            capture_output=True,
+            text=True,
+        )
         if window_name in result.stdout:
             return True
         time.sleep(0.2)

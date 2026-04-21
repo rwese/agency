@@ -18,7 +18,7 @@ class AgencyConfig:
     shell: str = "bash"
     template_url: str | None = "https://github.com/rwese/agency-templates"
     stop_timeout: int = 30
-    context_files: list[str] | None = None  # Files to add as system prompts
+    additional_context_files: list[str] | None = None  # Files to add as context (env vars expanded on load)
 
 
 @dataclass
@@ -41,7 +41,12 @@ class AgentConfig:
 
 
 def load_agency_config(agency_dir: Path) -> AgencyConfig:
-    """Load project configuration from .agency/config.yaml."""
+    """Load project configuration from .agency/config.yaml.
+
+    Environment variables in additional_context_files are expanded when loading.
+    """
+    import os
+
     config_path = agency_dir / "config.yaml"
 
     if not config_path.exists():
@@ -51,12 +56,23 @@ def load_agency_config(agency_dir: Path) -> AgencyConfig:
     with open(config_path) as f:
         data = yaml.safe_load(f) or {}
 
+    # Expand environment variables in additional_context_files
+    context_files_raw = data.get("additional_context_files")
+    context_files_expanded = None
+    if context_files_raw:
+        context_files_expanded = []
+        for path in context_files_raw:
+            # Expand ~ and ${VAR} in paths
+            expanded = os.path.expanduser(path)
+            expanded = os.path.expandvars(expanded)
+            context_files_expanded.append(expanded)
+
     return AgencyConfig(
         project=data.get("project", agency_dir.parent.name),
         shell=data.get("shell", "bash"),
         template_url=data.get("template_url"),
         stop_timeout=data.get("stop_timeout", 30),
-        context_files=data.get("context_files"),
+        additional_context_files=context_files_expanded,
     )
 
 
@@ -133,17 +149,18 @@ def save_agency_config(agency_dir: Path, config: AgencyConfig) -> None:
     """Save project configuration."""
     config_path = agency_dir / "config.yaml"
 
+    data = {
+        "project": config.project,
+        "shell": config.shell,
+        "template_url": config.template_url,
+        "stop_timeout": config.stop_timeout,
+    }
+
+    if config.additional_context_files:
+        data["additional_context_files"] = config.additional_context_files
+
     with open(config_path, "w") as f:
-        yaml.dump(
-            {
-                "project": config.project,
-                "shell": config.shell,
-                "template_url": config.template_url,
-                "stop_timeout": config.stop_timeout,
-            },
-            f,
-            default_flow_style=False,
-        )
+        yaml.dump(data, f, default_flow_style=False)
 
 
 def save_manager_config(agency_dir: Path, config: ManagerConfig) -> None:

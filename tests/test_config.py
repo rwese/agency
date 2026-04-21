@@ -30,6 +30,7 @@ class TestAgencyConfig:
         assert config.shell == "bash"
         assert config.template_url == "https://github.com/rwese/agency-templates"
         assert config.stop_timeout == 30
+        assert config.additional_context_files is None
 
     def test_custom_values(self):
         """Test custom configuration values."""
@@ -38,12 +39,14 @@ class TestAgencyConfig:
             shell="zsh",
             template_url="https://github.com/user/repo",
             stop_timeout=60,
+            additional_context_files=["${HOME}/AGENTS.md", "${HOME}/CLAUDE.md"],
         )
 
         assert config.project == "api"
         assert config.shell == "zsh"
         assert config.template_url == "https://github.com/user/repo"
         assert config.stop_timeout == 60
+        assert config.additional_context_files == ["${HOME}/AGENTS.md", "${HOME}/CLAUDE.md"]
 
 
 class TestManagerConfig:
@@ -112,6 +115,31 @@ class TestLoadAgencyConfig:
         assert config.shell == "zsh"
         assert config.template_url == "https://example.com"
         assert config.stop_timeout == 45
+
+    def test_load_with_context_files(self, temp_agency_dir):
+        """Test loading config with additional_context_files and env var expansion."""
+        config_file = temp_agency_dir / "config.yaml"
+        config_file.write_text(
+            yaml.dump(
+                {
+                    "project": "myapi",
+                    "additional_context_files": [
+                        "${HOME}/AGENTS.md",
+                        "~/CLAUDE.md",
+                    ],
+                }
+            )
+        )
+
+        config = load_agency_config(temp_agency_dir)
+
+        assert config.project == "myapi"
+        assert config.additional_context_files is not None
+        assert len(config.additional_context_files) == 2
+        # Check that env vars and ~ are expanded
+        assert "${HOME}" not in config.additional_context_files[0]
+        assert str(Path.home()) in config.additional_context_files[0]
+        assert "~" not in config.additional_context_files[1]
 
 
 class TestLoadManagerConfig:
@@ -253,6 +281,22 @@ class TestSaveAgencyConfig:
         assert loaded["shell"] == "zsh"
         assert loaded["template_url"] == "https://example.com"
         assert loaded["stop_timeout"] == 90
+
+    def test_save_config_with_context_files(self, temp_agency_dir):
+        """Test saving config with additional_context_files."""
+        config = AgencyConfig(
+            project="new-project",
+            additional_context_files=["${HOME}/AGENTS.md", "~/CLAUDE.md"],
+        )
+
+        save_agency_config(temp_agency_dir, config)
+
+        config_file = temp_agency_dir / "config.yaml"
+        assert config_file.exists()
+
+        loaded = yaml.safe_load(config_file.read_text())
+        assert "additional_context_files" in loaded
+        assert loaded["additional_context_files"] == ["${HOME}/AGENTS.md", "~/CLAUDE.md"]
 
 
 class TestSaveManagerConfig:
