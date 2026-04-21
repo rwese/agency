@@ -1,0 +1,231 @@
+#!/usr/bin/env bash
+# test_tui.exp - Master test runner for TUI E2E tests
+#
+# Runs all expect-based TUI tests and integrates with main test suite.
+
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+PASS=0
+FAIL=0
+SKIP=0
+
+pass() { printf "${GREEN}PASS:${NC} %s\n" "$*"; PASS=$((PASS + 1)); }
+fail() { printf "${RED}FAIL:${NC} %s\n" "$*"; FAIL=$((FAIL + 1)); }
+skip() { printf "${YELLOW}[SKIP]${NC} %s\n" "$*"; SKIP=$((SKIP + 1)); }
+info() { printf "${BLUE}INFO:${NC} %s\n" "$*"; }
+
+# Cleanup function
+cleanup() {
+    info "Cleaning up test sessions..."
+    tmux -L agency kill-session -t agency-test-tui 2>/dev/null || true
+    tmux -L agency kill-session -t agency-test-session 2>/dev/null || true
+    tmux -L agency kill-session -t agency-test-e2e 2>/dev/null || true
+    tmux -L agency kill-session -t agency-e2e-test 2>/dev/null || true
+    
+    # Kill any agency-test-* sessions
+    for session in $(tmux -L agency list-sessions -F '#S' 2>/dev/null | grep -E '^agency-test' || true); do
+        tmux -L agency kill-session -t "$session" 2>/dev/null || true
+    done
+}
+
+# Check if expect is available
+check_expect() {
+    if ! command -v expect &>/dev/null; then
+        echo "ERROR: expect is not installed"
+        echo "Install with: brew install expect (macOS) or apt install expect (Linux)"
+        return 1
+    fi
+    return 0
+}
+
+# Run a single expect test
+run_expect_test() {
+    local test_file="$1"
+    local test_name=$(basename "$test_file" .exp)
+    
+    info "Running $test_name..."
+    
+    # Cleanup before each test
+    cleanup
+    
+    # Run expect test
+    if expect "$test_file"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+usage() {
+    cat <<EOF
+Usage: $0 [OPTIONS]
+
+Run TUI E2E tests for Agency.
+
+OPTIONS:
+    -h, --help           Show this help message
+    -l, --list           List available tests
+    -t, --test NAME      Run specific test by name
+    -a, --all            Run all tests (default)
+    -k, --keep           Keep sessions running after tests
+
+AVAILABLE TESTS:
+    test_tui_nav.exp        Panel navigation tests
+    test_tui_tasks.exp      Task management tests
+    test_tui_sessions.exp   Session management tests
+    test_tui_messaging.exp  Messaging tests
+    test_tui_full.exp       Full E2E workflow test
+
+EXAMPLES:
+    $0                      # Run all tests
+    $0 --list               # List available tests
+    $0 --test test_tui_nav   # Run navigation tests only
+EOF
+}
+
+# List available tests
+list_tests() {
+    info "Available TUI tests:"
+    for test in *.exp; do
+        if [[ "$test" != "expect_helpers.exp" && "$test" != "test_tui.exp" ]]; then
+            echo "  - $test"
+        fi
+    done
+}
+
+# Main
+main() {
+    local run_all=true
+    local specific_test=""
+    local keep_sessions=false
+    
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            -l|--list)
+                list_tests
+                exit 0
+                ;;
+            -t|--test)
+                specific_test="$2"
+                run_all=false
+                shift
+                ;;
+            -a|--all)
+                run_all=true
+                ;;
+            -k|--keep)
+                keep_sessions=true
+                ;;
+            *)
+                echo "Unknown option: $1"
+                usage
+                exit 1
+                ;;
+        esac
+        shift
+    done
+    
+    # Check prerequisites
+    if ! check_expect; then
+        exit 1
+    fi
+    
+    # Initial cleanup
+    cleanup
+    
+    echo ""
+    echo "========================================"
+    echo "  Agency TUI E2E Test Suite"
+    echo "========================================"
+    echo ""
+    
+    # Set up test environment
+    export AGENCY_AGENT_CMD="python3 $(pwd)/../src/agency/mock_agent.py"
+    
+    # Define test order (dependencies matter)
+    local tests=(
+        "test_tui_nav.exp"
+        "test_tui_tasks.exp"
+        "test_tui_sessions.exp"
+        "test_tui_messaging.exp"
+        "test_tui_full.exp"
+    )
+    
+    # Filter if specific test requested
+    if [[ -n "$specific_test" ]]; then
+        tests=()
+        for test in *.exp; do
+            if [[ "$test" != "expect_helpers.exp" && "$test" != "test_tui.exp" ]]; then
+                if [[ "$test" == *"$specific_test"* ]]; then
+                    tests+=("$test")
+                fi
+            fi
+        done
+        if [[ ${#tests[@]} -eq 0 ]]; then
+            fail "No tests matching: $specific_test"
+            exit 1
+        fi
+    fi
+    
+    # Run tests
+    local failed_tests=()
+    for test in "${tests[@]}"; do
+        echo ""
+        info "----------------------------------------"
+        info "Running: $test"
+        info "----------------------------------------"
+        
+        if run_expect_test "$test"; then
+            pass "$test"
+        else
+            fail "$test"
+            failed_tests+=("$test")
+        fi
+        
+        # Cleanup between tests
+        if ! $keep_sessions; then
+            cleanup
+        fi
+    done
+    
+    # Final cleanup
+    if ! $keep_sessions; then
+        cleanup
+    fi
+    
+    # Summary
+    echo ""
+    echo "========================================"
+    echo "  Results"
+    echo "========================================"
+    echo "  Passed: $PASS"
+    echo "  Failed: $FAIL"
+    echo "  Skipped: $SKIP"
+    echo ""
+    
+    if [[ $FAIL -gt 0 ]]; then
+        echo "Failed tests:"
+        for test in "${failed_tests[@]}"; do
+            echo "  - $test"
+        done
+        exit 1
+    fi
+    
+    echo "All TUI tests passed!"
+    exit 0
+}
+
+main "$@"

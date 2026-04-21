@@ -135,6 +135,24 @@ test_completions() {
     echo "$out" | grep -q "complete -c agency" && pass "completions fish" || fail "completions fish: missing"
 }
 
+test_tui() {
+    info "Test: TUI E2E tests"
+    if command -v expect &>/dev/null; then
+        if [[ -f "test_tui/test_tui.exp" ]]; then
+            # Run TUI tests via the test runner
+            if bash test_tui/test_tui.exp; then
+                pass "tui tests"
+            else
+                fail "tui tests"
+            fi
+        else
+            skip "tui tests (runner not found)"
+        fi
+    else
+        skip "tui tests (expect not installed)"
+    fi
+}
+
 main() {
     info "========================================"
     info "  Agency Test Suite"
@@ -153,6 +171,7 @@ main() {
     test_kill
     test_kill_all
     test_completions
+    test_tui
     
     cleanup
     echo

@@ -1,0 +1,300 @@
+# expect_helpers.exp - Reusable expect functions for Agency TUI tests
+# Source this file from test scripts: source [file dirname [info script]]/expect_helpers.exp
+
+# Global timeout for expect commands (seconds)
+set expect_timeout 10
+
+# Track spawned process
+set spawn_id -1
+
+# -----------------------------------------------------------------------------
+# Helper: find_agency_cmd
+# Finds the agency command to use (uv run agency or direct)
+# -----------------------------------------------------------------------------
+proc find_agency_cmd {} {
+    if {[info exists ::env(AGENCY_CMD)]} {
+        return $::env(AGENCY_CMD)
+    }
+    
+    # Check if uv is available and we're in the project dir
+    if {[file exists "pyproject.toml"]} {
+        return "uv run agency"
+    }
+    
+    # Fallback to direct agency command
+    return "agency"
+}
+
+# -----------------------------------------------------------------------------
+# Helper: exec_agency
+# Execute agency CLI command
+# -----------------------------------------------------------------------------
+proc exec_agency {cmd args} {
+    set agency_cmd [find_agency_cmd]
+    set full_cmd "$agency_cmd $cmd"
+    if {$args ne ""} {
+        append full_cmd " $args"
+    }
+    catch {exec /bin/sh -c $full_cmd} result
+    return $result
+}
+
+# -----------------------------------------------------------------------------
+# Helper: launch_tui
+# Spawn the agency tui for testing
+# Returns: spawn_id on success, -1 on failure
+# -----------------------------------------------------------------------------
+proc launch_tui {} {
+    global spawn_id
+    global expect_timeout
+    
+    # Kill any existing test session
+    catch {exec tmux -L agency kill-session -t agency-test}
+    
+    # Set up environment
+    set mock_path [file join [pwd] src agency mock_agent.py]
+    set agency_cmd [find_agency_cmd]
+    
+    # Spawn the TUI
+    spawn -noecho /bin/sh -c "export AGENCY_AGENT_CMD=\"python3 $mock_path\" && $agency_cmd tui"
+    set spawn_id $spawn_id
+    
+    # Wait for TUI to start
+    set timeout 10
+    expect {
+        -re "Sessions|Tasks|Agency" {
+            puts "TUI launched successfully"
+            return 1
+        }
+        timeout {
+            puts "ERROR: Timeout waiting for TUI to load"
+            return 0
+        }
+        eof {
+            puts "ERROR: TUI process ended unexpectedly"
+            return 0
+        }
+    }
+}
+
+# -----------------------------------------------------------------------------
+# Helper: launch_tui_with_session
+# Create a session then spawn the TUI
+# -----------------------------------------------------------------------------
+proc launch_tui_with_session {} {
+    global expect_timeout
+    
+    # Kill any existing sessions
+    catch {exec tmux -L agency kill-session -t agency-test}
+    catch {exec tmux -L agency kill-session -t agency-test-session}
+    sleep 0.5
+    
+    # Create a test session with an agent
+    catch {exec_agency "start example --dir /tmp/agency-tui-test"}
+    sleep 2
+    
+    # Launch TUI
+    if {![launch_tui]} {
+        return 0
+    }
+    
+    puts "TUI with session launched successfully"
+    return 1
+}
+
+# -----------------------------------------------------------------------------
+# Helper: send_key
+# Send a key to the spawned process
+# Usage: send_key "right"
+# -----------------------------------------------------------------------------
+proc send_key {key} {
+    global spawn_id
+    
+    # Map key names to escape sequences
+    switch -exact -- $key {
+        "right"  { send "\033\[C" }
+        "left"   { send "\033\[D" }
+        "up"     { send "\033\[A" }
+        "down"   { send "\033\[B" }
+        "enter"  { send "\r" }
+        "escape" { send "\033" }
+        "tab"    { send "\t" }
+        "backspace" { send "\177" }
+        default  { send $key }
+    }
+}
+
+# -----------------------------------------------------------------------------
+# Helper: send_text
+# Type text into the TUI
+# Usage: send_text "hello world"
+# -----------------------------------------------------------------------------
+proc send_text {text} {
+    send $text
+}
+
+# -----------------------------------------------------------------------------
+# Helper: press_enter
+# Send Enter key
+# Usage: press_enter
+# -----------------------------------------------------------------------------
+proc press_enter {} {
+    send "\r"
+}
+
+# -----------------------------------------------------------------------------
+# Helper: wait_for
+# Wait for text pattern to appear
+# Returns: 1 if found, 0 if timeout
+# -----------------------------------------------------------------------------
+proc wait_for {pattern {timeout 10}} {
+    set timeout $timeout
+    expect {
+        -re $pattern {
+            return 1
+        }
+        timeout {
+            return 0
+        }
+    }
+}
+
+# -----------------------------------------------------------------------------
+# Helper: wait_for_exact
+# Wait for exact text pattern
+# Returns: 1 if found, 0 if timeout
+# -----------------------------------------------------------------------------
+proc wait_for_exact {pattern {timeout 10}} {
+    set timeout $timeout
+    expect {
+        $pattern {
+            return 1
+        }
+        timeout {
+            return 0
+        }
+    }
+}
+
+# -----------------------------------------------------------------------------
+# Helper: assert_visible
+# Assert text is visible in the current output
+# Usage: assert_visible "Sessions"
+# -----------------------------------------------------------------------------
+proc assert_visible {text} {
+    expect {
+        -re $text {
+            return 1
+        }
+        timeout {
+            puts "ASSERTION FAILED: Expected to find '$text'"
+            return 0
+        }
+    }
+}
+
+# -----------------------------------------------------------------------------
+# Helper: get_output
+# Get recent output from spawned process
+# Returns: string content
+# -----------------------------------------------------------------------------
+proc get_output {} {
+    return $expect_out(buffer)
+}
+
+# -----------------------------------------------------------------------------
+# Helper: cleanup
+# Clean up spawned process and tmux sessions
+# Usage: cleanup
+# -----------------------------------------------------------------------------
+proc cleanup {} {
+    global spawn_id
+    
+    puts "Cleaning up..."
+    
+    # Close spawned process
+    if {$spawn_id != -1} {
+        catch {close}
+        set spawn_id -1
+    }
+    
+    # Kill test tmux sessions
+    catch {exec tmux -L agency kill-session -t agency-test}
+    catch {exec tmux -L agency kill-session -t agency-test-session}
+    catch {exec tmux -L agency kill-session -t agency-test-e2e}
+    catch {exec tmux -L agency kill-session -t agency-e2e-test}
+    
+    # Kill any agency-test-* sessions
+    if {![catch {exec tmux -L agency list-sessions -F "#S"} sessions]} {
+        foreach session $sessions {
+            if {[string match "agency-test*" $session]} {
+                catch {exec tmux -L agency kill-session -t $session}
+            }
+        }
+    }
+    
+    # Clean up test temp files
+    catch {exec rm -f /tmp/agency-tui-startup.sh}
+    catch {exec rm -rf /tmp/agency-tui-test}
+    
+    # Clean up tasks file
+    if {[info exists ::env(HOME)]} {
+        set tasks_file [file join $::env(HOME) ".config" "agency" "sessions" "tasks.json"]
+        catch {exec rm -f $tasks_file}
+    }
+    
+    puts "Cleanup complete"
+}
+
+# -----------------------------------------------------------------------------
+# Helper: reset_tasks
+# Clear all tasks for clean test state
+# Usage: reset_tasks
+# -----------------------------------------------------------------------------
+proc reset_tasks {} {
+    if {[info exists ::env(HOME)]} {
+        set tasks_file [file join $::env(HOME) ".config" "agency" "sessions" "tasks.json"]
+        catch {exec rm -f $tasks_file}
+    }
+}
+
+# -----------------------------------------------------------------------------
+# Helper: check_session_visible
+# Check if a session name is visible
+# Usage: check_session_visible "test-session"
+# -----------------------------------------------------------------------------
+proc check_session_visible {session_name} {
+    expect {
+        -re $session_name {
+            return 1
+        }
+        timeout {
+            return 0
+        }
+    }
+}
+
+# -----------------------------------------------------------------------------
+# Helper: check_task_visible
+# Check if a task is visible
+# Usage: check_task_visible "TASK001"
+# -----------------------------------------------------------------------------
+proc check_task_visible {task_id} {
+    expect {
+        -re $task_id {
+            return 1
+        }
+        timeout {
+            return 0
+        }
+    }
+}
+
+# -----------------------------------------------------------------------------
+# Helper: get_activity_log
+# Get the activity log content
+# Returns: recent output
+# -----------------------------------------------------------------------------
+proc get_activity_log {} {
+    return $expect_out(buffer)
+}

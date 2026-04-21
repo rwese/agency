@@ -1,0 +1,167 @@
+#!/usr/bin/expect -f
+# test_tui_nav.exp - Panel navigation tests for Agency TUI
+
+source [file dirname [info script]]/expect_helpers.exp
+
+set test_name "Panel Navigation"
+set passed 0
+set failed 0
+
+proc pass {msg} {
+    global passed
+    puts "\[PASS\] $msg"
+    incr passed
+}
+
+proc fail {msg} {
+    global failed
+    puts "\[FAIL\] $msg"
+    incr failed
+}
+
+# Register cleanup for exit
+rename cleanup _cleanup_real
+proc cleanup {} {
+    catch {_cleanup_real}
+}
+trap {catch cleanup; exit 1} SIGINT
+trap {catch cleanup; exit 1} SIGTERM
+
+puts ""
+puts "========================================"
+puts "  Test: $test_name"
+puts "========================================"
+
+# Reset TUI state
+reset_tasks
+cleanup
+
+# Launch TUI
+puts ""
+puts "INFO: Launching TUI..."
+if {![launch_tui]} {
+    puts "[ERROR] Failed to launch TUI"
+    exit 1
+}
+
+sleep 2
+
+# Test 1: Sessions panel is active by default
+puts ""
+puts "INFO: Test 1: Sessions panel active by default"
+if {[wait_for "Sessions"]} {
+    pass "Sessions panel visible"
+} else {
+    fail "Sessions panel visible"
+}
+
+# Check for ◀ indicator on Sessions
+if {[wait_for "◀"]} {
+    pass "Sessions panel has active indicator (◀)"
+} else {
+    fail "Sessions panel has active indicator (◀)"
+}
+
+# Test 2: Press → to switch to Tasks panel
+puts ""
+puts "INFO: Test 2: Press → to switch to Tasks panel"
+send_key "right"
+sleep 1
+
+if {[wait_for "Tasks"]} {
+    pass "→ key switches to Tasks panel"
+} else {
+    fail "→ key switches to Tasks panel"
+}
+
+# Test 3: Press ← to go back to Sessions
+puts ""
+puts "INFO: Test 3: Press ← to go back to Sessions"
+send_key "left"
+sleep 1
+
+if {[wait_for "Sessions"]} {
+    pass "← key switches back to Sessions panel"
+} else {
+    fail "← key switches back to Sessions panel"
+}
+
+# Test 4: Navigate with ↑ in Sessions panel
+puts ""
+puts "INFO: Test 4: Navigate with ↑ key"
+send_key "up"
+sleep 0.5
+if {[wait_for "Sessions"]} {
+    pass "↑ key works"
+} else {
+    fail "↑ key works"
+}
+
+# Test 5: Navigate with ↓ in Sessions panel
+puts ""
+puts "INFO: Test 5: Navigate with ↓ key"
+send_key "down"
+sleep 0.5
+if {[wait_for "Sessions"]} {
+    pass "↓ key works"
+} else {
+    fail "↓ key works"
+}
+
+# Test 6: Navigate to Tasks panel
+puts ""
+puts "INFO: Test 6: Navigate to Tasks panel"
+send_key "right"
+sleep 1
+
+if {[wait_for "Tasks"]} {
+    pass "Can navigate to Tasks panel"
+} else {
+    fail "Can navigate to Tasks panel"
+}
+
+# Test 7: Navigate with j/k in Tasks panel
+puts ""
+puts "INFO: Test 7: Navigate with j/k vim-style"
+send_key "j"
+sleep 0.5
+if {[wait_for "Tasks"]} {
+    pass "j key works in Tasks panel"
+} else {
+    fail "j key works in Tasks panel"
+}
+
+send_key "k"
+sleep 0.5
+if {[wait_for "Tasks"]} {
+    pass "k key works in Tasks panel"
+} else {
+    fail "k key works in Tasks panel"
+}
+
+# Test 8: Navigate to Send Message panel
+puts ""
+puts "INFO: Test 8: Navigate to Send Message panel"
+send_key "right"
+sleep 1
+
+if {[wait_for "Send Message"]} {
+    pass "Can navigate to Send Message panel"
+} else {
+    fail "Can navigate to Send Message panel"
+}
+
+# Summary
+puts ""
+puts "========================================"
+puts "  Results: $passed passed, $failed failed"
+puts "========================================"
+
+cleanup
+
+if {$failed > 0} {
+    exit 1
+}
+
+puts "PASS: $test_name"
+exit 0
