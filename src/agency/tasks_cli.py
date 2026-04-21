@@ -220,6 +220,7 @@ def cmd_reopen(store: TaskStore, args: argparse.Namespace) -> int:
     if store.update_task(args.task_id, status="pending"):
         # Clear result fields
         import json
+
         task_json_path = store.agency_dir / "tasks" / args.task_id / "task.json"
         if task_json_path.exists():
             data = json.loads(task_json_path.read_text())

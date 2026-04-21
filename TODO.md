@@ -1,6 +1,6 @@
 # Agency v2.0 - Implementation TODO
 
-**Status:** Stage 1: Approval CLI
+**Status:** Stage 2: Completions COMPLETE
 **Last Updated:** 2024-04-21
 
 ## Current Stage
@@ -12,11 +12,11 @@
 - [x] Add `tasks reopen` command
 - [x] Add `tasks history` command
 
-### Stage 2: Completions (Pending)
+### Stage 2: Completions (DONE)
 
-- [ ] Convert `__main__.py` to Click
-- [ ] Enable Click shell completions
-- [ ] Test with bash/zsh/fish
+- [x] Convert `__main__.py` to Click
+- [x] Enable Click shell completions
+- [x] Test with bash/zsh/fish
 
 ### Stage 3: Integration Tests (Pending)
 
