@@ -102,9 +102,7 @@ class TemplateManager:
                     agency_path = extracted / path / subdir / ".agency"
                     if not agency_path.exists():
                         # Try path/.agency where path might include the subdir
-                        agency_path = (
-                            extracted / (path.split("/")[0] if path else "") / subdir / ".agency"
-                        )
+                        agency_path = extracted / (path.split("/")[0] if path else "") / subdir / ".agency"
                         if not agency_path.exists():
                             agency_path = extracted / subdir / ".agency"
                 else:

@@ -61,9 +61,7 @@ def cli():
 
 
 @click.command()
-@click.option(
-    "--dir", "dir", type=click.Path(), default=".", help="Project directory (default: current)"
-)
+@click.option("--dir", "dir", type=click.Path(), default=".", help="Project directory (default: current)")
 @click.option("--template", help="Template repository URL")
 @click.option("--template-subdir", help="Template subdirectory")
 @click.option("--force", is_flag=True, help="Overwrite existing")
@@ -106,9 +104,7 @@ def init_project(dir, template, template_subdir, force, refresh):
     template_url = template or "https://github.com/rwese/agency-templates"
 
     if template_url:
-        tm = TemplateManager(
-            template_url, cache_dir=Path.home() / ".cache" / "agency" / "templates"
-        )
+        tm = TemplateManager(template_url, cache_dir=Path.home() / ".cache" / "agency" / "templates")
         template_path = tm.get_template(template_subdir or "basic", refresh=refresh)
         if template_path:
             click.echo(f"[INFO] Using template from {template_url}")
@@ -164,9 +160,7 @@ def _create_default_agency_structure(agency_dir: Path) -> None:
 
     readme_path = agency_dir / "README.md"
     if not readme_path.exists():
-        readme_path.write_text(
-            "# Agency Project\n\nThis project uses Agency for AI agent orchestration.\n"
-        )
+        readme_path.write_text("# Agency Project\n\nThis project uses Agency for AI agent orchestration.\n")
 
 
 @click.command()
@@ -278,9 +272,7 @@ def stop(session, timeout, force):
         agency_dir_path = find_agency_dir()
         if not agency_dir_path:
             click.echo("[ERROR] No .agency/ found", err=True)
-            click.echo(
-                "[ERROR] Use 'agency stop <session>' or run from project directory", err=True
-            )
+            click.echo("[ERROR] Use 'agency stop <session>' or run from project directory", err=True)
             sys.exit(1)
         work_dir = agency_dir_path.parent
         session = f"agency-{work_dir.name}"
@@ -338,9 +330,7 @@ def kill(session):
         agency_dir_path = find_agency_dir()
         if not agency_dir_path:
             click.echo("[ERROR] No .agency/ found", err=True)
-            click.echo(
-                "[ERROR] Use 'agency kill <session>' or run from project directory", err=True
-            )
+            click.echo("[ERROR] Use 'agency kill <session>' or run from project directory", err=True)
             sys.exit(1)
         work_dir = agency_dir_path.parent
         session = f"agency-{work_dir.name}"
@@ -498,9 +488,7 @@ def list(dir):
     elif (
         not work_dir
         or not (work_dir / ".agency").exists()
-        or not SessionManager(
-            f"agency-{work_dir.name}", socket_name=f"agency-{work_dir.name}"
-        ).session_exists()
+        or not SessionManager(f"agency-{work_dir.name}", socket_name=f"agency-{work_dir.name}").session_exists()
     ):
         click.echo("[INFO] No agency sessions running")
 
@@ -579,11 +567,7 @@ def members(dir):
             click.echo("")
             click.echo(f"- **Status**: {status}")
             if agent.personality:
-                preview = (
-                    agent.personality[:50] + "..."
-                    if len(agent.personality) > 50
-                    else agent.personality
-                )
+                preview = agent.personality[:50] + "..." if len(agent.personality) > 50 else agent.personality
                 click.echo(f"- **Personality**: {preview}")
             click.echo("")
     else:
@@ -714,9 +698,7 @@ def tasks_assign(task_id, agent):
     store = TaskStore(agency_dir)
 
     if not store.is_agent_free(agent):
-        click.echo(
-            f"[WARN] Agent '{agent}' may not be free (has pending/in_progress tasks)", err=True
-        )
+        click.echo(f"[WARN] Agent '{agent}' may not be free (has pending/in_progress tasks)", err=True)
 
     if store.assign_task(task_id, agent):
         click.echo(f"[INFO] Assigned {task_id} to {agent}")
@@ -792,9 +774,7 @@ def tasks_reject(task_id, suggestions, reason):
         sys.exit(1)
 
     store = TaskStore(agency_dir)
-    if store.reject_task(
-        task_id, reason=reason, suggestions=list(suggestions) if suggestions else None
-    ):
+    if store.reject_task(task_id, reason=reason, suggestions=list(suggestions) if suggestions else None):
         click.echo(f"[INFO] Task {task_id} rejected")
     else:
         click.echo("[ERROR] Failed to reject task", err=True)

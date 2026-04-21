@@ -22,43 +22,65 @@ BASE_PERSONALITY = """You are running in an Agency v2.0 tmux session.
 - **Working directory**: `{work_dir}`
 - **Agency dir**: `{agency_dir}`
 
-## tmux Commands (via bash)
-Use `bash` tool for all tmux operations:
-```bash
-tmux -L {socket_name} list-windows -t {session_name}  # List windows
-tmux -L {socket_name} send-keys -t {session_name}:<window> "text" Enter  # Send to window
-tmux -L {socket_name} new-window -t {session_name} -n <name>  # Create window
-tmux -L {socket_name} attach -t {session_name}  # Attach (manual)
-```
+## Agency Commands (run from project directory)
 
-## Agency CLI (always use for task management)
+### Task Management
 ```bash
 agency tasks list                    # List pending tasks
 agency tasks add -d "description"    # Create task
 agency tasks show <id>              # View task details
 agency tasks assign <id> <agent>    # Assign to agent
 agency tasks complete <id> --result "..."  # Complete with result
-agency members                       # List session members
+agency tasks update <id> --status <status>  # Update task status
+```
+
+### Session Management
+```bash
+agency members                       # List session members with status
+agency list                         # List all agency sessions
+agency attach                       # Attach to this session
+agency stop <session>              # Gracefully stop session
+agency kill <session>              # Force kill session
+```
+
+### Tmux Operations
+```bash
+agency tmux list                    # List windows in this session
+agency tmux send <window> <text>    # Send keys to window
+agency tmux new <name>             # Create new window
+agency tmux attach                 # Attach (opens new terminal)
+agency tmux run <window> <cmd>     # Run command in window
+```
+
+## Direct tmux Commands (via bash tool)
+For advanced operations, use tmux directly:
+```bash
+tmux -L {socket_name} list-windows -t {session_name}  # List windows
+tmux -L {socket_name} send-keys -t {session_name}:<window> "text" Enter
+tmux -L {socket_name} new-window -t {session_name}: -n <name>  # Create window
 ```
 
 ## Windows in this session
-- **Manager**: `[MGR] coordinator` (index 0)
-- **Agents**: `coder`, `tester`, etc. (index 1+)
+- **Manager**: `[MGR] coordinator` (or custom name)
+- **Agents**: `coder`, `developer`, etc.
 
 ## Communication Protocol
 - Use `agency tasks` for all task operations (not ad-hoc file manipulation)
-- Check `agency members` to see who's online before assigning
+- Check `agency members` to see who's online before assigning tasks
 - Write task results to `tasks/<id>/result.json` for artifacts
+- Use `agency tmux list` to see current windows and their status
 """
 
 # Manager-specific base additions
 MANAGER_BASE_ADDITION = """
 
 ## Manager Responsibilities
-- Poll `agency tasks list` regularly
-- Assign unassigned tasks to available agents
-- Review completed tasks and approve/reject
+- Poll `agency tasks list` regularly (check every few minutes)
+- Assign unassigned tasks to available agents using `agency tasks assign`
+- Review completed tasks and approve with `agency tasks complete` or reject
 - Monitor agent health via `agency members`
+- Create new tasks with `agency tasks add -d "..."`
+- Use `agency tmux list` to monitor active windows
 """
 
 # Agent-specific base additions
@@ -66,9 +88,12 @@ AGENT_BASE_ADDITION = """
 
 ## Agent Responsibilities
 - Poll for assigned tasks: `agency tasks list`
-- Update task status: `agency tasks update <id> --status in_progress`
-- Complete tasks: `agency tasks complete <id> --result "..."`
-- Read task details: `agency tasks show <id>`
+- When assigned a task:
+  1. Update status: `agency tasks update <id> --status in_progress`
+  2. Read details: `agency tasks show <id>`
+  3. Work on the task
+  4. Complete: `agency tasks complete <id> --result "..."`
+- Use `agency members` to see other agents and coordinate if needed
 """
 
 
@@ -108,11 +133,7 @@ class SessionManager:
         result = self._tmux("list-windows", "-t", self.session_name, "-F", "#W")
         if result.returncode != 0:
             return []
-        return [
-            w.strip()
-            for w in result.stdout.strip().split("\n")
-            if w.strip() and w not in ("zsh", "tmux")
-        ]
+        return [w.strip() for w in result.stdout.strip().split("\n") if w.strip() and w not in ("zsh", "tmux")]
 
     def send_keys(self, window_name: str, msg: str) -> None:
         """Send keys to a window."""
@@ -156,9 +177,7 @@ class SessionManager:
         import time
 
         # Get pane PID
-        result = self._tmux(
-            "list-panes", "-t", f"{self.session_name}:{window_name}", "-F", "#{pane_pid}"
-        )
+        result = self._tmux("list-panes", "-t", f"{self.session_name}:{window_name}", "-F", "#{pane_pid}")
         if result.returncode != 0:
             return False
 
@@ -273,9 +292,7 @@ def start_manager_window(
     )
 
     # Generate and execute launch script
-    script_path = _generate_manager_launch_script(
-        session_name, socket_name, manager_name, agency_dir, work_dir
-    )
+    script_path = _generate_manager_launch_script(session_name, socket_name, manager_name, agency_dir, work_dir)
 
     # Send command to window
     subprocess.run(
@@ -324,9 +341,7 @@ def start_agent_window(
         raise RuntimeError(f"Failed to create agent window: {result.stderr}")
 
     # Generate and execute launch script
-    script_path = _generate_agent_launch_script(
-        session_name, socket_name, agent_name, agency_dir, work_dir
-    )
+    script_path = _generate_agent_launch_script(session_name, socket_name, agent_name, agency_dir, work_dir)
 
     # Send command to window
     subprocess.run(
