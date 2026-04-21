@@ -180,21 +180,37 @@ def create_project_session(
     session_name: str,
     socket_name: str,
     work_dir: Path,
+    initial_window_name: str | None = None,
 ) -> None:
-    """Create a new project session."""
+    """Create a new project session with named initial window.
+
+    Args:
+        session_name: Name of the tmux session
+        socket_name: Name of the tmux socket
+        work_dir: Working directory for the session
+        initial_window_name: Name for the initial window (default: session_name)
+    """
+    window_name = initial_window_name or session_name
+
     result = subprocess.run(
-        ["tmux", "-L", socket_name, "new-session", "-d", "-s", session_name, "-c", str(work_dir)],
+        [
+            "tmux",
+            "-L",
+            socket_name,
+            "new-session",
+            "-d",
+            "-s",
+            session_name,
+            "-n",
+            window_name,
+            "-c",
+            str(work_dir),
+        ],
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
         raise RuntimeError(f"Failed to create session: {result.stderr}")
-
-    # Remove the default zsh window, keeping session
-    subprocess.run(
-        ["tmux", "-L", socket_name, "kill-window", "-t", f"{session_name}:0"],
-        capture_output=True,
-    )
 
 
 def start_manager_window(
@@ -205,7 +221,7 @@ def start_manager_window(
     work_dir: Path,
 ) -> None:
     """Start a manager window in the session."""
-    # Create window at index 0
+    # Create window at next available index
     window_name = f"{MANAGER_PREFIX}{manager_name}"
 
     result = subprocess.run(
@@ -216,7 +232,7 @@ def start_manager_window(
             "new-window",
             "-d",
             "-t",
-            session_name,
+            f"{session_name}:",  # Colon to explicitly target session
             "-n",
             window_name,
             "-c",
@@ -285,7 +301,7 @@ def start_agent_window(
     work_dir: Path,
 ) -> None:
     """Start an agent window in the session."""
-    # Create window
+    # Create window at next available index
 
     result = subprocess.run(
         [
@@ -295,7 +311,7 @@ def start_agent_window(
             "new-window",
             "-d",
             "-t",
-            session_name,
+            f"{session_name}:",  # Colon to explicitly target session
             "-n",
             agent_name,
             "-c",
