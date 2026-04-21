@@ -32,7 +32,7 @@ agency list
 | `agency attach-manager <name>` | Attach to manager session |
 | `agency stop <session>[:agent]` | Stop gracefully (30s timeout) |
 | `agency stop-manager <name>` | Stop a manager gracefully |
-| `agency kill <session>[:agent]` | Force kill immediately |
+| `agency tui` | Launch terminal user interface |
 | `agency kill-all` | Kill all agency sessions |
 | `agency tasks list\|show <id>` | Manage tracked tasks |
 

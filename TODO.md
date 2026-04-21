@@ -28,7 +28,7 @@
 - [x] 4.3 Task detail view
 - [x] 4.4 Refresh on tasks.json change
 
-## Stage 5: Polish
+## Stage 5: Polish (Deferred)
 
 - [ ] 5.1 Message history panel
 - [ ] 5.2 Filter/search bar
