@@ -1,9 +1,8 @@
 # Agency - Just recipes
 
-# Default recipe
 default: help
 
-# Install the package
+# Install
 install:
     uv pip install -e .
 
@@ -11,66 +10,75 @@ install:
 install-dev:
     uv pip install -e ".[dev]"
 
-# Run tests
+# Test
 test:
     ./test_agency.sh
 
-# Run tests with pytest
+# Pytest
 pytest:
     uv run pytest
 
-# Format code (if black is installed)
-fmt:
-    uv run black src/
-
-# Lint code (if ruff is installed)
+# Lint
 lint:
-    uv run ruff check src/
+    uvx ruff check src/
+
+# Format
+fmt:
+    uvx ruff format src/
 
 # Clean build artifacts
 clean:
     rm -rf build/ dist/ *.egg-info/
     rm -rf .venv/ venv/
 
-# Reset config (clears all agency state)
+# Reset config
 reset:
     rm -rf ~/.config/agency
     agency init
 
-# Attach to a session
+# Test mock agent
+test-mock name dir:
+    AGENCY_AGENT_CMD="python3 src/agency/mock_agent.py" uv run agency start {{name}} --dir {{dir}}
+
+# Test mock manager
+test-mock-manager name dir:
+    AGENCY_AGENT_CMD="python3 src/agency/mock_agent.py" uv run agency start-manager {{name}} --dir {{dir}}
+
+# Attach to session
 attach session:
     agency attach {{session}}
 
-# Attach to a manager
+# Attach to manager
 attach-manager name:
     agency attach-manager {{name}}
 
-# Start an agent
+# Start agent
 start name dir:
     agency start {{name}} --dir {{dir}}
 
-# Start a manager
+# Start manager
 start-manager name dir:
     agency start-manager {{name}} --dir {{dir}}
 
-# List all sessions
+# List sessions
 list:
     agency list
 
-# Show this help
 help:
     @echo "Agency - Just recipes"
     @echo ""
-    @echo "  install        Install package"
-    @echo "  install-dev   Install with dev dependencies"
-    @echo "  test          Run integration tests"
-    @echo "  pytest        Run pytest"
-    @echo "  fmt           Format code"
-    @echo "  lint          Lint code"
-    @echo "  clean         Clean build artifacts"
-    @echo "  reset         Reset config"
-    @echo "  attach        Attach to session"
-    @echo "  attach-manager Attach to manager"
-    @echo "  start         Start agent"
-    @echo "  start-manager Start manager"
-    @echo "  list          List sessions"
+    @echo "  install              Install package"
+    @echo "  install-dev          Install with dev dependencies"
+    @echo "  test                 Run integration tests"
+    @echo "  pytest               Run pytest"
+    @echo "  lint                 Run ruff"
+    @echo "  fmt                  Format code"
+    @echo "  clean                Clean build artifacts"
+    @echo "  reset                Reset config"
+    @echo "  test-mock            Test with mock agent"
+    @echo "  test-mock-manager    Test with mock manager"
+    @echo "  attach               Attach to session"
+    @echo "  attach-manager       Attach to manager"
+    @echo "  start                Start agent"
+    @echo "  start-manager        Start manager"
+    @echo "  list                 List sessions"

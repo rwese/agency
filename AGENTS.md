@@ -1,149 +1,122 @@
 # Agency - Agent Configuration
 
-## Overview
-
 Simple tmux-based AI agent session manager. Built with uv.
 
-## Installation
+## Quick Start
 
 ```bash
-# Install for development
+# Install
 uv pip install -e .
 
-# Run without install
-uv run agency <command>
+# Initialize config
+agency init
+
+# Start an agent
+agency start coder --dir ~/projects/myapp
+
+# List sessions
+agency list
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `agency init` | Create config skeleton in `~/.config/agency/` |
-| `agency start <name> --dir <path>` | Start agent in session |
+| `agency init` | Create config in `~/.config/agency/` |
+| `agency start <name> --dir <path>` | Start agent in project session |
 | `agency start-manager <name> --dir <path>` | Start manager (orchestrator) |
-| `agency list` | List sessions with windows |
-| `agency list-managers` | List available manager roles |
-| `agency send <session> <agent> <msg>` | Send message |
-| `agency stop <session>[:agent]` | Graceful shutdown |
-| `agency stop-manager <name>` | Stop a manager |
-| `agency kill <session>[:agent]` | Force kill |
-| `agency kill-all` | Kill all agency sessions |
+| `agency list` | List sessions and windows |
+| `agency list-managers` | List available manager configs |
+| `agency send <session> [agent] <msg>` | Send message to agent |
+| `agency attach <session> [agent]` | Attach to tmux session |
 | `agency attach-manager <name>` | Attach to manager session |
-| `agency tasks list` | List tracked tasks |
-| `agency tasks show <id>` | Show task details |
+| `agency stop <session>[:agent]` | Stop gracefully (30s timeout) |
+| `agency stop-manager <name>` | Stop a manager gracefully |
+| `agency kill <session>[:agent]` | Force kill immediately |
+| `agency kill-all` | Kill all agency sessions |
+| `agency tasks list\|show <id>` | Manage tracked tasks |
 
 ## Session Model
 
-- **Session** = one per project/directory (`agency-{basename}`)
-- **Window** = one per agent
-- **Rule** = unique agent names within session
+```
+agency-        # Project session (shared by agents)
+agency-manager- # Manager session (dedicated)
+```
 
 ```
-agency start coder --dir ~/projects/api  # Creates session "api", window "coder"
-agency start tester --dir ~/projects/api # Adds window "tester" to "api"
+agency start coder --dir ~/projects/api   # Creates session "api", window "coder"
+agency start tester --dir ~/projects/api  # Adds window "tester" to session "api"
 agency start coder --dir ~/projects/api  # ERROR: coder exists
 ```
 
 ## Configuration
 
-YAML files in `~/.config/agency/agents/`:
-
+**Agents**: `~/.config/agency/agents/<name>.yaml`
 ```yaml
-name: the-dude
+name: coder
 personality: |
-  Like The Dude from The Big Lebowski. Laid back.
+  You are a senior Python developer.
 ```
 
-YAML files in `~/.config/agency/managers/`:
-
+**Managers**: `~/.config/agency/managers/<name>.yaml`
 ```yaml
 name: coordinator
-description: |-
-  Reviews tasks and delegates to agents.
-badge: "[MGR]"           # Optional: prefix in tmux window name
-badge_color: brightblue   # Optional: tmux status bar color
+description: Reviews tasks and delegates to agents.
+badge: "[MGR]"           # Optional: tmux window prefix
+badge_color: brightblue  # Optional: tmux status color
 personality: |
-  You are a project coordinator. Use `agency list` to monitor sessions.
-  Delegate with `agency send <session> <agent> <task>`.
-  Track task IDs for requesting parties.
-```
-
-**Badge Options:**
-- `badge`: Text prefix (e.g., `"[MGR]"`, `"★"`, `"👑"`)
-- `badge_color`: tmux color - `brightblue`, `brightgreen`, `brightred`, `brightyellow`, `brightmagenta`, `brightcyan`, `brightwhite`, or standard colors
-
-## Manager Mode
-
-Managers orchestrate agents:
-- `start-manager` creates dedicated session (`agency-manager-<name>`)
-- Manager monitors all sessions via `agency list`
-- Manager delegates to agents via `agency send`
-- Task IDs track delegation (return to requesting party)
-
-```bash
-# Start a manager
-agency start-manager coordinator --dir ~/projects/myapp
-
-# Manager uses CLI to:
-# - agency list (see all sessions/agents)
-# - agency start coder --dir ~/projects/myapp (create agent)
-# - agency send myapp coder "implement X" (delegate)
+  You are a project coordinator...
 ```
 
 ## Development
 
 ```bash
-# Install in editable mode
+# Install
 uv pip install -e .
 
-# Run tests
+# Test
+./test_agency.sh
 uv run pytest
 
-# Or use the test script
-./test_agency.sh
-
-# Test with mock agent
-AGENCY_AGENT_CMD="python3 mock_agent.py" uv run agency start test --dir /tmp
-
-# Test manager mode
-AGENCY_AGENT_CMD="python3 mock_agent.py" uv run agency start-manager coordinator --dir /tmp
-
-# Manual tmux debugging
+# Debug tmux
 tmux -L agency list-sessions
 tmux -L agency list-windows -t <session>
-tmux -L agency capture-pane -t <session>:<window> -p
+
+# Test with mock agent
+AGENCY_AGENT_CMD="python3 src/agency/mock_agent.py" uv run agency start test --dir /tmp
+AGENCY_AGENT_CMD="python3 src/agency/mock_agent.py" uv run agency start-manager coordinator --dir /tmp
 ```
 
-## Testing
-
-- `test_agency.sh` - Integration tests (9 tests)
-- `uv run pytest` - Run test suite
+**Just recipes:**
+```bash
+just install     # Install package
+just test       # Run tests
+just lint       # Run ruff
+just clean      # Clean build artifacts
+just reset      # Reset ~/.config/agency
+```
 
 ## Project Structure
 
 ```
 agency/
-├── src/agency/               # Source package
-│   ├── __init__.py          # Package init with version
-│   ├── __main__.py          # CLI entry point (agency)
-│   ├── generate_agent_script.py  # Agent launch script generator
-│   └── mock_agent.py        # Mock pi for testing
-├── test_agency.sh           # Integration tests
-├── README.md                 # User documentation
-├── AGENTS.md                 # This file
-├── pyproject.toml            # uv project config
-└── ~/.config/agency/        # Config directory
-    ├── agents/              # Agent YAML configs
-    ├── managers/            # Manager YAML configs
-    └── sessions/            # Session scripts, state, tasks.json
+├── src/agency/
+│   ├── __init__.py
+│   ├── __main__.py      # CLI entry (agency)
+│   ├── generate_agent_script.py
+│   ├── mock_agent.py
+│   └── agents/          # Example configs
+├── test_agency.sh
+├── pyproject.toml
+├── justfile
+└── README.md
 ```
 
 ## Boundaries
 
 **ALWAYS**
-- Run tests before committing
+- Run `./test_agency.sh` before committing
 - Use `uv run agency` or `agency` (after install)
-- Clean up tmux sessions after tests
 
 **USUALLY**
 - Test with mock_agent before real pi
