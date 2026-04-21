@@ -442,13 +442,15 @@ def _generate_manager_launch_script(
     context_files = discover_context_files(work_dir, work_dir)  # Use work_dir as git_root for now
 
     # Add custom context files from config if specified
-    # Re-expand AGENCY_* vars here since they're available at session start
+    # Substitute AGENCY_* vars directly since they're known values
     if agency_config.additional_context_files:
-        import os
-
         for cf in agency_config.additional_context_files:
-            # Expand AGENCY_* vars (already expanded HOME, etc. at config load)
-            cf_expanded = os.path.expandvars(cf)
+            # Substitute known AGENCY_* vars directly
+            cf_expanded = (
+                cf.replace("${AGENCY_DIR}", str(agency_dir))
+                .replace("${AGENCY_WORKDIR}", str(work_dir))
+                .replace("${AGENCY_PROJECT}", session_name)
+            )
             cf_path = Path(cf_expanded)
             if cf_path.is_absolute() and cf_path.exists():
                 context_files.append(cf_path)
@@ -537,13 +539,15 @@ def _generate_agent_launch_script(
     context_files = discover_context_files(work_dir, work_dir)
 
     # Add custom context files from config if specified
-    # Re-expand AGENCY_* vars here since they're available at session start
+    # Substitute AGENCY_* vars directly since they're known values
     if agency_config.additional_context_files:
-        import os
-
         for cf in agency_config.additional_context_files:
-            # Expand AGENCY_* vars (already expanded HOME, etc. at config load)
-            cf_expanded = os.path.expandvars(cf)
+            # Substitute known AGENCY_* vars directly
+            cf_expanded = (
+                cf.replace("${AGENCY_DIR}", str(agency_dir))
+                .replace("${AGENCY_WORKDIR}", str(work_dir))
+                .replace("${AGENCY_PROJECT}", session_name)
+            )
             cf_path = Path(cf_expanded)
             if cf_path.is_absolute() and cf_path.exists():
                 context_files.append(cf_path)
