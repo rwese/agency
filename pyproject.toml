@@ -1,20 +1,28 @@
 [project]
 name = "agency"
-version = "0.3.0"
+version = "2.0.0"
 description = "AI Agent Session Manager - tmux-based multi-agent orchestration"
 readme = "README.md"
 license = "MIT"
 authors = [
     { name = "rwese" }
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
+    "filelock>=3.13.0",
+    "requests>=2.31.0",
+    "rich>=13.0.0",
     "pyyaml>=6.0",
-    "textual>=8.2.4",
 ]
 
 [project.scripts]
 agency = "agency.__main__:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.1.0",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -28,9 +36,19 @@ include = [
     "/README.md",
     "/AGENTS.md",
     "/pyproject.toml",
+    "/docs/",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
 
 [dependency-groups]
 dev = [
     "pytest>=7.0",
+    "ruff>=0.1.0",
 ]

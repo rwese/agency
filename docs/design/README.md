@@ -1,75 +1,64 @@
-# Textual Design Inspiration
-
-Collected references for improving the Agency TUI aesthetics.
+# Agency v2.0 Design Documents
 
 ## Overview
 
-This folder contains design research for enhancing the Agency TUI's visual appeal, including:
-- Layout patterns
-- Color schemes  
-- Component designs
-- Code snippets and examples
+This directory contains the complete design specification for Agency v2.0.
 
-## Quick Links
+## Documents
 
-- [Layout Patterns](./layouts.md) - Grid, panels, navigation
-- [Color Schemes](./colors.md) - Palettes, themes, contrast
-- [Components](./components.md) - Cards, lists, inputs, badges
-- [Code Examples](./examples.md) - Ready-to-use snippets
-- [Inspiration Gallery](./gallery.md) - Screenshots and references
+### [v2.0-index.md](v2.0-index.md)
+**Start here.** Overview, quick reference, and links to all documents.
 
----
+### [v2.0-entities.md](v2.0-entities.md)
+Core entities and relationships:
+- Project, Manager, Agent, Task definitions
+- Entity diagrams
+- Task state machine
+- File structure
 
-## Key Resources
+### [v2.0-cli.md](v2.0-cli.md)
+Complete CLI reference:
+- All commands with flags
+- Examples for each command
+- Exit codes
+- Error output format
 
-### TUI Libraries & Frameworks
+### [v2.0-schemas.md](v2.0-schemas.md)
+Data model schemas:
+- `tasks.json` v2 schema
+- `task.json` and `result.json`
+- YAML config schemas
+- Task ID generation
+- Locking strategy
 
-| Library | Language | Best For |
-|---------|----------|----------|
-| [Textual](https://textual.textualize.io/) | Python | Primary (already used) |
-| [Rich](https://github.com/textualize/rich) | Python | Rich text, tables, panels |
-| [Ratatui](https://ratatui.rs/) | Rust | Alternative if rewriting |
-| [Bubble Tea](https://github.com/charmbracelet/bubbletea) | Go | Elm-architecture inspiration |
-| [Lip Gloss](https://github.com/charmbracelet/lipgloss) | Go | CSS-like styling |
+### [v2.0-workflows.md](v2.0-workflows.md)
+Detailed workflows:
+- Project creation
+- Task lifecycle diagrams
+- Manager approval flow
+- Shutdown and halt/resume
+- Template system
 
-### Inspiration Sources
+## Reading Order
 
-- [awesome-tuis](https://github.com/rothgar/awesome-tuis) - Curated TUI list
-- [Terminal Trove](https://terminaltrove.com/) - New terminal tools
-- [r/unixporn](https://reddit.com/r/unixporn) - Desktop/window rice
-- [written-in-textual](https://github.com/matan-h/written-in-textual) - Textual projects
+1. Start with `v2.0-index.md`
+2. Read `v2.0-entities.md` for conceptual model
+3. Reference `v2.0-cli.md` for commands
+4. Use `v2.0-schemas.md` for implementation
+5. Reference `v2.0-workflows.md` for behavior
 
-### Design Guides
+## Status
 
-- [Designer's Guide to the Terminal](https://www.alexchantastic.com/designers-guide-to-the-terminal)
-- [Rich Styles Docs](https://rich.readthedocs.io/en/latest/style.html)
-- [Lip Gloss Styling](https://github.com/charmbracelet/lipgloss)
-- [Textual Widget Gallery](https://www.reddit.com/r/programming/comments/11kw98o/textual_tui_framework_widget_gallery/)
+| Document | Status |
+|----------|--------|
+| v2.0-index.md | ✓ Complete |
+| v2.0-entities.md | ✓ Complete |
+| v2.0-cli.md | ✓ Complete |
+| v2.0-schemas.md | ✓ Complete |
+| v2.0-workflows.md | ✓ Complete |
 
-## Color Palette Inspiration
+## Related Documents
 
-### Popular Terminal Themes
-
-| Theme | Primary | Accent | Background |
-|-------|---------|--------|------------|
-| Tokyonight | #7AA2F7 | #BB9AF7 | #1A1B26 |
-| Catppuccin | #89B4FA | #CBA6F7 | #1E1E2E |
-| Kanagawa | #7AA2F7 | #DDB6F2 | #1F1F28 |
-| Rose Pine | #EBBCBA | #C4A7E7 | #191724 |
-| Nord | #81A1C1 | #B48EAD | #2E3440 |
-
-### Status Colors
-
-```
-pending:    yellow (#FFA500)
-in_progress: cyan (#00CED1)  
-completed:   green (#00FF7F)
-failed:      red (#FF4444)
-```
-
-## Next Steps
-
-1. Review [Layout Patterns](./layouts.md) for structural ideas
-2. Check [Color Schemes](./colors.md) for palette options
-3. Browse [Gallery](./gallery.md) for visual inspiration
-4. Adapt [Code Examples](./examples.md) for Agency
+- [AGENTS.md](../../AGENTS.md) - Developer-focused overview
+- [CHANGELOG.md](../../CHANGELOG.md) - Version history
+- [agency-templates](https://github.com/rwese/agency-templates) - Default templates repo

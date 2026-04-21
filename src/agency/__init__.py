@@ -1,7 +1,5 @@
 """
-Agency - AI Agent Session Manager
-
-A tmux-based session manager for orchestrating multiple AI agents.
+Agency v2.0 - AI Agent Session Manager
 """
 
-__version__ = "0.3.0"
+__version__ = "2.0.0"

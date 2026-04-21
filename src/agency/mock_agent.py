@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Mock Agent for testing agency."""
+
 import argparse
 import os
 import signal

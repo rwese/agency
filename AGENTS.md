@@ -1,117 +1,151 @@
-# Agency - Agent Configuration
+# Agency v2.0 - Agent Configuration
 
-Simple tmux-based AI agent session manager. Built with uv.
+Tmux-based AI agent orchestration with project-centric model.
 
-## TUI Preview
+## Architecture
 
 ```
-┌─ Agency TUI ──────────────────────────────────────────────────────────┐
-│ Sessions                    │ Tasks                      │
-├────────────────────────────┼───────────────────────────┤
-│ 🤖 agency-demo              │ ⏳ TASK001: Auth API      │
-│    Agents: coder,tester    │    Assigned: coder        │
-│ 👑 coordinator              │ ⏳ TASK002: Write tests   │
-│                            │    Assigned: tester       │
-│                            │ ✅ TASK003: CI/CD setup   │
-│                            │    Assigned: coordinator   │
-├────────────────────────────┴───────────────────────────┤
-│ Send Message  [ Type a message...                         ]         │
-├───────────────────────────────────────────────────────────┤
-│ Activity Log                                                     │
-│ [INFO] Monitoring 2 sessions...                                   │
-├───────────────────────────────────────────────────────────┤
-│ q Quit  r Refresh  j↓k↑ Navigate  a Attach  s Send  n New  x Stop │
-└───────────────────────────────────────────────────────────┘
+agency-<project>                    # tmux session + socket
+├── [MGR] coordinator              # Manager (index 0)
+├── coder                           # Agent (index 1+)
+└── tester                          # Agent
 ```
 
-Launch with: `agency tui`
+**Relationships:**
+- Project 1:1 Manager
+- Project 1:N Agents  
+- Manager 1:N Tasks
+- Agent 1:1 Task (active)
+
+## Quick Start
+
+```bash
+# Create project
+agency init-project --dir ~/projects/api --start-manager coordinator
+
+# Add agents
+agency start coder --dir ~/projects/api
+agency start tester --dir ~/projects/api
+
+# Manage tasks
+agency tasks add -d "Implement auth API"
+agency tasks assign swift-bear-a3f2 coder
+
+# Attach and work
+agency attach api
+```
 
 ## Commands
 
+### Project Management
+
 | Command | Description |
 |---------|-------------|
-| `agency init [--global\|--local]` | Interactive init (or specify scope) |
-| `agency start <name> --dir <path>` | Start agent in project session |
-| `agency start-manager <name> --dir <path>` | Start manager (orchestrator) |
-| `agency list` | List sessions and windows |
-| `agency list-managers` | List available manager configs |
-| `agency send <session> [agent] <msg>` | Send message to agent |
-| `agency attach <session> [agent]` | Attach to tmux session |
-| `agency attach-manager <name>` | Attach to manager session |
-| `agency stop <session>[:agent]` | Stop gracefully (30s timeout) |
-| `agency stop-manager <name>` | Stop a manager gracefully |
-| `agency tui` | Launch terminal user interface |
-| `agency kill-all` | Kill all agency sessions |
-| `agency tasks list\|show <id>` | Manage tracked tasks |
+| `agency init-project --dir <path>` | Create project + session + `.agency/` |
+| `agency start <name> --dir <path>` | Start agent in project |
+| `agency stop <session>` | Shutdown session gracefully |
+| `agency resume <session>` | Resume from halt |
+| `agency attach <session>` | Attach to session |
+| `agency list` | List sessions |
 
-## Session Model
+### Task Management
+
+| Command | Description |
+|---------|-------------|
+| `agency tasks list` | List active tasks (Markdown) |
+| `agency tasks add -d <desc>` | Create task |
+| `agency tasks show <id>` | Show task details |
+| `agency tasks assign <id> <agent>` | Assign to agent |
+| `agency tasks complete <id> --result <text>` | Complete task |
+| `agency tasks update <id> [--status] [--priority]` | Update task |
+| `agency tasks delete <id>` | Delete task |
+| `agency tasks history` | List completed tasks |
+
+## File Structure
 
 ```
-agency-        # Project session (shared by agents)
-agency-manager- # Manager session (dedicated)
-```
-
-```
-agency start coder --dir ~/projects/api   # Creates session "api", window "coder"
-agency start tester --dir ~/projects/api  # Adds window "tester" to session "api"
-agency start coder --dir ~/projects/api  # ERROR: coder exists
+<project-root>/
+├── .agency/
+│   ├── config.yaml           # Project settings
+│   ├── manager.yaml          # Manager personality
+│   ├── agents.yaml           # Agent registry
+│   ├── tasks.json            # Active tasks
+│   ├── .halted              # Halt marker
+│   ├── agents/
+│   │   ├── coder.yaml
+│   │   └── coder/
+│   │       └── personality.md
+│   ├── tasks/
+│   │   └── <task_id>/
+│   │       ├── task.json
+│   │       └── result.json
+│   └── pending/
+│       └── <task_id>.json
+├── src/
+└── ...
 ```
 
 ## Configuration
 
-### Init Options
+### config.yaml
 
-```bash
-# Interactive (prompts for scope, agents, managers)
-agency init
-
-# Non-interactive global init
-agency init --global
-
-# Local project init (in git root's .agency/)
-agency init --local
-
-# Custom directory (implies --local)
-agency init --dir ~/projects/myapp
-
-# Overwrite existing
-agency init --global --force
+```yaml
+project: api
+shell: bash
+template_url: https://github.com/rwese/agency-templates
 ```
 
-### Local Configuration
+### manager.yaml
 
-Projects can have `.agency/` directory with local configs:
+```yaml
+personality: |
+  You are the project coordinator.
 
+  ## Task Management
+  - agency tasks list  # See pending
+  - agency tasks assign <id> <agent>  # Assign
+  - agency tasks add -d "..."  # Create
+
+poll_interval: 30
+auto_approve: false
 ```
-.agency/
-├── agents/         # Project-specific agents
-├── managers/       # Project-specific managers
-└── README.md
+
+### agents.yaml
+
+```yaml
+agents:
+  - name: coder
+    config: agents/coder.yaml
+  - name: tester
+    config: agents/tester.yaml
 ```
 
-Benefits:
-- **Version controlled**: Share agent setup with team
-- **Self-contained**: Clone and run agents immediately
-- **Portable**: Works across machines
+### agents/<name>.yaml
 
-### Global Configuration
-
-**Agents**: `~/.config/agency/agents/<name>.yaml`
 ```yaml
 name: coder
-personality: |
-  You are a senior Python developer.
+personality: personality.md
 ```
 
-**Managers**: `~/.config/agency/managers/<name>.yaml`
-```yaml
-name: coordinator
-description: Reviews tasks and delegates to agents.
-badge: "[MGR]"           # Optional: tmux window prefix
-badge_color: brightblue  # Optional: tmux status color
-personality: |
-  You are a project coordinator...
+## Task Lifecycle
+
 ```
+pending → in_progress → pending_approval → completed
+                     ↓
+                  failed (on reject)
+```
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `AGENCY_PROJECT` | Project name |
+| `AGENCY_DIR` | Path to `.agency/` |
+| `AGENCY_AGENT` | Agent name |
+| `AGENCY_MANAGER` | Manager name |
+| `PI_CODING_AGENT` | `true` for agents |
+| `PI_AGENCY_MANAGER` | `true` for manager |
+| `PI_AGENCY_RESUMING` | `true` on resume |
 
 ## Development
 
@@ -123,39 +157,27 @@ uv pip install -e .
 ./test_agency.sh
 uv run pytest
 
+# Lint
+uvx ruff check src/
+uvx ruff format src/
+
 # Debug tmux
-tmux -L agency list-sessions
-tmux -L agency list-windows -t <session>
+tmux -L agency-api list-sessions
+tmux -L agency-api list-windows -t <session>
 
-# Test with mock agent
-AGENCY_AGENT_CMD="python3 src/agency/mock_agent.py" uv run agency start test --dir /tmp
-AGENCY_AGENT_CMD="python3 src/agency/mock_agent.py" uv run agency start-manager coordinator --dir /tmp
+# Test with mock
+AGENCY_AGENT_CMD="python3 src/agency/mock_agent.py" \
+  uv run agency start coder --dir /tmp
 ```
 
-**Just recipes:**
-```bash
-just install     # Install package
-just test       # Run tests
-just lint       # Run ruff
-just clean      # Clean build artifacts
-just reset      # Reset ~/.config/agency
-```
+## Design Documents
 
-## Project Structure
-
-```
-agency/
-├── src/agency/
-│   ├── __init__.py
-│   ├── __main__.py      # CLI entry (agency)
-│   ├── generate_agent_script.py
-│   ├── mock_agent.py
-│   └── agents/          # Example configs
-├── test_agency.sh
-├── pyproject.toml
-├── justfile
-└── README.md
-```
+See `docs/design/` for complete specification:
+- `v2.0-index.md` - Overview
+- `v2.0-entities.md` - Entity relationships
+- `v2.0-cli.md` - CLI reference
+- `v2.0-schemas.md` - Data schemas
+- `v2.0-workflows.md` - Workflows
 
 ## Boundaries
 
@@ -163,10 +185,7 @@ agency/
 - Run `./test_agency.sh` before committing
 - Use `uv run agency` or `agency` (after install)
 
-**USUALLY**
-- Test with mock_agent before real pi
-- Verify tmux sessions are gone after tests
-
 **NEVER**
 - Commit with untested changes
 - Leave running tmux sessions
+- Store secrets in `.agency/`
