@@ -899,7 +899,7 @@ Examples:
     subparsers = parser.add_subparsers(dest="command", help="Commands")
     
     # init
-    init_parser = subparsers.add_parser("init", help="Initialize agency config",
+    subparsers.add_parser("init", help="Initialize agency config",
         description="Create agency config directory with example agent and manager configs.")
     
     # start
@@ -915,11 +915,11 @@ Examples:
     start_mgr_parser.add_argument("--dir", required=True, help="Working directory for the manager")
     
     # list-managers
-    list_mgr_parser = subparsers.add_parser("list-managers", help="List manager configs",
+    subparsers.add_parser("list-managers", help="List manager configs",
         description="List available manager configurations.")
     
-    # list-sessions (new name for clarity - shows all sessions including managers)
-    list_parser = subparsers.add_parser("list", help="List running sessions",
+    # list
+    subparsers.add_parser("list", help="List running sessions",
         description="List all running agency sessions and their windows.")
     
     # send
@@ -940,7 +940,7 @@ Examples:
     kill_parser.add_argument("session", help="Session or 'session:agent' to kill")
     
     # kill-all
-    kill_all_parser = subparsers.add_parser("kill-all", help="Kill all agency sessions",
+    subparsers.add_parser("kill-all", help="Kill all agency sessions",
         description="Force kill all agency sessions. Use 'stop' for graceful shutdown.")
     
     # attach
