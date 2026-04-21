@@ -158,10 +158,9 @@ pending → in_progress → pending_approval → completed
 |----------|-------------|
 | `AGENCY_PROJECT` | Project name |
 | `AGENCY_DIR` | Path to `.agency/` |
-| `AGENCY_AGENT` | Agent name |
-| `AGENCY_MANAGER` | Manager name |
-| `PI_CODING_AGENT` | `true` for agents |
-| `PI_AGENCY_MANAGER` | `true` for manager |
+| `AGENCY_AGENT` | Agent name (set for agents) |
+| `AGENCY_MANAGER` | Manager name (set for manager) |
+| `AGENCY_ROLE` | `MANAGER` or `AGENT` |
 | `PI_AGENCY_RESUMING` | `true` on resume |
 
 ## Development
