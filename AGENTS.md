@@ -2,21 +2,29 @@
 
 Simple tmux-based AI agent session manager. Built with uv.
 
-## Quick Start
+## TUI Preview
 
-```bash
-# Install
-uv pip install -e .
-
-# Initialize config
-agency init
-
-# Start an agent
-agency start coder --dir ~/projects/myapp
-
-# List sessions
-agency list
 ```
+┌─ Agency TUI ──────────────────────────────────────────────────────────┐
+│ Sessions                    │ Tasks                      │
+├────────────────────────────┼───────────────────────────┤
+│ 🤖 agency-demo              │ ⏳ TASK001: Auth API      │
+│    Agents: coder,tester    │    Assigned: coder        │
+│ 👑 coordinator              │ ⏳ TASK002: Write tests   │
+│                            │    Assigned: tester       │
+│                            │ ✅ TASK003: CI/CD setup   │
+│                            │    Assigned: coordinator   │
+├────────────────────────────┴───────────────────────────┤
+│ Send Message  [ Type a message...                         ]         │
+├───────────────────────────────────────────────────────────┤
+│ Activity Log                                                     │
+│ [INFO] Monitoring 2 sessions...                                   │
+├───────────────────────────────────────────────────────────┤
+│ q Quit  r Refresh  j↓k↑ Navigate  a Attach  s Send  n New  x Stop │
+└───────────────────────────────────────────────────────────┘
+```
+
+Launch with: `agency tui`
 
 ## Commands
 
