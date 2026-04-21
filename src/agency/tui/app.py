@@ -1,10 +1,12 @@
 """Agency TUI Application."""
 
+import json
 import os
 import subprocess
-from pathlib import Path
+from datetime import datetime
 from enum import Enum
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
+from pathlib import Path
 from typing import Optional
 
 from textual.app import App, ComposeResult
@@ -201,6 +203,9 @@ class AgencyTUI(App):
         ("n", "start_agent", "New Agent"),
         ("m", "start_manager", "New Manager"),
         ("x", "stop_agent", "Stop"),
+        ("c", "create_task", "Create"),
+        ("u", "update_task", "Update"),
+        ("d", "delete_task", "Delete"),
         ("escape", "clear_selection", "Clear"),
         ("?", "toggle_help", "Help"),
     ]
@@ -522,6 +527,119 @@ class AgencyTUI(App):
         log.write_line(f"[yellow]Stopping {agent}...[/yellow]")
         self.post_message(StopAgent(s.name, agent))
 
+    def _get_tasks_file(self) -> Path:
+        """Get tasks file path."""
+        tasks_file = Path.home() / ".config" / "agency" / "sessions" / "tasks.json"
+        tasks_file.parent.mkdir(parents=True, exist_ok=True)
+        return tasks_file
+
+    def _load_tasks(self) -> dict:
+        """Load tasks from file."""
+        tasks_file = self._get_tasks_file()
+        if not tasks_file.exists():
+            return {}
+        with open(tasks_file) as f:
+            return json.load(f)
+
+    def _save_tasks(self, tasks: dict) -> None:
+        """Save tasks to file."""
+        tasks_file = self._get_tasks_file()
+        with open(tasks_file, 'w') as f:
+            json.dump(tasks, f, indent=2)
+
+    def _generate_task_id(self, tasks: dict) -> str:
+        """Generate next task ID."""
+        max_num = 0
+        for tid in tasks.keys():
+            if tid.startswith("TASK"):
+                try:
+                    num = int(tid[4:])
+                    max_num = max(max_num, num)
+                except ValueError:
+                    pass
+        return f"TASK{max_num + 1:03d}"
+
+    def action_create_task(self) -> None:
+        """Create a new task (uses current session/agent as assignee)."""
+        log = self.query_one("#activity-log", Log)
+        
+        tasks = self._load_tasks()
+        task_id = self._generate_task_id(tasks)
+        
+        # Use selected agent if in sessions panel
+        assigned_to = None
+        if self._sessions:
+            s = self._sessions[self._selected_session_index]
+            if self._selected_agent_index is not None and self._selected_agent_index < len(s.windows):
+                assigned_to = s.windows[self._selected_agent_index]
+        
+        task = {
+            "task_id": task_id,
+            "description": "New task",
+            "status": "pending",
+            "assigned_to": assigned_to,
+            "created_at": datetime.now().isoformat(),
+            "completed_at": None,
+            "result": None
+        }
+        
+        tasks[task_id] = task
+        self._save_tasks(tasks)
+        
+        log.write_line(f"[green]Created task:[/green] {task_id}")
+        if assigned_to:
+            log.write_line(f"  Assigned to: {assigned_to}")
+        
+        self.refresh_tasks()
+
+    def action_update_task(self) -> None:
+        """Update status of selected task (cycles through statuses)."""
+        log = self.query_one("#activity-log", Log)
+        
+        if not self._tasks:
+            log.write_line("[yellow]No tasks to update[/yellow]")
+            return
+        
+        task = self._tasks[self._selected_task_index]
+        status_order = ["pending", "in_progress", "completed", "failed"]
+        current_idx = status_order.index(task.status) if task.status in status_order else 0
+        next_idx = (current_idx + 1) % len(status_order)
+        new_status = status_order[next_idx]
+        
+        tasks = self._load_tasks()
+        if task.task_id in tasks:
+            tasks[task.task_id]["status"] = new_status
+            if new_status == "completed":
+                tasks[task.task_id]["completed_at"] = datetime.now().isoformat()
+            else:
+                tasks[task.task_id]["completed_at"] = None
+            self._save_tasks(tasks)
+        
+        log.write_line(f"[cyan]Updated:[/cyan] {task.task_id} -> {new_status}")
+        self.refresh_tasks()
+
+    def action_delete_task(self) -> None:
+        """Delete selected task."""
+        log = self.query_one("#activity-log", Log)
+        
+        if not self._tasks:
+            log.write_line("[yellow]No tasks to delete[/yellow]")
+            return
+        
+        task = self._tasks[self._selected_task_index]
+        tasks = self._load_tasks()
+        
+        if task.task_id in tasks:
+            del tasks[task.task_id]
+            self._save_tasks(tasks)
+            log.write_line(f"[red]Deleted task:[/red] {task.task_id}")
+        
+        # Adjust index if needed
+        if self._selected_task_index >= len(self._tasks) - 1:
+            self._selected_task_index = max(0, len(self._tasks) - 2)
+        
+        self.refresh_tasks()
+
     def action_toggle_help(self) -> None:
         log = self.query_one("#activity-log", Log)
         log.write_line("""
@@ -529,12 +647,15 @@ class AgencyTUI(App):
 ─────────────────────────────────────
 [cyan]←/→[/cyan]    Switch panels (Sessions/Tasks/Main)
 [cyan]↑/↓[/cyan]    Navigate sessions & tasks
-[cyan]Enter[/cyan]  Select/expand session or show task details
+[cyan]Enter[/cyan]  Select/expand or show task details
 [cyan]a[/cyan]      Attach to session
 [cyan]s[/cyan]      Focus message input
 [cyan]n[/cyan]      New agent
 [cyan]m[/cyan]      New manager
 [cyan]x[/cyan]      Stop agent
+[cyan]c[/cyan]      Create task
+[cyan]u[/cyan]      Update task status
+[cyan]d[/cyan]      Delete task
 [cyan]r[/cyan]      Refresh
 [cyan]?[/cyan]      Help
 [cyan]q[/cyan]      Quit""")

@@ -843,8 +843,22 @@ def cmd_completions(shell: str) -> None:
     print(completion_file.read_text())
 
 
-def cmd_tasks(action: str, task_id: Optional[str] = None) -> None:
-    """Manage tasks - list, show, or update task status."""
+def generate_task_id(tasks: dict[str, Task]) -> str:
+    """Generate next task ID."""
+    max_num = 0
+    for tid in tasks.keys():
+        if tid.startswith("TASK"):
+            try:
+                num = int(tid[4:])
+                max_num = max(max_num, num)
+            except ValueError:
+                pass
+    return f"TASK{max_num + 1:03d}"
+
+
+def cmd_tasks(action: str, description: Optional[str] = None, task_id: Optional[str] = None,
+              status: Optional[str] = None, assignee: Optional[str] = None) -> None:
+    """Manage tasks - list, add, update, show, or delete tasks."""
     tasks = load_tasks()
 
     if action == "list":
@@ -856,7 +870,49 @@ def cmd_tasks(action: str, task_id: Optional[str] = None) -> None:
         print("-" * 70)
         for tid, task in sorted(tasks.items()):
             desc = task.description[:40] + "..." if len(task.description) > 40 else task.description
-            print(f"{task.task_id:<10} {task.status:<12} {str(task.assigned_to or ''):<13} {desc}")
+            print(f"{task.task_id:<10} {task.status:<12} {str(task.assigned_to or '-'):<13} {desc}")
+
+    elif action == "add":
+        from datetime import datetime
+        new_id = task_id or generate_task_id(tasks)
+        if new_id in tasks:
+            log_error(f"Task already exists: {new_id}")
+            sys.exit(1)
+        
+        new_task = Task(
+            task_id=new_id,
+            description=description or "New task",
+            status="pending",
+            assigned_to=assignee,
+            created_at=datetime.now().isoformat()
+        )
+        tasks[new_id] = new_task
+        save_tasks(tasks)
+        log_info(f"Created task: {new_id}")
+
+    elif action == "update" and task_id:
+        if task_id not in tasks:
+            log_error(f"Task not found: {task_id}")
+            sys.exit(1)
+        
+        task = tasks[task_id]
+        from datetime import datetime
+        
+        if status:
+            if status not in ["pending", "in_progress", "completed", "failed"]:
+                log_error(f"Invalid status: {status}")
+                sys.exit(1)
+            task.status = status
+            if status == "completed":
+                task.completed_at = datetime.now().isoformat()
+            else:
+                task.completed_at = None
+        
+        if assignee is not None:
+            task.assigned_to = assignee if assignee else None
+        
+        save_tasks(tasks)
+        log_info(f"Updated task: {task_id}")
 
     elif action == "show" and task_id:
         if task_id not in tasks:
@@ -873,22 +929,14 @@ def cmd_tasks(action: str, task_id: Optional[str] = None) -> None:
         if task.result:
             print(f"Result:       {task.result}")
 
-    elif action == "create" and task_id:
-        # Create a new task
-        from datetime import datetime
-        new_task = Task(
-            task_id=task_id,
-            description="Task created",
-            status="pending",
-            created_at=datetime.now().isoformat()
-        )
-        tasks[task_id] = new_task
+    elif action == "delete" and task_id:
+        if task_id not in tasks:
+            log_error(f"Task not found: {task_id}")
+            sys.exit(1)
+        
+        del tasks[task_id]
         save_tasks(tasks)
-        log_info(f"Created task: {task_id}")
-
-    elif action == "update" and task_id:
-        # This would be called by the manager to update task status
-        log_info("Use agency send to communicate with manager for task updates")
+        log_info(f"Deleted task: {task_id}")
 
 
 def cmd_start(agent_name: str, work_dir: str) -> str:
@@ -1239,8 +1287,13 @@ Examples:
     # tasks
     tasks_parser = subparsers.add_parser("tasks", help="Manage tasks",
         description="Manage delegated tasks. Track progress and results.")
-    tasks_parser.add_argument("action", choices=["list", "show", "create"], help="Action: list, show, create")
-    tasks_parser.add_argument("task_id", nargs="?", help="Task ID (for show/create)")
+    tasks_parser.add_argument("action", choices=["list", "add", "update", "show", "delete"], 
+        help="Action: list, add, update, show, delete")
+    tasks_parser.add_argument("task_id", nargs="?", help="Task ID (for show/update/delete)")
+    tasks_parser.add_argument("-d", "--description", help="Task description (for add)")
+    tasks_parser.add_argument("-s", "--status", choices=["pending", "in_progress", "completed", "failed"],
+        help="Task status (for update)")
+    tasks_parser.add_argument("-a", "--assignee", help="Assign to agent (for add/update)")
 
     # completions
     comp_parser = subparsers.add_parser("completions", help="Print shell completions",
@@ -1289,7 +1342,7 @@ Examples:
     elif args.command == "stop-manager":
         cmd_stop_manager(args.name)
     elif args.command == "tasks":
-        cmd_tasks(args.action, args.task_id)
+        cmd_tasks(args.action, args.description, args.task_id, args.status, args.assignee)
     elif args.command == "completions":
         cmd_completions(args.shell)
     elif args.command == "tui":

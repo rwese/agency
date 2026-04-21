@@ -1,26 +1,36 @@
-# Agency TUI - Complete
+# Task: Task Management Integration
 
-## ✅ All Critical Fixes Implemented
+## Status
 
-### Fixed Issues:
-1. **Message targeting** - Navigate to specific agent, press Enter to expand, then send
-2. **Panel navigation** - ←/→ switch panels, ↑/↓ navigate within
-3. **Start manager** - Press 'm' to start managers
+| # | Task | Status |
+|---|------|--------|
+| 1 | Add `agency tasks` CLI command group | [x] |
+| 2 | Implement `agency tasks add` | [x] |
+| 3 | Implement `agency tasks list` | [x] |
+| 4 | Implement `agency tasks update` | [x] |
+| 5 | Implement `agency tasks delete` | [x] |
+| 6 | Wire TUI to create tasks | [x] |
+| 7 | Wire TUI to update task status | [x] |
+| 8 | Wire TUI to delete tasks | [x] |
+| 9 | Document task format | [ ] |
+| 10 | Remove demo data | [x] |
 
-### Keybindings:
-| Key | Action |
-|-----|--------|
-| ←/→ | Switch panels (Sessions/Tasks/Main) |
-| ↑/↓ | Navigate within panel |
-| Enter | Expand session to show agents |
-| a | Attach to selected session/agent |
-| s | Focus message input |
-| n | Start new agent |
-| m | Start new manager |
-| x | Stop selected agent |
-| r | Refresh all |
-| ? | Help |
-| q | Quit |
+## Notes
+- Task data: `~/.config/agency/sessions/tasks.json`
+- Status values: `pending`, `in_progress`, `completed`, `failed`
 
-## Screenshot
-See `docs/agency-tui-screenshot.png`
+## TUI Keybindings for Tasks
+- `c` - Create task (uses selected agent as assignee)
+- `u` - Update task status (cycles: pending → in_progress → completed → failed)
+- `d` - Delete selected task
+
+## CLI Commands
+```bash
+agency tasks list                    # List all tasks
+agency tasks add -d "Description"   # Create task
+agency tasks add -d "..." -a coder # Create with assignee
+agency tasks update <id> --status in_progress
+agency tasks update <id> --assignee tester
+agency tasks show <id>              # Show task details
+agency tasks delete <id>            # Delete task
+```
