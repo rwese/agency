@@ -57,8 +57,8 @@ def main():
         f.write("#!/bin/bash\n")
         f.write(f'cd "{agency_dir}"\n')
         # Use --no-context-files to skip AGENTS.md/CLAUDE.md loading for clean persona
-        # Use PI_CODING_AGENT=true to signal agent mode
-        base_cmd = f'{agent_cmd} --session-dir "{agency_dir}/sessions" --no-context-files PI_CODING_AGENT=true'
+        # Use AGENCY_ROLE to signal agent mode
+        base_cmd = f'{agent_cmd} --session-dir "{agency_dir}/sessions" --no-context-files AGENCY_ROLE=AGENT'
         if personality:
             escaped = escape(personality)
             f.write(f'exec {base_cmd} --append-system-prompt "{escaped}"\n')

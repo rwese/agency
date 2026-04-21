@@ -399,8 +399,7 @@ def _generate_manager_launch_script(
         f"{agent_cmd} "
         f'--session-dir "{agency_dir}" '
         f"--no-context-files "
-        f"PI_CODING_AGENT=true "
-        f"PI_AGENCY_MANAGER=true "
+        f"AGENCY_ROLE=MANAGER "
         f"AGENCY_PROJECT={session_name} "
         f'AGENCY_DIR="{agency_dir}" '
         f"AGENCY_MANAGER={manager_name} "
@@ -467,7 +466,7 @@ def _generate_agent_launch_script(
         f"{agent_cmd} "
         f'--session-dir "{agency_dir}" '
         f"--no-context-files "
-        f"PI_CODING_AGENT=true "
+        f"AGENCY_ROLE=AGENT "
         f"AGENCY_PROJECT={session_name} "
         f'AGENCY_DIR="{agency_dir}" '
         f"AGENCY_AGENT={agent_name} "
