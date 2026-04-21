@@ -899,62 +899,76 @@ Examples:
     subparsers = parser.add_subparsers(dest="command", help="Commands")
     
     # init
-    subparsers.add_parser("init", help="Initialize agency config")
+    init_parser = subparsers.add_parser("init", help="Initialize agency config",
+        description="Create agency config directory with example agent and manager configs.")
     
     # start
-    start_parser = subparsers.add_parser("start", help="Start an agent")
-    start_parser.add_argument("name", help="Agent name")
-    start_parser.add_argument("--dir", required=True, help="Working directory")
+    start_parser = subparsers.add_parser("start", help="Start an agent",
+        description="Start an agent in a project session. Creates session if needed.")
+    start_parser.add_argument("name", help="Agent name (from agent configs)")
+    start_parser.add_argument("--dir", required=True, help="Working directory for the agent")
     
     # start-manager
-    start_mgr_parser = subparsers.add_parser("start-manager", help="Start a manager")
-    start_mgr_parser.add_argument("name", help="Manager name")
-    start_mgr_parser.add_argument("--dir", required=True, help="Working directory")
+    start_mgr_parser = subparsers.add_parser("start-manager", help="Start a manager",
+        description="Start a manager orchestrator in its own dedicated session.")
+    start_mgr_parser.add_argument("name", help="Manager name (from manager configs)")
+    start_mgr_parser.add_argument("--dir", required=True, help="Working directory for the manager")
     
     # list-managers
-    subparsers.add_parser("list-managers", help="List available manager configs")
+    list_mgr_parser = subparsers.add_parser("list-managers", help="List manager configs",
+        description="List available manager configurations.")
     
     # list-sessions (new name for clarity - shows all sessions including managers)
-    subparsers.add_parser("list", help="List running sessions")
+    list_parser = subparsers.add_parser("list", help="List running sessions",
+        description="List all running agency sessions and their windows.")
     
     # send
-    send_parser = subparsers.add_parser("send", help="Send message to agent")
-    send_parser.add_argument("session", help="Session name")
-    send_parser.add_argument("target", nargs="?", help="Agent name (optional if single window)")
-    send_parser.add_argument("message", nargs="+", help="Message to send")
+    send_parser = subparsers.add_parser("send", help="Send message to agent",
+        description="Send a message to an agent. Use 'session:agent' syntax for multiple windows.")
+    send_parser.add_argument("session", help="Session name (use 'session:agent' for specific window)")
+    send_parser.add_argument("target", nargs="?", help="Agent name (optional if session has one window)")
+    send_parser.add_argument("message", nargs="+", help="Message to send to the agent")
     
     # stop
-    stop_parser = subparsers.add_parser("stop", help="Stop session gracefully")
-    stop_parser.add_argument("session", help="Session[:agent]")
+    stop_parser = subparsers.add_parser("stop", help="Stop session gracefully",
+        description="Stop a session or window gracefully. Sends shutdown, waits 30s.")
+    stop_parser.add_argument("session", help="Session or 'session:agent' to stop")
     
     # kill
-    kill_parser = subparsers.add_parser("kill", help="Force kill session")
-    kill_parser.add_argument("session", help="Session[:agent]")
+    kill_parser = subparsers.add_parser("kill", help="Force kill session",
+        description="Force kill a session or window immediately.")
+    kill_parser.add_argument("session", help="Session or 'session:agent' to kill")
     
     # kill-all
-    subparsers.add_parser("kill-all", help="Kill all agency sessions")
+    kill_all_parser = subparsers.add_parser("kill-all", help="Kill all agency sessions",
+        description="Force kill all agency sessions. Use 'stop' for graceful shutdown.")
     
     # attach
-    attach_parser = subparsers.add_parser("attach", help="Attach to an agency session")
+    attach_parser = subparsers.add_parser("attach", help="Attach to session",
+        description="Attach to an agency tmux session.")
     attach_parser.add_argument("session", help="Session name")
-    attach_parser.add_argument("target", nargs="?", help="Agent/window name (optional)")
+    attach_parser.add_argument("target", nargs="?", help="Window/agent name (optional)")
     
     # attach-manager
-    attach_mgr_parser = subparsers.add_parser("attach-manager", help="Attach to a manager session")
+    attach_mgr_parser = subparsers.add_parser("attach-manager", help="Attach to manager",
+        description="Attach to a manager session.")
     attach_mgr_parser.add_argument("name", help="Manager name")
     
     # stop-manager
-    stop_mgr_parser = subparsers.add_parser("stop-manager", help="Stop a manager gracefully")
+    stop_mgr_parser = subparsers.add_parser("stop-manager", help="Stop manager gracefully",
+        description="Stop a manager session gracefully. Sends shutdown, waits 30s.")
     stop_mgr_parser.add_argument("name", help="Manager name")
     
     # tasks
-    tasks_parser = subparsers.add_parser("tasks", help="Manage tasks")
-    tasks_parser.add_argument("action", choices=["list", "show", "create"], help="Action")
-    tasks_parser.add_argument("task_id", nargs="?", help="Task ID")
+    tasks_parser = subparsers.add_parser("tasks", help="Manage tasks",
+        description="Manage delegated tasks. Track progress and results.")
+    tasks_parser.add_argument("action", choices=["list", "show", "create"], help="Action: list, show, create")
+    tasks_parser.add_argument("task_id", nargs="?", help="Task ID (for show/create)")
     
     # completions
-    comp_parser = subparsers.add_parser("completions", help="Print shell completion script")
-    comp_parser.add_argument("shell", choices=["bash", "zsh", "fish"], help="Shell type")
+    comp_parser = subparsers.add_parser("completions", help="Print shell completions",
+        description="Print shell completion script. Source or pipe to shell rc file.")
+    comp_parser.add_argument("shell", choices=["bash", "zsh", "fish"], help="Shell: bash, zsh, or fish")
     
     args = parser.parse_args()
     
