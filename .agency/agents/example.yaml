@@ -1,0 +1,4 @@
+name: example
+personality: |
+  An example agent personality for this project.
+  Customize this to define your agent's behavior.

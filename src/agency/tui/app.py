@@ -154,8 +154,8 @@ class AgencyTUI(App):
     CSS = """
     Screen { background: $surface; }
     
-    /* Panel styling */
-    #left-panel { width: 64; dock: left; background: $panel; }
+    /* Panel styling - compact widths */
+    #left-panel { width: 28; dock: left; background: $panel; }
     #main-col { width: 1fr; }
     
     /* Header styling */
@@ -172,14 +172,14 @@ class AgencyTUI(App):
         text-style: bold;
     }
     
-    /* Content areas */
-    #sessions-content { padding: 1 2; }
-    #tasks-content { padding: 1 2; }
+    /* Content areas - compact */
+    #sessions-content { padding: 0 1; }
+    #tasks-content { padding: 0 1; }
     
     /* Message area */
     #message-row { height: 3; padding: 1 2; background: $panel; }
-    #target-label { width: 5; color: $text-muted; }
-    #target-display { width: 22; color: $accent; text-style: bold; }
+    #target-label { width: 4; color: $text-muted; }
+    #target-display { width: 18; color: $accent; text-style: bold; }
     
     /* Input */
     #message-input { width: 1fr; }
@@ -270,14 +270,14 @@ class AgencyTUI(App):
             icon = s.status_icon
             agents = ", ".join(s.windows) if s.windows else "[dim]no agents[/dim]"
             
-            # Session line
+            # Session line with simple connector
             if is_selected:
                 if is_active:
                     lines.append(f"[bold cyan]▌ {icon} {s.display_name}[/bold cyan]")
                 else:
-                    lines.append(f"[cyan]  {icon} {s.display_name}[/cyan]")
+                    lines.append(f"[cyan]▌ {icon} {s.display_name}[/cyan]")
             else:
-                lines.append(f"    {icon} {s.display_name}")
+                lines.append(f"  {icon} {s.display_name}")
             
             # Agents line
             if is_selected:
@@ -289,13 +289,14 @@ class AgencyTUI(App):
             if is_selected and s.windows:
                 for j, agent in enumerate(s.windows):
                     is_agent_selected = j == self._selected_agent_index
+                    
                     if is_agent_selected:
                         if is_active:
                             lines.append(f"[bold yellow]▌   └ {agent}[/bold yellow]")
                         else:
-                            lines.append(f"[yellow]      {agent}[/yellow]")
+                            lines.append(f"[yellow]    └ {agent}[/yellow]")
                     else:
-                        lines.append(f"        {agent}")
+                        lines.append(f"      └ {agent}")
         
         widget.update("\n".join(lines))
 
@@ -323,23 +324,23 @@ class AgencyTUI(App):
             }.get(t.status, "❓")
             
             desc = t.description
-            if len(desc) > 38:
-                desc = desc[:35] + "..."
+            if len(desc) > 30:
+                desc = desc[:27] + "..."
             
             is_selected = i == self._selected_task_index
             
             if is_selected and is_active:
                 lines.append(f"[bold cyan]▌[/bold cyan] {icon} {t.task_id}: {desc}")
             elif is_selected:
-                lines.append(f"[cyan]  {icon} {t.task_id}: {desc}[/cyan]")
+                lines.append(f"[cyan]▌[/cyan] {icon} {t.task_id}: {desc}")
             else:
-                lines.append(f"    {icon} {t.task_id}: {desc}")
+                lines.append(f"  {icon} {t.task_id}: {desc}")
             
             if t.assigned_to:
                 if is_selected:
                     lines.append(f"[cyan]    → {t.assigned_to}[/cyan]")
                 else:
-                    lines.append(f"    [dim]→ {t.assigned_to}[/dim]")
+                    lines.append(f"  [dim]→ {t.assigned_to}[/dim]")
         
         widget.update("\n".join(lines))
 
@@ -392,14 +393,22 @@ class AgencyTUI(App):
             self._current_panel = Panel.TASKS
         elif self._current_panel == Panel.TASKS:
             self._current_panel = Panel.SESSIONS
+        elif self._current_panel == Panel.SESSIONS:
+            self._current_panel = Panel.MAIN
         self.update_panel_indicators()
+        self.refresh_sessions()
+        self.refresh_tasks()
 
     def action_panel_right(self) -> None:
         if self._current_panel == Panel.SESSIONS:
             self._current_panel = Panel.TASKS
         elif self._current_panel == Panel.TASKS:
             self._current_panel = Panel.MAIN
+        elif self._current_panel == Panel.MAIN:
+            self._current_panel = Panel.SESSIONS
         self.update_panel_indicators()
+        self.refresh_sessions()
+        self.refresh_tasks()
 
     def action_nav_up(self) -> None:
         if self._current_panel == Panel.SESSIONS:
