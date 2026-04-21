@@ -248,6 +248,7 @@ def create_project_session(
     result = subprocess.run(
         [
             "tmux",
+            "-f", "/dev/null",
             "-L",
             socket_name,
             "new-session",
