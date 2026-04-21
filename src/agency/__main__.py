@@ -112,7 +112,48 @@ def discover_agent_files(project_name: str | None = None) -> dict[str, Path | No
     return results
 
 
-@click.group()
+def _get_default_epilog() -> str:
+    """Get epilog with examples for default (interactive) mode."""
+    return """Examples:
+  # Quick start
+  cd ~/projects/myapp && agency init
+  agency start
+
+  # Task management
+  agency tasks add -d "Implement login"
+  agency tasks assign task-001 coder
+  agency tasks list
+
+  # Session management
+  agency list
+  agency attach
+  agency stop"""
+
+
+def _get_manager_epilog() -> str:
+    """Get epilog with examples for manager/coordinator mode."""
+    return """Examples:
+  # Coordinator workflow
+  agency tasks list
+  agency tasks assign task-001 coder
+  agency members
+
+  # Monitor sessions
+  agency tmux list
+  agency stop"""
+
+
+def _get_agent_epilog() -> str:
+    """Get epilog with examples for agent mode."""
+    return """Examples:
+  # Agent workflow
+  agency tasks list
+  agency tasks show task-001
+  agency tasks update task-001 --status in_progress
+  agency tasks complete task-001 --result "Done!"""
+
+
+@click.group(epilog=(_get_manager_epilog() if os.environ.get("AGENCY_ROLE", "").upper() == "MANAGER" else _get_agent_epilog() if os.environ.get("AGENCY_ROLE", "").upper() == "AGENT" else _get_default_epilog()))
 @click.version_option(version=VERSION)
 @click.pass_context
 def cli(ctx):
