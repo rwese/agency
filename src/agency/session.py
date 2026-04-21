@@ -14,6 +14,50 @@ MANAGER_PREFIX = "[MGR] "
 HALTED_SUFFIX = "-HALTED"
 SHUTDOWN_MESSAGE = "Please wrap up, save your work, then exit gracefully. Say 'Goodbye' when done."
 
+# Default context files to discover
+DEFAULT_CONTEXT_FILES = ["AGENTS.md", "CLAUDE.md", ".claude.md"]
+
+
+def discover_context_files(work_dir: Path, git_root: Path) -> list[Path]:
+    """Discover context files from work_dir up to git_root.
+
+    Args:
+        work_dir: Starting directory
+        git_root: Git repository root (stop here)
+
+    Returns:
+        List of discovered context file paths
+    """
+    context_files = []
+    current = work_dir.absolute()
+
+    while current != current.parent and current != git_root:
+        for filename in DEFAULT_CONTEXT_FILES:
+            file_path = current / filename
+            if file_path.is_file() and file_path not in context_files:
+                context_files.append(file_path)
+        current = current.parent
+
+    return context_files
+
+
+def format_context_args(context_files: list[Path]) -> str:
+    """Format context files as --append-system-prompt arguments.
+
+    Args:
+        context_files: List of file paths
+
+    Returns:
+        Command line arguments for append-system-prompt
+    """
+    if not context_files:
+        return ""
+    args = []
+    for f in context_files:
+        # Use process substitution for file contents
+        args.append(f'--append-system-prompt "<({f})"')
+    return " ".join(args)
+
 # Base personality injected into all agents (always included)
 BASE_PERSONALITY = """You are running in an Agency v2.0 tmux session.
 
@@ -361,6 +405,8 @@ def _generate_manager_launch_script(
     work_dir: Path,
 ) -> Path:
     """Generate the manager launch script."""
+    from agency.config import load_agency_config
+
     scripts_dir = agency_dir / ".scripts"
     scripts_dir.mkdir(parents=True, exist_ok=True)
     script_path = scripts_dir / f"manager-{manager_name}.sh"
@@ -390,6 +436,24 @@ def _generate_manager_launch_script(
     escaped = _escape_prompt(full_personality)
     personality_args = f' --append-system-prompt "{escaped}"'
 
+    # Discover context files from work_dir to git_root
+    agency_config = load_agency_config(agency_dir)
+    context_files = discover_context_files(work_dir, work_dir)  # Use work_dir as git_root for now
+
+    # Add custom context files from config if specified
+    if agency_config.context_files:
+        for cf in agency_config.context_files:
+            cf_path = Path(cf)
+            if cf_path.is_absolute() and cf_path.exists():
+                context_files.append(cf_path)
+            elif not cf_path.is_absolute():
+                # Relative paths are relative to work_dir
+                rel_path = work_dir / cf_path
+                if rel_path.exists() and rel_path not in context_files:
+                    context_files.append(rel_path)
+
+    context_args = format_context_args(context_files)
+
     # Get agent command
     agent_cmd = os.environ.get("AGENCY_AGENT_CMD", "pi")
 
@@ -403,7 +467,8 @@ def _generate_manager_launch_script(
         f"AGENCY_PROJECT={session_name} "
         f'AGENCY_DIR="{agency_dir}" '
         f"AGENCY_MANAGER={manager_name} "
-        f"{personality_args}"
+        f"{personality_args} "
+        f"{context_args}"
     )
 
     script_path.write_text(f"#!/bin/bash\n{cmd}\n")
@@ -420,6 +485,8 @@ def _generate_agent_launch_script(
     work_dir: Path,
 ) -> Path:
     """Generate the agent launch script."""
+    from agency.config import load_agency_config
+
     scripts_dir = agency_dir / ".scripts"
     scripts_dir.mkdir(parents=True, exist_ok=True)
     script_path = scripts_dir / f"agent-{agent_name}.sh"
@@ -457,6 +524,23 @@ def _generate_agent_launch_script(
     escaped = _escape_prompt(full_personality)
     personality_args = f' --append-system-prompt "{escaped}"'
 
+    # Discover context files from work_dir to git_root
+    agency_config = load_agency_config(agency_dir)
+    context_files = discover_context_files(work_dir, work_dir)
+
+    # Add custom context files from config if specified
+    if agency_config.context_files:
+        for cf in agency_config.context_files:
+            cf_path = Path(cf)
+            if cf_path.is_absolute() and cf_path.exists():
+                context_files.append(cf_path)
+            elif not cf_path.is_absolute():
+                rel_path = work_dir / cf_path
+                if rel_path.exists() and rel_path not in context_files:
+                    context_files.append(rel_path)
+
+    context_args = format_context_args(context_files)
+
     # Get agent command
     agent_cmd = os.environ.get("AGENCY_AGENT_CMD", "pi")
 
@@ -470,7 +554,8 @@ def _generate_agent_launch_script(
         f"AGENCY_PROJECT={session_name} "
         f'AGENCY_DIR="{agency_dir}" '
         f"AGENCY_AGENT={agent_name} "
-        f"{personality_args}"
+        f"{personality_args} "
+        f"{context_args}"
     )
 
     script_path.write_text(f"#!/bin/bash\n{cmd}\n")

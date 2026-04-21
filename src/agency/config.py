@@ -18,6 +18,7 @@ class AgencyConfig:
     shell: str = "bash"
     template_url: str | None = "https://github.com/rwese/agency-templates"
     stop_timeout: int = 30
+    context_files: list[str] | None = None  # Files to add as system prompts
 
 
 @dataclass
@@ -55,6 +56,7 @@ def load_agency_config(agency_dir: Path) -> AgencyConfig:
         shell=data.get("shell", "bash"),
         template_url=data.get("template_url"),
         stop_timeout=data.get("stop_timeout", 30),
+        context_files=data.get("context_files"),
     )
 
 
