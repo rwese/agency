@@ -171,14 +171,12 @@ project: api
 shell: bash
 additional_context_files:
   - ${HOME}/.agents/AGENTS.md
-  - ${AGENCY_DIR}/context/project-rules.md
-  - ${AGENCY_WORKDIR}/CLAUDE.md
+  - ./context/project-rules.md
+  - ./CLAUDE.md
 ```
 
 Common use cases:
 - `${HOME}/.agents/AGENTS.md` - Global agent config
-- `${AGENCY_DIR}/context/local.md` - Project-specific context in `.agency/`
-- `${AGENCY_WORKDIR}/CLAUDE.md` - Claude config from project root
 
 ## Testing
 
