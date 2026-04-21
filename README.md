@@ -1,329 +1,202 @@
 # Agency - AI Agent Session Manager
 
-A Python-based tmux session manager for AI agents. Each agent runs in its own tmux window within a project-based session.
+A tmux-based multi-agent orchestration tool for AI-driven development workflows.
 
 ## Quick Start
 
 ```bash
-# Install with uv
+# Install
 uv pip install -e .
 
-# Or run directly without install
-uv run agency --help
+# Create a project with a manager
+agency init-project --dir ~/projects/api --start-manager coordinator
 
-# Initialize config
-agency init
+# Start agents
+agency start developer --dir ~/projects/api
 
-# Create an agent config
-cat > ~/.config/agency/agents/myagent.yaml <<EOF
-name: myagent
-personality: |
-  Your agent's personality description
-EOF
+# Manage tasks
+agency tasks add -d "Implement authentication"
+agency tasks assign swift-bear-a3f2 developer
+agency tasks list
 
-# Start an agent
-agency start myagent --dir ~/projects/myapp
-
-# List running agents
-agency list
-
-# Send a message
-agency send myapp myagent "Hello!"
-
-# Stop gracefully
-agency stop myapp:myagent
-
-# Kill all sessions
-agency kill-all
+# Attach and work
+agency attach api
 ```
+
+## Architecture
+
+```
+agency-api                    # tmux session + socket
+├── [MGR] coordinator       # Manager (orchestrator)
+├── developer                # Agent
+└── tester                  # Agent
+```
+
+**Relationships:**
+- Project 1:1 Manager
+- Project 1:N Agents
+- Manager 1:N Tasks
+- Agent 1:1 Task (active)
 
 ## Installation
 
-### Using uv (recommended)
-
 ```bash
-# Install in editable mode for development
+# Using uv (recommended)
 uv pip install -e .
 
-# Install for production use
-uv pip install .
-```
-
-### Using pip
-
-```bash
-pip install .
-```
-
-### Run without installing
-
-```bash
+# Or run without installing
 uv run agency <command>
 ```
 
-## Session Model
-
-- **Session** = One per project/directory (based on directory basename)
-- **Window** = One per agent
-- **Rule**: Unique agent names within a session
-
-Example:
-```bash
-agency start coder --dir ~/projects/api     # Creates session "api", window "coder"
-agency start tester --dir ~/projects/api     # Adds window "tester" to session "api"
-agency start coder --dir ~/projects/api     # ERROR: "coder" already exists
-```
-
-## Manager Mode
-
-Managers are specialized agents that orchestrate other agents. They:
-- Monitor all agency sessions and agents
-- Review incoming tasks and delegate to appropriate agents
-- Track task IDs for requesting parties
-- Coordinate multi-agent workflows
-
-```bash
-# List available managers
-agency list-managers
-
-# Start a manager (creates dedicated session)
-agency start-manager coordinator --dir ~/projects/myapp
-
-# List manager sessions
-agency list
-
-# Attach to a manager
-agency attach-manager coordinator
-
-# Stop a manager
-agency stop-manager coordinator
-```
-
-### Manager Responsibilities
-
-When a manager receives a task not addressed to a specific agent:
-1. Assigns a task ID (returned to requesting party)
-2. Delegates to appropriate agent using `agency send`
-3. Tracks task status
-4. Reports back when complete
-
 ## Commands
+
+### Project Management
 
 | Command | Description |
 |---------|-------------|
-| `init [--global\|--local]` | Initialize config (interactive by default) |
-| `start <name> --dir <path>` | Start agent in project session |
-| `start-manager <name> --dir <path>` | Start manager in dedicated session |
-| `list` | List all running sessions and windows |
-| `list-managers` | List available manager configurations |
-| `send <session> [agent] <msg>` | Send message to agent |
-| `attach <session> [agent]` | Attach to tmux session |
-| `attach-manager <name>` | Attach to manager session |
-| `stop <session>[:agent]` | Stop gracefully (30s timeout) |
-| `stop-manager <name>` | Stop a manager gracefully |
-| `kill <session>[:agent]` | Force kill immediately |
-| `kill-all` | Kill all agency sessions |
-| `tasks list` | List all tracked tasks |
-| `tasks show <task_id>` | Show task details |
-| `completions <shell>` | Print shell completion script (bash/zsh/fish) |
+| `agency init-project --dir <path>` | Create project + session + `.agency/` |
+| `agency start <name> --dir <path>` | Start agent or manager |
+| `agency stop <session>` | Shutdown gracefully |
+| `agency resume <session>` | Resume from halt |
+| `agency attach <session>` | Attach to session |
+| `agency list` | List sessions |
+
+### Task Management
+
+| Command | Description |
+|---------|-------------|
+| `agency tasks list` | List active tasks |
+| `agency tasks add -d <desc>` | Create task |
+| `agency tasks show <id>` | Show task details |
+| `agency tasks assign <id> <agent>` | Assign to agent |
+| `agency tasks complete <id> --result <text>` | Complete task |
+| `agency tasks history` | Show completed tasks |
+
+## File Structure
+
+```
+project/
+├── .agency/
+│   ├── config.yaml           # Project settings
+│   ├── manager.yaml          # Manager personality
+│   ├── agents.yaml           # Agent registry
+│   ├── tasks.json            # Active tasks
+│   ├── agents/
+│   │   └── developer.yaml
+│   ├── tasks/
+│   │   └── <task_id>/
+│   │       ├── task.json
+│   │       └── result.json
+│   └── pending/
+│       └── <task_id>.json
+└── src/
+```
+
+## Task Lifecycle
+
+```
+pending → in_progress → pending_approval → completed
+                     ↓
+                  failed (on reject)
+```
+
+## Templates
+
+Use templates for quick project setup:
+
+```bash
+# Basic template (default)
+agency init-project --dir ~/projects/api
+
+# API template
+agency init-project --dir ~/projects/api \
+  --template https://github.com/rwese/agency-templates/tree/main/api
+
+# Custom template
+agency init-project --dir ~/projects/app \
+  --template https://github.com/user/repo
+```
 
 ## Configuration
 
-### Global Init
-
-```bash
-# Interactive (recommended for first-time setup)
-agency init
-
-# Non-interactive global init
-agency init --global
-
-# Local project init (requires git repository)
-agency init --local
-
-# With custom directory
-agency init --dir ~/projects/myapp
-
-# Overwrite existing
-agency init --global --force
-```
-
-### Local Configuration
-
-Projects can have their own `.agency/` directory with local agent and manager configs:
-
-```
-.agency/
-├── agents/         # Project-specific agents
-│   └── example.yaml
-├── managers/      # Project-specific managers
-│   └── coordinator.yaml
-└── README.md
-```
-
-Benefits of local config:
-- **Version controlled**: Commit to git, share with team
-- **Self-contained**: Project includes its agent setup
-- **Portable**: Clone and run agents immediately
-
-### Agent Configs
-
-Global configs stored in `~/.config/agency/agents/`, local configs in `.agency/agents/`:
+### config.yaml
 
 ```yaml
-name: myagent
-personality: |
-  Your personality description.
-  Can be multi-line.
+project: api
+shell: bash
 ```
 
-### Manager Configs
-Stored in `~/.config/agency/managers/`:
+### manager.yaml
 
 ```yaml
-name: coordinator
-description: |
-  A project coordinator that reviews tasks and delegates to agents.
-badge: "[MGR]"           # Optional: prefix in tmux window name
-badge_color: brightblue  # Optional: tmux status bar color
 personality: |
-  You are a project coordinator. Your role is to:
-  - Monitor all agency sessions with `agency list`
-  - Delegate tasks to appropriate agents
-  - Track task IDs for requesting parties
-  - Report task status back to stakeholders
+  You are the project coordinator.
+
+  ## Task Management
+  - agency tasks list
+  - agency tasks assign <id> <agent>
+
+poll_interval: 30
+auto_approve: false
 ```
 
-**Badge Options:**
-- `badge`: Text prefix shown in tmux window name (e.g., `"[MGR]"`, `"★"`, `"👑"`)
-- `badge_color`: Color for tmux status bar highlighting:
-  - Bright: `brightblue`, `brightgreen`, `brightred`, `brightyellow`, `brightmagenta`, `brightcyan`, `brightwhite`
-  - Standard: `blue`, `green`, `red`, `yellow`, `magenta`, `cyan`, `white`
+### agents.yaml
 
-### Task Tracking
-Tasks are stored in `~/.config/agency/sessions/tasks.json`:
-
-```json
-{
-  "A1B2C3D4": {
-    "task_id": "A1B2C3D4",
-    "description": "Implement user auth",
-    "status": "in_progress",
-    "assigned_to": "coder",
-    "created_at": "2024-01-15T10:30:00",
-    "completed_at": null,
-    "result": null
-  }
-}
+```yaml
+agents:
+  - name: developer
+    config: agents/developer.yaml
 ```
 
 ## Environment Variables
 
-- `AGENCY_AGENT_CMD` - Override the agent command (default: `pi`)
-- `XDG_CONFIG_HOME` - Config directory (default: `~/.config`)
+| Variable | Description |
+|----------|-------------|
+| `AGENCY_PROJECT` | Project name |
+| `AGENCY_DIR` | Path to `.agency/` |
+| `AGENCY_AGENT` | Agent name |
+| `AGENCY_MANAGER` | Manager name |
+| `PI_CODING_AGENT` | Set for agents |
+| `PI_AGENCY_MANAGER` | Set for manager |
 
-## Agent Configuration
+## Testing
 
-Agents are automatically configured for clean operation:
+```bash
+# Run tests
+uv run pytest
 
-- **Quiet startup**: `~/.config/agency/sessions/.pi/settings.json` with `quietStartup: true`
-- **Clean persona**: Uses `--no-context-files` to skip AGENTS.md/CLAUDE.md loading
-- **Session isolation**: Each agent stores session data in `~/.config/agency/sessions/`
-- **Manager mode**: Sets `PI_AGENCY_MANAGER=true` for manager agents
+# Lint
+uvx ruff check src/
+
+# Format
+uvx ruff format src/
+```
 
 ## Project Structure
 
 ```
 agency/
-├── src/agency/            # Source package
-│   ├── __init__.py       # Package init with version
-│   ├── __main__.py       # CLI entry point
-│   ├── generate_agent_script.py  # Script generator
-│   ├── mock_agent.py     # Mock for testing
-│   └── agents/           # Example agent configs
-├── README.md
-├── AGENTS.md             # Developer documentation
-├── pyproject.toml        # uv/pip project config
-├── test_agency.sh        # Integration tests
-└── completions/          # Shell completions
+├── src/agency/
+│   ├── __init__.py
+│   ├── __main__.py       # CLI entry
+│   ├── session.py         # Session management
+│   ├── tasks.py           # Task store
+│   ├── tasks_cli.py       # Task CLI
+│   ├── template.py        # Template download
+│   └── config.py          # Config loading
+├── tests/
+│   ├── test_tasks.py
+│   ├── test_session.py
+│   └── test_config.py
+├── docs/design/           # Design documents
+└── pyproject.toml
 ```
 
-## Shell Completions
+## Design Documents
 
-Smart shell completions for bash, zsh, and fish.
-
-### Quick Install
-
-```bash
-# Print and install bash completions
-agency completions bash >> ~/.bashrc
-
-# Print and install zsh completions
-agency completions zsh >> ~/.zshrc
-
-# Print and install fish completions
-agency completions fish > ~/.config/fish/completions/agency.fish
-```
-
-### Manual Install
-
-#### Bash
-
-```bash
-# Source in .bashrc or .profile
-source /path/to/agency/completions/bash
-
-# Or install system-wide
-sudo cp completions/bash /usr/local/etc/bash_completion.d/agency
-```
-
-### Zsh
-
-```bash
-# Add to .zshrc
-fpath=(~/path/to/agency/completions/zsh $fpath)
-autoload -Uz _agency
-compdef _agency agency
-
-# Or copy completion file
-cp completions/zsh ~/.config/zsh/completions/_agency
-```
-
-### Fish
-
-```bash
-# Copy completion file
-cp completions/fish ~/.config/fish/completions/agency.fish
-```
-
-### Just Recipes
-
-```bash
-just completions-bash     # Install bash completions
-just completions-zsh      # Install zsh completions  
-just completions-fish     # Install fish completions
-just completions          # Install all
-```
-
-## Testing
-
-```bash
-# Run test suite
-uv run pytest
-
-# Or use the test script
-./test_agency.sh
-```
-
-## Architecture
-
-- `agency/__main__.py` - Main CLI and session management
-- `agency/generate_agent_script.py` - Helper for agent launch scripts
-- `agency/mock_agent.py` - Mock agent for testing
-
-## Session Types
-
-| Prefix | Type | Purpose |
-|--------|------|---------|
-| `agency-` | Project | Shared by multiple agents working on same project |
-| `agency-manager-` | Manager | Dedicated session for orchestration/coordination |
+See `docs/design/` for complete specification:
+- [v2.0-index.md](docs/design/v2.0-index.md) - Overview
+- [v2.0-entities.md](docs/design/v2.0-entities.md) - Entities
+- [v2.0-cli.md](docs/design/v2.0-cli.md) - CLI reference
+- [v2.0-schemas.md](docs/design/v2.0-schemas.md) - Data schemas
+- [v2.0-workflows.md](docs/design/v2.0-workflows.md) - Workflows
