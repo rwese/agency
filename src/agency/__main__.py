@@ -587,6 +587,12 @@ def members(dir):
 @click.group()
 def tasks():
     """Task management commands."""
+
+
+# Agent-only tasks (limited commands)
+@click.group()
+def tasks_agent():
+    """Task commands for agents."""
     pass
 
 
@@ -903,6 +909,86 @@ def tasks_history(agent):
         click.echo("")
 
 
+# === Agent-only task commands ===
+
+
+def _get_agent_name():
+    """Get agent name from AGENCY_AGENT env var."""
+    agent = os.environ.get("AGENCY_AGENT", "")
+    if not agent:
+        click.echo("[ERROR] AGENCY_AGENT not set", err=True)
+        sys.exit(1)
+    return agent
+
+
+def _verify_task_ownership(agency_dir: Path, task_id: str, agent: str) -> bool:
+    """Verify task is assigned to this agent."""
+    store = TaskStore(agency_dir)
+    task = store.get_task(task_id)
+    if not task:
+        click.echo(f"[ERROR] Task not found: {task_id}", err=True)
+        return False
+    if task.assigned_to != agent:
+        click.echo(f"[ERROR] Task {task_id} not assigned to you", err=True)
+        return False
+    return True
+
+
+@tasks_agent.command("list")
+def agent_tasks_list():
+    """List tasks assigned to you."""
+    agent = _get_agent_name()
+    tasks_list(status=None, assignee=agent)
+
+
+@tasks_agent.command("show")
+@click.argument("task_id")
+def agent_tasks_show(task_id):
+    """Show task details."""
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        sys.exit(1)
+    agent = _get_agent_name()
+    if not _verify_task_ownership(agency_dir, task_id, agent):
+        sys.exit(1)
+    tasks_show(task_id)
+
+
+@tasks_agent.command("update")
+@click.argument("task_id")
+@click.option("--status", help="Status: pending, in_progress, pending_approval")
+@click.option("--priority", help="Priority: low, normal, high")
+def agent_tasks_update(task_id, status, priority):
+    """Update task status or priority."""
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        sys.exit(1)
+    agent = _get_agent_name()
+    if not _verify_task_ownership(agency_dir, task_id, agent):
+        sys.exit(1)
+    tasks_update(task_id, status, priority)
+
+
+@tasks_agent.command("complete")
+@click.argument("task_id")
+@click.option("--result", required=True, help="Result summary")
+@click.option("--files", help="JSON array of files")
+@click.option("--diff", help="Git diff")
+@click.option("--summary", help="Summary")
+def agent_tasks_complete(task_id, result, files, diff, summary):
+    """Complete a task."""
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        sys.exit(1)
+    agent = _get_agent_name()
+    if not _verify_task_ownership(agency_dir, task_id, agent):
+        sys.exit(1)
+    tasks_complete(task_id, result, files, diff, summary)
+
+
 # === Completions ===
 
 
@@ -1085,10 +1171,8 @@ if _agency_role == "MANAGER":
     cli.add_command(tasks)
     cli.add_command(tmux_cmd)
 elif _agency_role == "AGENT":
-    # Agent sees: only task and member commands
-    cli.add_command(members)
-    cli.add_command(tasks)
-    cli.add_command(list)
+    # Agent sees: tasks_agent only (limited commands)
+    cli.add_command(tasks_agent)
 else:
     # Default: all commands
     cli.add_command(init_project, name="init")
