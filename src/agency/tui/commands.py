@@ -233,3 +233,105 @@ def stop_agent(session_name: str, agent: str, force: bool = False) -> None:
         # Fall through to kill if graceful shutdown failed
 
     tmux_or_raise("kill-window", "-t", f"{session_name}:{agent}")
+
+
+def load_manager_config(manager_name: str) -> dict | None:
+    """Load manager configuration from YAML."""
+    config_path = Path.home() / ".config" / "agency" / "managers" / f"{manager_name}.yaml"
+    if not config_path.exists():
+        return None
+    with open(config_path) as f:
+        return yaml.safe_load(f)
+
+
+def start_manager(manager_name: str, work_dir: str) -> str:
+    """Start a manager in its own session."""
+    # Expand tildes
+    work_dir = os.path.expanduser(work_dir)
+    Path(work_dir).mkdir(parents=True, exist_ok=True)
+
+    # Load config
+    config = load_manager_config(manager_name)
+    if not config:
+        raise ValueError(f"Manager config not found: {manager_name}")
+
+    personality = config.get("personality")
+    badge = config.get("badge", "[MGR]")
+
+    # Manager gets its own session
+    session_name = f"{MANAGER_PREFIX}{manager_name}"
+
+    if session_exists(session_name):
+        raise ValueError(f"Manager '{manager_name}' already running")
+
+    # Apply badge to window name
+    window_name = manager_name
+    if badge:
+        window_name = f"{badge} {manager_name}"
+
+    # Get agent command
+    agent_cmd = get_agent_cmd()
+
+    # Generate launch script
+    script_path = generate_manager_script(
+        session_name, window_name, agent_cmd, personality, manager_name
+    )
+
+    # Create session and window
+    tmux_or_raise("new-session", "-d", "-s", session_name, "-c", work_dir)
+    tmux_or_raise("new-window", "-d", "-t", session_name, "-n", window_name, "-c", work_dir)
+
+    # Send command to run manager
+    send_keys(session_name, window_name, str(script_path))
+
+    return f"{session_name}:{window_name}"
+
+
+def generate_manager_script(
+    session_name: str,
+    window_name: str,
+    agent_cmd: str,
+    personality: str | None = None,
+    manager_name: str | None = None,
+) -> Path:
+    """Generate and write the manager launch script."""
+    SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Create quiet settings
+    pi_dir = SESSIONS_DIR / ".pi"
+    pi_dir.mkdir(parents=True, exist_ok=True)
+    settings_path = pi_dir / "settings.json"
+
+    if not settings_path.exists():
+        import json
+        settings = {
+            "quietStartup": True,
+            "collapseChangelog": True,
+            "packages": [],
+            "extensions": [],
+            "skills": [],
+            "prompts": [],
+            "themes": []
+        }
+        with open(settings_path, 'w') as f:
+            json.dump(settings, f, indent=2)
+
+    script_path = SESSIONS_DIR / f"{session_name}-{window_name}.sh"
+    agency_dir = Path(__file__).parent.parent.absolute()
+
+    # Build command
+    base_cmd = f'{agent_cmd} --session-dir "{SESSIONS_DIR}" --no-context-files PI_CODING_AGENT=true PI_AGENCY_MANAGER=true'
+    if manager_name:
+        base_cmd += f' PI_AGENCY_MANAGER_NAME={manager_name}'
+
+    cmd = f'cd "{agency_dir}" && exec {base_cmd}'
+    if personality:
+        escaped = personality.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`")
+        cmd += f' --append-system-prompt "{escaped}"'
+
+    with open(script_path, "w") as f:
+        f.write("#!/bin/bash\n")
+        f.write(f"{cmd}\n")
+
+    script_path.chmod(0o755)
+    return script_path

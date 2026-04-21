@@ -235,10 +235,9 @@ class Dashboard(Screen):
         if not message:
             return
 
-        # Determine target agent
-        agent = None
-        if self._selected_session.windows:
-            agent = self._selected_session.windows[0]
+        # Determine target agent based on session list selection
+        session_list = self.query_one(SessionList)
+        session, agent = session_list.get_selected_target()
 
         log = self.query_one("#activity-log", Log)
         log.write_line(f"[cyan]→ {self._selected_session.display_name}: {message}[/cyan]")
