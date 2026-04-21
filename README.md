@@ -111,7 +111,7 @@ When a manager receives a task not addressed to a specific agent:
 
 | Command | Description |
 |---------|-------------|
-| `init` | Initialize config directory (creates agents/ and managers/) |
+| `init [--global\|--local]` | Initialize config (interactive by default) |
 | `start <name> --dir <path>` | Start agent in project session |
 | `start-manager <name> --dir <path>` | Start manager in dedicated session |
 | `list` | List all running sessions and windows |
@@ -129,8 +129,46 @@ When a manager receives a task not addressed to a specific agent:
 
 ## Configuration
 
+### Global Init
+
+```bash
+# Interactive (recommended for first-time setup)
+agency init
+
+# Non-interactive global init
+agency init --global
+
+# Local project init (requires git repository)
+agency init --local
+
+# With custom directory
+agency init --dir ~/projects/myapp
+
+# Overwrite existing
+agency init --global --force
+```
+
+### Local Configuration
+
+Projects can have their own `.agency/` directory with local agent and manager configs:
+
+```
+.agency/
+├── agents/         # Project-specific agents
+│   └── example.yaml
+├── managers/      # Project-specific managers
+│   └── coordinator.yaml
+└── README.md
+```
+
+Benefits of local config:
+- **Version controlled**: Commit to git, share with team
+- **Self-contained**: Project includes its agent setup
+- **Portable**: Clone and run agents immediately
+
 ### Agent Configs
-Stored in `~/.config/agency/agents/`:
+
+Global configs stored in `~/.config/agency/agents/`, local configs in `.agency/agents/`:
 
 ```yaml
 name: myagent

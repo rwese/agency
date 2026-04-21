@@ -22,7 +22,7 @@ agency list
 
 | Command | Description |
 |---------|-------------|
-| `agency init` | Create config in `~/.config/agency/` |
+| `agency init [--global\|--local]` | Interactive init (or specify scope) |
 | `agency start <name> --dir <path>` | Start agent in project session |
 | `agency start-manager <name> --dir <path>` | Start manager (orchestrator) |
 | `agency list` | List sessions and windows |
@@ -50,6 +50,43 @@ agency start coder --dir ~/projects/api  # ERROR: coder exists
 ```
 
 ## Configuration
+
+### Init Options
+
+```bash
+# Interactive (prompts for scope, agents, managers)
+agency init
+
+# Non-interactive global init
+agency init --global
+
+# Local project init (in git root's .agency/)
+agency init --local
+
+# Custom directory (implies --local)
+agency init --dir ~/projects/myapp
+
+# Overwrite existing
+agency init --global --force
+```
+
+### Local Configuration
+
+Projects can have `.agency/` directory with local configs:
+
+```
+.agency/
+├── agents/         # Project-specific agents
+├── managers/       # Project-specific managers
+└── README.md
+```
+
+Benefits:
+- **Version controlled**: Share agent setup with team
+- **Self-contained**: Clone and run agents immediately
+- **Portable**: Works across machines
+
+### Global Configuration
 
 **Agents**: `~/.config/agency/agents/<name>.yaml`
 ```yaml

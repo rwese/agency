@@ -41,11 +41,24 @@ MOCK_AGENT="src/agency/mock_agent.py"
 
 # Manual integration tests
 test_init() {
-    info "Test: init"
+    info "Test: init --global"
     rm -rf "$TEST_CONFIG_DIR/agency"
-    $AGENCY_CMD init >/dev/null 2>&1
+    $AGENCY_CMD init --global >/dev/null 2>&1
     [[ -f "$TEST_CONFIG_DIR/agency/agents/example.yaml" ]] && pass "init" || fail "init"
     [[ -d "$TEST_CONFIG_DIR/agency/managers" ]] && pass "init managers dir" || fail "init managers dir"
+}
+
+test_init_local() {
+    info "Test: init --local"
+    rm -rf "$TEST_CONFIG_DIR/agency"
+    # Create temp git repo for local init test
+    local TEST_LOCAL_DIR="${TMPDIR:-/tmp}/agency-test-local-$$"
+    mkdir -p "$TEST_LOCAL_DIR"
+    git -C "$TEST_LOCAL_DIR" init >/dev/null 2>&1
+    $AGENCY_CMD init --local --dir "$TEST_LOCAL_DIR" >/dev/null 2>&1
+    [[ -f "$TEST_LOCAL_DIR/.agency/agents/example.yaml" ]] && pass "init local" || fail "init local"
+    [[ -d "$TEST_LOCAL_DIR/.agency/managers" ]] && pass "init local managers dir" || fail "init local managers dir"
+    rm -rf "$TEST_LOCAL_DIR"
 }
 
 test_start() {
@@ -131,6 +144,7 @@ main() {
     export AGENCY_AGENT_CMD="python3 $MOCK_AGENT"
     
     test_init
+    test_init_local
     test_start
     test_start_no_dir
     test_list

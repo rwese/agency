@@ -54,7 +54,12 @@ _agency_complete() {
 
     # Subcommand completions
     case "$word" in
-        init|kill-all|list|list-managers|help|version)
+        init)
+            # agency init [--global] [--local] [--dir <path>] [--force]
+            COMPREPLY=($(compgen -W "--global --local --dir --force" -- "$cur"))
+            compopt -o nospace
+            ;;
+        kill-all|list|list-managers|help|version)
             # These take no arguments
             ;;
         start)

@@ -59,6 +59,10 @@ complete -c agency -f
 
 # No-arg commands
 complete -c agency -n '__fish_use_subcommand' -a 'init' -d 'Initialize agency config'
+complete -c agency -n '__fish_seen_subcommand_from init' -l 'global' -d 'Initialize global config'
+complete -c agency -n '__fish_seen_subcommand_from init' -l 'local' -d 'Initialize local project config'
+complete -c agency -n '__fish_seen_subcommand_from init' -l 'force' -d 'Overwrite existing config'
+complete -c agency -n '__fish_seen_subcommand_from init' -l 'dir' -s 'd' -r -d 'Custom local directory' -f -a '(for d in */; string trim --right -c / "$d"; end)'
 complete -c agency -n '__fish_use_subcommand' -a 'kill-all' -d 'Kill all agency sessions'
 complete -c agency -n '__fish_use_subcommand' -a 'list' -d 'List running sessions'
 complete -c agency -n '__fish_use_subcommand' -a 'list-managers' -d 'List available managers'
@@ -105,5 +109,4 @@ complete -c agency -n '__fish_seen_subcommand_from completions' -a 'bash' -d 'Ba
 complete -c agency -n '__fish_seen_subcommand_from completions' -a 'zsh' -d 'Zsh completions'
 complete -c agency -n '__fish_seen_subcommand_from completions' -a 'fish' -d 'Fish completions'
 
-# --dir option
-complete -c agency -l dir -s d -r -d 'Working directory' -f -a '(for d in */; string trim --right -c / "$d"; end)'
+

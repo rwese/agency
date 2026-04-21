@@ -96,6 +96,13 @@ _agency() {
             ;;
         arg)
             case "$word" in
+                init)
+                    _arguments \
+                        '--global[Initialize global config]' \
+                        '--local[Initialize local project config]' \
+                        '--dir[Custom local directory]:dir:_files -/' \
+                        '--force[Overwrite existing config]'
+                    ;;
                 start)
                     _describe 'agent' agent_configs
                     ;;
