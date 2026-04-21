@@ -1,100 +1,96 @@
-# Agency
+# Agency - AI Agent Session Manager
 
-> Simple tmux-based AI agent session manager.
+A Python-based tmux session manager for AI agents. Each agent runs in its own tmux window within a project-based session.
 
-A lightweight bash script that manages AI agent sessions in tmux, providing persistent memory and simple CLI commands.
-
-## Features
-
-- **Persistent Memory**: Each agent maintains a memory file across sessions
-- **Simple CLI**: Start, send messages, list, stop, and kill agents
-- **Graceful Shutdown**: Agents receive shutdown prompts to save state before exit
-- **Session Management**: Named sessions with timestamps for easy tracking
-- **No Dependencies**: Just needs `tmux` and `bash`
-
-## Installation
+## Quick Start
 
 ```bash
-# Clone or copy to ~/.local/bin/
-cp agency ~/.local/bin/
-chmod +x ~/.local/bin/agency
+# Initialize config
+python3 agency.py init
 
-# Source completions (add to ~/.bashrc or ~/.zshrc)
-source /path/to/completions/bash
-```
-
-## Configuration
-
-Initialize the config directory:
-
-```bash
-agency init
-```
-
-This creates `~/.config/agency/agents/` with an example config.
-
-### Agent Config (`~/.config/agency/agents/<name>.yaml`)
-
-```yaml
-name: coder
-memory_file: ~/.agency/memory/coder.md
-source_dir: ~/.agency/agents/coder
-storage_dir: ~/.agency/storage/coder
-working_dir: ~/projects/myapp
-```
-
-## Usage
-
-```bash
-# Initialize (first time only)
-agency init
+# Create an agent config
+cat > ~/.config/agency/agents/myagent.yaml <<EOF
+name: myagent
+personality: |
+  Your agent's personality description
+EOF
 
 # Start an agent
-agency start coder
-agency start coder --dir ~/projects/myapp
+python3 agency.py start myagent --dir ~/projects/myapp
 
-# Send a message to a running agent
-agency send coder dark-wolf "Fix the authentication bug"
+# List running agents
+python3 agency.py list
 
-# List running sessions
-agency list
+# Send a message
+python3 agency.py send myapp myagent "Hello!"
 
-# Graceful shutdown (sends shutdown prompt, waits up to 30s)
-agency stop coder dark-wolf
+# Stop gracefully
+python3 agency.py stop myapp:myagent
 
-# Force kill
-agency kill coder dark-wolf
-agency kill-all
+# Kill session
+python3 agency.py kill-all
+```
+
+## Session Model
+
+- **Session** = One per project/directory (based on directory basename)
+- **Window** = One per agent
+- **Rule**: Unique agent names within a session
+
+Example:
+```bash
+agency start coder --dir ~/projects/api     # Creates session "api", window "coder"
+agency start tester --dir ~/projects/api     # Adds window "tester" to session "api"
+agency start coder --dir ~/projects/api     # ERROR: "coder" already exists
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `agency init` | Create config skeleton |
-| `agency start <name> [--dir <path>]` | Start agent in tmux |
-| `agency send <session> <msg>` | Send message to session |
-| `agency list` | List running sessions |
-| `agency stop <session>` | Graceful shutdown (30s timeout) |
-| `agency kill <session>` | Force kill session |
-| `agency kill-all` | Kill all agency sessions |
+| `init` | Initialize config directory |
+| `start <name> --dir <path>` | Start agent in session |
+| `list` | List all sessions and windows |
+| `send <session> <agent> <msg>` | Send message to agent |
+| `stop <session>[:agent]` | Stop gracefully |
+| `kill <session>[:agent]` | Force kill |
+| `kill-all` | Kill all agency sessions |
 
-## Session Names
+## Configuration
 
-Sessions are named: `{prefix}{agent-name}-{word1}-{word2}`
+Agent configs are stored in `~/.config/agency/agents/`:
 
-Example: `agency-coder-dark-wolf`
+```yaml
+name: myagent
+personality: |
+  Your personality description.
+  Can be multi-line.
+```
 
-- Prefix: `agency-`
-- Agent name: from config
-- Word pair: high-entropy 1-token words (59 words, 3481 combinations)
+## Environment Variables
 
-## Requirements
+- `AGENCY_AGENT_CMD` - Override the agent command (default: `pi`)
+- `XDG_CONFIG_HOME` - Config directory (default: `~/.config`)
 
-- `tmux` >= 1.8
-- `bash` >= 4.0
-- Optional: `yq` for YAML config parsing
+## Installation
 
-## License
+```bash
+# Run directly
+python3 agency.py --help
 
-MIT
+# Or symlink
+ln -s $(pwd)/agency.py /usr/local/bin/agency
+chmod +x agency.py
+```
+
+## Testing
+
+```bash
+./test_agency.sh
+```
+
+## Architecture
+
+- `agency.py` - Main CLI and session management
+- `generate_agent_script.py` - Helper for agent launch scripts
+- `mock_agent.py` - Mock agent for testing
