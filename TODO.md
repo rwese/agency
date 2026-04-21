@@ -16,10 +16,10 @@
 
 ## Stage 3: Lifecycle Management
 
-- [ ] 3.1 Agent selector (list available configs)
-- [ ] 3.2 Start agent from TUI
-- [ ] 3.3 Stop agent from TUI
-- [ ] 3.4 Confirmation dialogs
+- [x] 3.1 Agent selector (list available configs)
+- [x] 3.2 Start agent from TUI
+- [x] 3.3 Stop agent from TUI
+- [x] 3.4 Confirmation dialogs
 
 ## Stage 4: Task Board
 
