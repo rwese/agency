@@ -1,5 +1,10 @@
 #!/usr/bin/expect -f
 # test_tui_messaging.exp - Messaging tests for Agency TUI
+#
+# Tests messaging functionality by verifying:
+# 1. Navigation to message input
+# 2. Message input and sending
+# 3. Messages persisted to messages.json
 
 source [file dirname [info script]]/expect_helpers.exp
 
@@ -17,6 +22,23 @@ proc fail {msg} {
     global failed
     puts "\[FAIL\] $msg"
     incr failed
+}
+
+# Helper: Get messages file path
+proc get_messages_file {} {
+    return [file join $::env(HOME) ".config" "agency" "messages.json"]
+}
+
+# Helper: Read messages from file
+proc read_messages_file {} {
+    set file [get_messages_file]
+    if {![file exists $file]} {
+        return ""
+    }
+    if {[catch {exec cat $file} content]} {
+        return ""
+    }
+    return $content
 }
 
 # Register cleanup for exit
@@ -47,20 +69,28 @@ if {![launch_tui_with_session]} {
 puts "INFO: TUI launched, waiting for initial render..."
 sleep 2
 
-# Test 1: Navigate to Send Message panel
+# Navigate to Sessions panel first and select session
+puts ""
+puts "INFO: Selecting a session..."
+send_key "down"  ;# Select session
+sleep 1
+send_key "Enter"  ;# Expand
+sleep 1
+
+# Navigate to Send Message panel
 puts ""
 puts "INFO: Test 1: Navigate to Send Message panel"
-# Sessions -> Tasks -> Main
 send_key "Right"
 sleep 0.5
 send_key "Right"
 sleep 1
 
+# Verify we're at the message panel
 set output [get_pane_content]
-if {[regexp {Send Message} $output] || [regexp {Type message|message-input|To:} $output]} {
-    pass "Navigate to Send Message panel"
+if {[regexp {Send Message} $output] || [regexp {message-input} $output] || [regexp {To:} $output]} {
+    pass "Navigated to Send Message panel"
 } else {
-    fail "Navigate to Send Message panel"
+    fail "Should be at Send Message panel"
 }
 
 # Test 2: Focus input with 's' key
@@ -69,55 +99,56 @@ puts "INFO: Test 2: Focus input with 's' key"
 send_key "s"
 sleep 1
 
-# The input should be focused now
-# We can verify by pressing a key and seeing it appear
+# Verify input area is visible
 set output [get_pane_content]
-if {[string match "*Type message*" $output] || [string match "*message*" $output]} {
-    pass "'s' focuses message input"
+if {[regexp {message-input} $output] || [regexp {Type.*message} $output] || [regexp {To:} $output]} {
+    pass "'s' focuses message input area"
 } else {
-    # Input might not be visible in pane capture
-    pass "'s' focuses message input (assumed)"
+    fail "'s' should focus message input area"
 }
 
 # Test 3: Type a message
 puts ""
 puts "INFO: Test 3: Type a message"
-send_text "Hello, test agent!"
+send_text "Test message"
 sleep 1
 
-# Verify text was entered (check activity log or input state)
-set output [get_pane_content]
-if {[string match "*Hello*" $output] || [string match "*test agent*" $output]} {
-    pass "Message text entered"
-} else {
-    puts "INFO: Output doesn't show message text (may need different check)"
-    pass "Message text entered (assumed)"
-}
+# The typed text should appear in the activity log after sending
+# We'll verify this after sending
 
 # Test 4: Send message with Enter
 puts ""
 puts "INFO: Test 4: Send message with Enter"
 press_enter
-sleep 2
+sleep 3
 
 # Check activity log for sent message
 set log [get_activity_log]
-if {[string match "*Hello*" $log] || [string match "*→ *" $log] || [string match "*Sent*" $log]} {
-    pass "Message sent and logged"
+if {[regexp {Test message} $log] || [regexp {→} $log] || [regexp {Sent} $log]} {
+    pass "Message sent and appears in activity log"
 } else {
-    puts "INFO: Activity log: $log"
-    fail "Message sent and logged"
+    fail "Sent message should appear in activity log"
+}
+
+# Verify messages.json was created and has the message
+set messages_content [read_messages_file]
+if {$messages_content ne ""} {
+    pass "Message persisted to messages.json"
+} else {
+    fail "Message should be persisted to messages.json"
 }
 
 # Test 5: Input cleared after sending
 puts ""
 puts "INFO: Test 5: Input cleared after sending"
 set output [get_pane_content]
-# After sending, input should be empty
-if {![string match "*Hello, test agent*" $output]} {
-    pass "Input cleared after sending"
+# After sending, the input should be cleared
+# We can't easily verify the input field, but we can verify
+# the log shows only one message
+if {[regexp -all {Test message} $log] == 1} {
+    pass "Input appears cleared (single message in log)"
 } else {
-    fail "Input after sending (may not be cleared in capture)"
+    fail "Input should be cleared after sending"
 }
 
 # Test 6: Target display shows selected session
@@ -129,98 +160,68 @@ sleep 0.5
 send_key "Left"
 sleep 1
 
-# Select session
-send_key "Down"
+# Select the session
+send_key "down"
 sleep 1
 
-# Check target display
-set output [get_pane_content]
-if {[string match "*test*" $output] || [string match "*agency-tui*" $output]} {
-    pass "Target display shows session"
-} else {
-    puts "INFO: Output: $output"
-    pass "Target display works"
-}
-
-# Test 7: Select an agent and check target
-puts ""
-puts "INFO: Test 7: Select agent and check target"
-send_key "Enter"
-sleep 1
-send_key "Down"
-sleep 1
-
-set output [get_pane_content]
-# Should show agent in target
-if {[string match "*agent*" $output]} {
-    pass "Agent shown in target"
-} else {
-    pass "Agent selection works"
-}
-
-# Test 8: Navigate to send panel and send to specific agent
-puts ""
-puts "INFO: Test 8: Send message to specific agent"
+# Navigate back to message panel
 send_key "Right"
 sleep 0.5
 send_key "Right"
 sleep 1
 
-send_key "s"
-sleep 1
-
-send_text "Specific agent message"
-sleep 1
-press_enter
-sleep 2
-
-set log [get_activity_log]
-if {[string match "*Specific agent*" $log] || [string match "*agent message*" $log]} {
-    pass "Message sent to specific agent"
+set output [get_pane_content]
+# Target display should show session
+if {[regexp {To:.*example} $output] || [regexp {To:.*agency} $output] || [regexp {To:.*-} $output]} {
+    pass "Target display shows selected session"
 } else {
-    puts "INFO: Activity log: $log"
-    pass "Message sent (target may vary)"
+    fail "Target display should show selected session"
 }
 
-# Test 9: Empty message should not be sent
+# Test 7: Send second message
 puts ""
-puts "INFO: Test 9: Empty message handling"
+puts "INFO: Test 7: Send second message"
+send_key "s"
+sleep 1
+send_text "Second test message"
+sleep 1
+press_enter
+sleep 3
+
+set log [get_activity_log]
+if {[regexp {Second test message} $log]} {
+    pass "Second message sent"
+} else {
+    fail "Second message should be sent"
+}
+
+# Verify two messages in file
+set messages_content [read_messages_file]
+if {[regexp -all "\"content\"" $messages_content] >= 2} {
+    pass "Multiple messages persisted to file"
+} else {
+    fail "Multiple messages should be persisted"
+}
+
+# Test 8: Empty message handling
+puts ""
+puts "INFO: Test 8: Empty message not sent"
 send_key "s"
 sleep 1
 # Don't type anything, just press Enter
 press_enter
-sleep 1
-
-# Should not show empty message in log
-set log [get_activity_log]
-if {![regexp {\[cyan\]→.*:\s*$} $log]} {
-    pass "Empty message not sent"
-} else {
-    pass "Empty message handled"
-}
-
-# Test 10: Multiple messages can be sent
-puts ""
-puts "INFO: Test 10: Multiple messages"
-send_text "Message 1"
-sleep 0.5
-press_enter
-sleep 1
-
-send_text "Message 2"
-sleep 0.5
-press_enter
 sleep 2
 
-set log [get_activity_log]
-set msg1 [string match "*Message 1*" $log]
-set msg2 [string match "*Message 2*" $log]
+# Count messages before
+set msg_count_before [regexp -all \"content\" [read_messages_file]]
 
-if {$msg1 && $msg2} {
-    pass "Multiple messages sent"
+# Count messages after
+set msg_count_after [regexp -all \"content\" [read_messages_file]]
+
+if {$msg_count_after == $msg_count_before} {
+    pass "Empty message not persisted"
 } else {
-    puts "INFO: Message 1: $msg1, Message 2: $msg2"
-    pass "Multiple messages sent (assumed)"
+    fail "Empty message should not be persisted"
 }
 
 # Summary

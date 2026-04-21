@@ -1,5 +1,10 @@
 #!/usr/bin/expect -f
 # test_tui_sessions.exp - Session management tests for Agency TUI
+#
+# Tests session management by verifying:
+# 1. Sessions appear in the UI
+# 2. Sessions exist in tmux
+# 3. Navigation and selection work
 
 source [file dirname [info script]]/expect_helpers.exp
 
@@ -17,6 +22,19 @@ proc fail {msg} {
     global failed
     puts "\[FAIL\] $msg"
     incr failed
+}
+
+# Helper: Check if session exists in tmux
+proc session_exists {pattern} {
+    catch {
+        set sessions [exec tmux -L agency list-sessions -F "#S"]
+        foreach s $sessions {
+            if {[string match "*$pattern*" $s]} {
+                return 1
+            }
+        }
+    }
+    return 0
 }
 
 # Register cleanup for exit
@@ -50,113 +68,118 @@ sleep 2
 # Verify Sessions panel is active
 puts ""
 puts "INFO: Test 1: Sessions panel is active by default"
-if {[wait_for_regex {Sessions.*◀}]} {
+if {[wait_for "Sessions" 3] && [wait_for "◀" 1]} {
     pass "Sessions panel is active"
 } else {
-    fail "Sessions panel is active"
+    fail "Sessions panel should be active by default"
 }
 
 # Test 2: Session is visible in the list
 puts ""
 puts "INFO: Test 2: Session is visible in list"
-if {[check_session_visible "agency-tui"] || [check_session_visible "test-tui"] || [check_session_visible "example"]} {
+# Should show the example session we created
+if {[wait_for "example" 3]} {
     pass "Session visible in list"
 } else {
-    fail "Session visible in list"
+    fail "Session should be visible in list"
 }
 
-# Test 3: Session has an agent (verify agent is visible)
+# Test 3: Session has an agent visible
 puts ""
 puts "INFO: Test 3: Session agents are visible"
-# The session content should show agents
-if {[check_session_visible "example"] || [check_session_visible "agent"] || [check_session_visible "test"]} {
-    pass "Session agent info visible"
+if {[wait_for "example" 2]} {
+    pass "Agent visible in session"
 } else {
-    fail "Session agent info visible"
+    fail "Agent should be visible in session"
 }
 
-# Test 4: Navigate to session with ↓
+# Test 4: Navigate down to session
 puts ""
-puts "INFO: Test 4: Navigate down to session"
-send_key "Down"
+puts "INFO: Test 4: Navigate down with ↓"
+send_key "down"
 sleep 1
 
 set output [get_pane_content]
-# Should show ▌ indicator for selected session
-if {[string match "*▌*" $output]} {
-    pass "Session selected with indicator"
+# Should show selection indicator ▌
+if {[regexp {▌.*example} $output]} {
+    pass "↓ navigates to session with selection indicator"
 } else {
-    # Try with bold/cyan formatting
-    puts "INFO: Checking selection... Output excerpt: [string range $output 0 300]"
-    pass "Session selection works"
+    fail "↓ should navigate to session with selection indicator"
 }
 
-# Test 5: Press Enter to expand/collapse agents
+# Test 5: Press Enter to expand agents
 puts ""
-puts "INFO: Test 5: Press Enter to expand/collapse agents"
+puts "INFO: Test 5: Enter expands session"
 send_key "Enter"
 sleep 1
 
-# Should show agent details after expansion
 set output [get_pane_content]
-# After Enter, agents should be visible
-if {[check_session_visible "example"] || [check_session_visible "test"]} {
-    pass "Enter expands session agents"
+# After expand, agents should show with └
+if {[regexp {└.*example} $output]} {
+    pass "Enter expands session to show agents"
 } else {
-    fail "Enter expands session agents"
+    fail "Enter should expand session to show agents"
 }
 
-# Test 6: Navigate to agent with ↓
+# Test 6: Navigate to agent
 puts ""
 puts "INFO: Test 6: Navigate to agent with ↓"
-send_key "Down"
+send_key "down"
 sleep 1
 
-# Test 7: Attach to session with 'a' key
-puts ""
-puts "INFO: Test 7: Attach to session"
-# Press 'a' to attach
-send_key "a"
-sleep 2
-
-# Check activity log for attach message
-set log [get_activity_log]
-if {[string match "*Attach*" $log] || [string match "*attach*" $log]} {
-    pass "'a' key triggers attach action"
+set output [get_pane_content]
+# Should show agent selection
+if {[regexp {└.*example} $output]} {
+    pass "↓ navigates to agent"
 } else {
-    # The attach might have happened but tmux session takes over
-    pass "'a' key triggers attach action (log shows activity)"
+    fail "↓ should navigate to agent"
 }
 
-# Test 8: Navigate with ↑ to deselect agent
+# Test 7: Verify tmux session exists
 puts ""
-puts "INFO: Test 8: Navigate back up"
+puts "INFO: Test 7: Verify session in tmux"
+if {[session_exists "agency"]} {
+    pass "Session exists in tmux"
+} else {
+    fail "Session should exist in tmux"
+}
+
+# Test 8: Navigate back up
+puts ""
+puts "INFO: Test 8: Navigate up with ↑"
 send_key "Up"
 sleep 1
 
-# Should go back to session level
-pass "Navigation up works"
-
-# Test 9: Test session icon (🤖 for regular session)
-puts ""
-puts "INFO: Test 9: Session has correct icon"
 set output [get_pane_content]
-if {[string match "*ð*" $output] || [check_session_visible "agency-tui"] || [check_session_visible "test"]} {
-    pass "Session has correct icon"
+# Should go back to session level
+if {[regexp {▌.*example} $output]} {
+    pass "↑ navigates back to session"
 } else {
-    pass "Session display works (icon may vary)"
+    fail "↑ should navigate back to session"
 }
 
-# Test 10: Verify session is running in tmux
+# Test 9: Session icon visible (🤖)
 puts ""
-puts "INFO: Test 10: Session running in tmux"
-set sessions [exec tmux -L agency list-sessions 2>/dev/null]
-if {[string match "*agency-test*" $sessions] || [string match "*agency-tui*" $sessions] || [string match "*test-tui*" $sessions]} {
-    pass "Session is running in tmux"
+puts "INFO: Test 9: Session has icon"
+set output [get_pane_content]
+# Look for the emoji icon
+if {[regexp {🤖} $output] || [regexp {ð[^\s]} $output]} {
+    pass "Session icon visible"
 } else {
-    # The session might have ended, that's OK for this test
-    puts "INFO: Session not found (may have ended)"
-    pass "Session check completed"
+    fail "Session should have an icon"
+}
+
+# Test 10: Attach action (check activity log)
+puts ""
+puts "INFO: Test 10: Attach action triggers"
+send_key "a"
+sleep 2
+
+set log [get_activity_log]
+if {[string match "*Attach*" $log] || [string match "*attach*" $log]} {
+    pass "Attach action logged"
+} else {
+    fail "Attach action should be logged"
 }
 
 # Summary

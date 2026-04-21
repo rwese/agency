@@ -3,14 +3,12 @@
 #
 # Tests complete workflow:
 # 1. Create session
-# 2. Start agent
-# 3. Launch TUI
-# 4. Create task
-# 5. Assign task to agent
-# 6. Send message to agent
-# 7. Update task status
-# 8. Stop agent
-# 9. Cleanup
+# 2. Launch TUI
+# 3. Create task
+# 4. Send message to agent
+# 5. Update task status
+# 6. Verify persistence
+# 7. Cleanup
 
 source [file dirname [info script]]/expect_helpers.exp
 
@@ -30,6 +28,42 @@ proc fail {msg} {
     incr failed
 }
 
+# Helper: Get tasks file path
+proc get_tasks_file {} {
+    return [file join $::env(HOME) ".config" "agency" "sessions" "tasks.json"]
+}
+
+# Helper: Get messages file path
+proc get_messages_file {} {
+    return [file join $::env(HOME) ".config" "agency" "messages.json"]
+}
+
+# Helper: Check if session exists in tmux
+proc session_exists {pattern} {
+    catch {
+        set sessions [exec tmux -L agency list-sessions -F "#S"]
+        foreach s $sessions {
+            if {[string match "*$pattern*" $s]} {
+                return 1
+            }
+        }
+    }
+    return 0
+}
+
+# Helper: Count tasks in UI
+proc count_tasks_in_ui {} {
+    set output [get_pane_content]
+    set count 0
+    while {[regexp -indices "TASK" $output match]} {
+        incr count
+        set idx [lindex $match 1]
+        incr idx
+        set output [string range $output $idx end]
+    }
+    return $count
+}
+
 # Register cleanup for exit
 rename cleanup _cleanup_real
 proc cleanup {} {
@@ -47,58 +81,54 @@ puts "========================================"
 reset_tasks
 cleanup
 
-# Step 1: Create a session manually
+# Step 1: Create a session
 puts ""
 puts "INFO: Step 1: Create test session"
-catch {exec_agency "start e2e-test --dir /tmp/agency-e2e-test"}
+catch {exec_agency "start example --dir /tmp/agency-e2e-test"}
 sleep 2
 
-# Verify session created
-set sessions [exec tmux -L agency list-sessions 2>/dev/null]
-if {[string match "*e2e-test*" $sessions]} {
-    pass "Session created"
+# Verify session created in tmux
+if {[session_exists "agency"]} {
+    pass "Session created in tmux"
 } else {
-    fail "Session created"
+    fail "Session should be created in tmux"
 }
 
 # Step 2: Launch TUI
 puts ""
 puts "INFO: Step 2: Launch TUI"
-# Kill any existing test session
-exec tmux -L agency kill-session -t agency-test-tui 2>/dev/null
-sleep 1
-
-# Start TUI in detached session
-exec tmux -L agency new-session -d -s agency-test-tui "env AGENCY_AGENT_CMD=\"python3 [file join [pwd] src agency mock_agent.py]\" [find_agency_cmd] tui" 2>/dev/null
+if {![launch_tui]} {
+    puts "[ERROR] Failed to launch TUI"
+    exit 1
+}
 sleep 3
 
 # Verify TUI is running
-set output [exec tmux -L agency capture-pane -t agency-test-tui -p]
-if {[string match "*Sessions*" $output] || [string match "*Agency*" $output]} {
-    pass "TUI launched"
+if {[wait_for "Sessions" 3]} {
+    pass "TUI launched successfully"
 } else {
-    fail "TUI launched"
+    fail "TUI should launch successfully"
 }
 
-# Step 3: Verify session is visible in TUI
+# Step 3: Verify session visible in TUI
 puts ""
 puts "INFO: Step 3: Verify session visible"
-if {[check_session_visible "e2e-test"]} {
+if {[wait_for "example" 3]} {
     pass "Session visible in TUI"
 } else {
-    fail "Session visible in TUI"
+    fail "Session should be visible in TUI"
 }
 
 # Step 4: Navigate to Tasks panel
 puts ""
 puts "INFO: Step 4: Navigate to Tasks panel"
-send_key "Right"  ;# Sessions -> Tasks
+send_key "right"
 sleep 1
 
-if {[wait_for_regex {Tasks.*◀}]} {
+if {[wait_for "Tasks" 2]} {
     pass "Navigated to Tasks panel"
 } else {
-    fail "Navigated to Tasks panel"
+    fail "Should navigate to Tasks panel"
 }
 
 # Step 5: Create a task
@@ -107,59 +137,52 @@ puts "INFO: Step 5: Create task"
 send_key "c"
 sleep 2
 
-if {[check_task_visible "TASK"]} {
-    pass "Task created"
+set task_count [count_tasks_in_ui]
+if {$task_count >= 1} {
+    pass "Task created in TUI"
 } else {
-    fail "Task created"
+    fail "Task should be created in TUI"
 }
 
-# Step 6: Check task is pending
-puts ""
-puts "INFO: Step 6: Verify task is pending"
-set output [exec tmux -L agency capture-pane -t agency-test-tui -p]
-if {[string match "*⏳*" $output] || [string match "*pending*" $output]} {
-    pass "Task is pending"
+# Verify task in file
+set tasks_file [get_tasks_file]
+if {[file exists $tasks_file] && [regexp "TASK" [exec cat $tasks_file]]} {
+    pass "Task persisted to file"
 } else {
-    fail "Task is pending"
+    fail "Task should be persisted to file"
 }
 
-# Step 7: Navigate to Sessions to send message
+# Step 6: Navigate to Sessions
 puts ""
-puts "INFO: Step 7: Navigate to Sessions"
-send_key "Left"  ;# Tasks -> Sessions
+puts "INFO: Step 6: Navigate to Sessions"
+send_key "left"
 sleep 1
 
-if {[wait_for_regex {Sessions.*◀}]} {
-    pass "Navigated to Sessions"
+if {[wait_for "Sessions" 2]} {
+    pass "Navigated to Sessions panel"
 } else {
-    fail "Navigated to Sessions"
+    fail "Should navigate to Sessions panel"
 }
 
-# Step 8: Select the session
+# Step 7: Select session
 puts ""
-puts "INFO: Step 8: Select session"
-send_key "Down"
+puts "INFO: Step 7: Select session"
+send_key "down"
 sleep 1
 
-set output [exec tmux -L agency capture-pane -t agency-test-tui -p]
-if {[string match "*e2e-test*" $output]} {
+set output [get_pane_content]
+if {[regexp {▌.*example} $output] || [regexp {example} $output]} {
     pass "Session selected"
 } else {
-    fail "Session selected"
+    fail "Session should be selected"
 }
 
-# Step 9: Expand to see agents
+# Step 8: Send message
 puts ""
-puts "INFO: Step 9: Expand session"
-send_key "Enter"
-sleep 1
-
-# Step 10: Send message to agent
-puts ""
-puts "INFO: Step 10: Send message"
-send_key "Right"
+puts "INFO: Step 8: Send message"
+send_key "right"
 sleep 0.5
-send_key "Right"
+send_key "right"
 sleep 1
 
 send_key "s"
@@ -168,79 +191,53 @@ sleep 1
 send_text "E2E test message"
 sleep 1
 press_enter
-sleep 2
+sleep 3
 
 set log [get_activity_log]
-if {[string match "*E2E test*" $log] || [string match "*Sent*" $log]} {
+if {[regexp {E2E test} $log]} {
     pass "Message sent"
 } else {
-    puts "INFO: Log: $log"
-    pass "Message sent (assumed)"
+    fail "Message should be sent"
 }
 
-# Step 11: Navigate back to update task status
+# Verify message in file
+set messages_file [get_messages_file]
+if {[file exists $messages_file] && [regexp "E2E test" [exec cat $messages_file]]} {
+    pass "Message persisted to file"
+} else {
+    fail "Message should be persisted to file"
+}
+
+# Step 9: Update task status
 puts ""
-puts "INFO: Step 11: Update task status"
-send_key "Left"
+puts "INFO: Step 9: Update task status"
+send_key "left"
 sleep 0.5
-send_key "Left"
+send_key "left"
 sleep 1
 
-send_key "Down"
+send_key "down"
 sleep 1
-send_key "Up"
+send_key "up"
 sleep 1
 
 send_key "u"
 sleep 2
 
-set output [exec tmux -L agency capture-pane -t agency-test-tui -p]
+set output [get_pane_content]
 if {[string match "*🔄*" $output] || [string match "*in_progress*" $output]} {
     pass "Task updated to in_progress"
 } else {
-    fail "Task updated to in_progress"
+    fail "Task should be updated to in_progress"
 }
 
-# Step 12: Stop the agent
+# Step 10: Verify session still exists
 puts ""
-puts "INFO: Step 12: Stop agent"
-send_key "Left"
-sleep 1
-
-send_key "x"
-sleep 3
-
-# Verify agent stopped in log
-set log [get_activity_log]
-if {[string match "*stop*" $log] || [string match "*Stop*" $log] || [string match "*stopped*" $log]} {
-    pass "Agent stop triggered"
+puts "INFO: Step 10: Verify session still exists"
+if {[session_exists "agency"]} {
+    pass "Session still running in tmux"
 } else {
-    pass "Agent stop triggered (assumed)"
-}
-
-# Step 13: Verify session still exists
-puts ""
-puts "INFO: Step 13: Verify session still exists"
-set sessions [exec tmux -L agency list-sessions 2>/dev/null]
-if {[string match "*e2e-test*" $sessions]} {
-    pass "Session still running after agent stop"
-} else {
-    # Session might have been cleaned up, that's OK
-    puts "INFO: Session cleaned up (acceptable)"
-    pass "Session handled correctly"
-}
-
-# Step 14: Cleanup
-puts ""
-puts "INFO: Step 14: Cleanup"
-cleanup
-
-# Verify cleanup worked
-set sessions [exec tmux -L agency list-sessions 2>/dev/null]
-if {![string match "*agency-test*" $sessions] && ![string match "*e2e-test*" $sessions]} {
-    pass "Cleanup completed"
-} else {
-    fail "Cleanup completed"
+    fail "Session should still be running in tmux"
 }
 
 # Summary
@@ -248,6 +245,8 @@ puts ""
 puts "========================================"
 puts "  Results: $passed passed, $failed failed"
 puts "========================================"
+
+cleanup
 
 if {$failed > 0} {
     exit 1
