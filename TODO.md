@@ -23,10 +23,10 @@
 
 ## Stage 4: Task Board
 
-- [ ] 4.1 Task list widget
-- [ ] 4.2 Status filters
-- [ ] 4.3 Task detail view
-- [ ] 4.4 Refresh on tasks.json change
+- [x] 4.1 Task list widget
+- [x] 4.2 Status filters
+- [x] 4.3 Task detail view
+- [x] 4.4 Refresh on tasks.json change
 
 ## Stage 5: Polish
 

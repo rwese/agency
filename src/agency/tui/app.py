@@ -13,6 +13,7 @@ from textual.timer import Timer
 from textual.widgets import Footer, Header, Input, Static, Log
 
 from agency.tui.widgets.session_list import SessionList, SessionInfo, SessionSelected
+from agency.tui.widgets.task_board import TaskBoard, TaskInfo
 
 
 # Tmux socket for agency sessions
@@ -89,6 +90,31 @@ def list_available_managers() -> list[str]:
     return sorted([f.stem for f in managers_dir.glob("*.yaml")])
 
 
+def load_tasks() -> list[TaskInfo]:
+    """Load tasks from JSON file."""
+    import json
+    tasks_file = Path.home() / ".config" / "agency" / "sessions" / "tasks.json"
+    if not tasks_file.exists():
+        return []
+
+    with open(tasks_file) as f:
+        data = json.load(f)
+
+    tasks = []
+    for tid, tdata in data.items():
+        tasks.append(TaskInfo(
+            task_id=tdata.get("task_id", tid),
+            description=tdata.get("description", ""),
+            status=tdata.get("status", "pending"),
+            assigned_to=tdata.get("assigned_to"),
+            created_at=tdata.get("created_at"),
+            completed_at=tdata.get("completed_at"),
+            result=tdata.get("result"),
+        ))
+
+    return tasks
+
+
 class SendMessage(Message):
     """Message sent when user sends a message."""
     def __init__(self, session: str, agent: str | None, message: str) -> None:
@@ -130,7 +156,7 @@ class AgencyTUI(App):
     }
 
     #sidebar {
-        width: 30;
+        width: 28;
         dock: left;
         background: $panel;
     }
@@ -143,8 +169,22 @@ class AgencyTUI(App):
         text-style: bold;
     }
 
+    #task-panel {
+        width: 28;
+        dock: left;
+        background: $panel;
+    }
+
+    #task-panel-header {
+        dock: top;
+        height: 1;
+        content-align: center middle;
+        background: $accent 20%;
+        text-style: bold;
+    }
+
     #main-area {
-        width: 100%;
+        width: 1fr;
     }
 
     #detail-header {
@@ -219,6 +259,9 @@ class AgencyTUI(App):
             with Vertical(id="sidebar"):
                 yield Static("Sessions", id="sidebar-header")
                 yield SessionList()
+            with Vertical(id="task-panel"):
+                yield Static("Tasks", id="task-panel-header")
+                yield TaskBoard()
             with Container(id="main-area"):
                 yield Static("Select a session", id="detail-header")
                 yield Static("", id="session-detail")
@@ -239,16 +282,21 @@ class AgencyTUI(App):
         self.sub_title = "AI Agent Session Manager"
 
         # Start auto-refresh timer (every 2 seconds)
-        self._refresh_timer = self.set_interval(2.0, self.refresh_sessions)
+        self._refresh_timer = self.set_interval(2.0, self.refresh_all)
 
         # Initial load
-        self.refresh_sessions()
+        self.refresh_all()
         self.query_one(SessionList).focus()
 
     def on_unmount(self) -> None:
         """Called when app is unmounted."""
         if self._refresh_timer:
             self._refresh_timer.stop()
+
+    def refresh_all(self) -> None:
+        """Refresh all data sources."""
+        self.refresh_sessions()
+        self.refresh_tasks()
 
     def refresh_sessions(self) -> None:
         """Refresh the session list."""
@@ -265,6 +313,12 @@ class AgencyTUI(App):
             else:
                 self._selected_session = None
                 self.update_session_detail(None)
+
+    def refresh_tasks(self) -> None:
+        """Refresh the task board."""
+        tasks = load_tasks()
+        task_board = self.query_one("#task-panel TaskBoard", TaskBoard)
+        task_board.watch_tasks(tasks)
 
     def update_session_detail(self, session: SessionInfo | None) -> None:
         """Update the session detail panel."""
