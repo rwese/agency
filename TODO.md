@@ -1,58 +1,36 @@
-# TODO: Agency E2E Integration Test
+# Agency TUI Implementation
 
-## Status: ✓ COMPLETE
+## Stage 1: Foundation
 
-## Summary
+- [x] 1.1 Add `textual` dependency to pyproject.toml
+- [x] 1.2 Create `agency tui` command
+- [x] 1.3 Session list widget
+- [x] 1.4 Auto-refresh timer
 
-E2E test ran successfully on 2026-04-21.
+## Stage 2: Agent Interaction
 
-## Test Results
+- [x] 2.1 Message input panel
+- [x] 2.2 Message log storage (messages.json)
+- [x] 2.3 Attach action (jump to tmux)
+- [x] 2.4 Status indicators (color-coded)
 
-| Metric | Result |
-|--------|--------|
-| Manager started | ✓ |
-| Coder created todo.py | ✓ (3118 bytes) |
-| Tester created test_todo.py | ✓ (4245 bytes) |
-| Tests run | 4/7 passed |
-| Test failures | Minor (state pollution, path issues) |
+## Stage 3: Lifecycle Management
 
-## Files Created
+- [ ] 3.1 Agent selector (list available configs)
+- [ ] 3.2 Start agent from TUI
+- [ ] 3.3 Stop agent from TUI
+- [ ] 3.4 Confirmation dialogs
 
-```
-e2e/test-todo-app/
-├── agents/
-│   ├── coder.yaml          # Coder agent prompt
-│   └── tester.yaml        # Tester agent prompt
-├── managers/
-│   └── coordinator.yaml   # Manager with protocol
-├── README.md             # Test documentation
-└── e2e-proof.txt         # Proof of work
-```
+## Stage 4: Task Board
 
-## Issues Found
+- [ ] 4.1 Task list widget
+- [ ] 4.2 Status filters
+- [ ] 4.3 Task detail view
+- [ ] 4.4 Refresh on tasks.json change
 
-1. **Badge in window name breaks scripts** - Window name with `[MGR]` causes shell escaping issues. Fixed by using empty badge.
+## Stage 5: Polish
 
-2. **Wrong session name in coordinator prompt** - Prompt uses `e2e-test` but actual session is `agency-test`. Minor issue.
-
-3. **TextLog import error in tui/app.py** - Pre-existing issue, TextLog renamed in newer textual.
-
-## Usage
-
-```bash
-# Initialize test directory
-just e2e-test-init
-
-# Start coordinator
-just e2e-test-start
-
-# Attach to interact (in another terminal)
-just e2e-test-attach
-
-# Clean up
-just e2e-test-clean
-```
-
-## Proof
-
-See `e2e/test-todo-app/e2e-proof.txt` for full test output.
+- [ ] 5.1 Message history panel
+- [ ] 5.2 Filter/search bar
+- [ ] 5.3 Keybindings help
+- [ ] 5.4 Theme toggle
