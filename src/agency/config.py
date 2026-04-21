@@ -41,10 +41,19 @@ class AgentConfig:
 
 
 def _has_unresolved_vars(path: str) -> bool:
-    """Check if path contains unresolved ${VAR} or $VAR patterns."""
+    """Check if path contains unresolved ${VAR} or $VAR patterns.
+
+    Ignores AGENCY_* vars which are set at session start, not config load time.
+    """
     import re
 
-    return bool(re.search(r"\$\{[^}]+\}|\$[A-Z_][A-Z0-9_]*", path))
+    # Match ${VAR} or $VAR but not AGENCY_* vars (deferred to session start)
+    unresolved = re.findall(r"(?:\$\{([^}]+)\}|\$([A-Z_][A-Z0-9_]*))", path)
+    for var in unresolved:
+        full_var = var[0] or var[1]  # either ${VAR} or $VAR format
+        if not full_var.startswith("AGENCY_"):
+            return True
+    return False
 
 
 def load_agency_config(agency_dir: Path) -> AgencyConfig:

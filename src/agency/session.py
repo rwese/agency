@@ -442,9 +442,14 @@ def _generate_manager_launch_script(
     context_files = discover_context_files(work_dir, work_dir)  # Use work_dir as git_root for now
 
     # Add custom context files from config if specified
+    # Re-expand AGENCY_* vars here since they're available at session start
     if agency_config.additional_context_files:
+        import os
+
         for cf in agency_config.additional_context_files:
-            cf_path = Path(cf)
+            # Expand AGENCY_* vars (already expanded HOME, etc. at config load)
+            cf_expanded = os.path.expandvars(cf)
+            cf_path = Path(cf_expanded)
             if cf_path.is_absolute() and cf_path.exists():
                 context_files.append(cf_path)
             elif not cf_path.is_absolute():
@@ -531,9 +536,14 @@ def _generate_agent_launch_script(
     context_files = discover_context_files(work_dir, work_dir)
 
     # Add custom context files from config if specified
+    # Re-expand AGENCY_* vars here since they're available at session start
     if agency_config.additional_context_files:
+        import os
+
         for cf in agency_config.additional_context_files:
-            cf_path = Path(cf)
+            # Expand AGENCY_* vars (already expanded HOME, etc. at config load)
+            cf_expanded = os.path.expandvars(cf)
+            cf_path = Path(cf_expanded)
             if cf_path.is_absolute() and cf_path.exists():
                 context_files.append(cf_path)
             elif not cf_path.is_absolute():
