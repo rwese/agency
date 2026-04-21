@@ -26,3 +26,6 @@ Thumbs.db
 
 # Agency
 sessions/
+
+# Agency project configs (per-user)
+.agency/
