@@ -156,8 +156,8 @@ agents:
 | `AGENCY_DIR` | Path to `.agency/` |
 | `AGENCY_AGENT` | Agent name |
 | `AGENCY_MANAGER` | Manager name |
-| `PI_CODING_AGENT` | Set for agents |
-| `PI_AGENCY_MANAGER` | Set for manager |
+| `AGENCY_ROLE` | Set for agents |
+| `AGENCY_ROLE` | Set for manager |
 
 ## Testing
 

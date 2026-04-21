@@ -161,7 +161,7 @@ pending → in_progress → pending_approval → completed
 | `AGENCY_AGENT` | Agent name (set for agents) |
 | `AGENCY_MANAGER` | Manager name (set for manager) |
 | `AGENCY_ROLE` | `MANAGER` or `AGENT` |
-| `PI_AGENCY_RESUMING` | `true` on resume |
+| `AGENCY_RESUMING` | `true` on resume |
 
 ## Development
 

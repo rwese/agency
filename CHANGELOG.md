@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Halt/Resume
 - **Halt detection**: `.halted` file + session/window rename
-- **Graceful resume**: Manager restarts with `PI_AGENCY_RESUMING=true`
+- **Graceful resume**: Manager restarts with `AGENCY_RESUMING=true`
 - **Pending preservation**: Incomplete tasks preserved across resume
 
 #### Manager Capabilities
