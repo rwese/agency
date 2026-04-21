@@ -442,6 +442,20 @@ def build_parser() -> argparse.ArgumentParser:
     tasks_complete.add_argument("--diff", help="Git diff")
     tasks_complete.add_argument("--summary", help="Summary")
 
+    # tasks approve
+    tasks_approve = tasks_sub.add_parser("approve", help="Approve task")
+    tasks_approve.add_argument("task_id", help="Task ID")
+
+    # tasks reject
+    tasks_reject = tasks_sub.add_parser("reject", help="Reject task")
+    tasks_reject.add_argument("task_id", help="Task ID")
+    tasks_reject.add_argument("--reason", required=True, help="Rejection reason")
+    tasks_reject.add_argument("--suggestions", nargs="*", help="Suggestions for agent")
+
+    # tasks reopen
+    tasks_reopen = tasks_sub.add_parser("reopen", help="Reopen task")
+    tasks_reopen.add_argument("task_id", help="Task ID")
+
     # tasks update
     tasks_update = tasks_sub.add_parser("update", help="Update task")
     tasks_update.add_argument("task_id", help="Task ID")

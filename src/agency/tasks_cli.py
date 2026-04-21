@@ -26,6 +26,12 @@ def handle_tasks_command(args: argparse.Namespace, agency_dir: Path) -> int:
         return cmd_assign(store, args)
     elif args.tasks_command == "complete":
         return cmd_complete(store, args)
+    elif args.tasks_command == "approve":
+        return cmd_approve(store, args)
+    elif args.tasks_command == "reject":
+        return cmd_reject(store, args)
+    elif args.tasks_command == "reopen":
+        return cmd_reopen(store, args)
     elif args.tasks_command == "update":
         return cmd_update(store, args)
     elif args.tasks_command == "delete":
@@ -34,7 +40,7 @@ def handle_tasks_command(args: argparse.Namespace, agency_dir: Path) -> int:
         return cmd_history(store, args)
     else:
         print(
-            "Usage: agency tasks <list|add|show|assign|complete|update|delete|history>",
+            "Usage: agency tasks <list|add|show|assign|complete|approve|reject|reopen|update|delete|history>",
             file=sys.stderr,
         )
         return 1
@@ -177,6 +183,55 @@ def cmd_complete(store: TaskStore, args: argparse.Namespace) -> int:
         return 0
     else:
         print("[ERROR] Failed to complete task", file=sys.stderr)
+        return 1
+
+
+def cmd_approve(store: TaskStore, args: argparse.Namespace) -> int:
+    """Approve a pending task completion."""
+    if store.approve_task(args.task_id):
+        print(f"[INFO] Task {args.task_id} approved and archived")
+        return 0
+    else:
+        print("[ERROR] Failed to approve task", file=sys.stderr)
+        return 1
+
+
+def cmd_reject(store: TaskStore, args: argparse.Namespace) -> int:
+    """Reject a pending task completion."""
+    if store.reject_task(args.task_id, reason=args.reason, suggestions=args.suggestions):
+        print(f"[INFO] Task {args.task_id} rejected")
+        return 0
+    else:
+        print("[ERROR] Failed to reject task", file=sys.stderr)
+        return 1
+
+
+def cmd_reopen(store: TaskStore, args: argparse.Namespace) -> int:
+    """Reopen a completed or failed task."""
+    task = store.get_task(args.task_id)
+    if not task:
+        print(f"[ERROR] Task not found: {args.task_id}", file=sys.stderr)
+        return 1
+
+    if task.status not in ("completed", "failed"):
+        print(f"[ERROR] Task {args.task_id} is not completed or failed", file=sys.stderr)
+        return 1
+
+    if store.update_task(args.task_id, status="pending"):
+        # Clear result fields
+        import json
+        task_json_path = store.agency_dir / "tasks" / args.task_id / "task.json"
+        if task_json_path.exists():
+            data = json.loads(task_json_path.read_text())
+            data["status"] = "pending"
+            data["completed_at"] = None
+            data["result"] = None
+            task_json_path.write_text(json.dumps(data, indent=2))
+
+        print(f"[INFO] Task {args.task_id} reopened")
+        return 0
+    else:
+        print("[ERROR] Failed to reopen task", file=sys.stderr)
         return 1
 
 
