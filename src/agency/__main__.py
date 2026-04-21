@@ -52,9 +52,15 @@ def find_git_root(path: Path = Path.cwd()) -> Path | None:
 
 @click.group()
 @click.version_option(version=VERSION)
-def cli():
+@click.pass_context
+def cli(ctx):
     """Agency - AI Agent Session Manager."""
-    pass
+    role = os.environ.get("AGENCY_ROLE", "").upper()
+    if role in ("MANAGER", "AGENT"):
+        ctx.info_name = f"agency ({role.lower()})"
+
+
+# === Project Commands ===
 
 
 # === Project Commands ===
@@ -1063,18 +1069,39 @@ def tmux_run(ctx, window, command):
     click.echo(f"[OK] Running in {window}: {command}")
 
 
-# Register commands
-cli.add_command(init_project, name="init")
-cli.add_command(start)
-cli.add_command(stop)
-cli.add_command(kill)
-cli.add_command(resume)
-cli.add_command(attach)
-cli.add_command(list)
-cli.add_command(members)
-cli.add_command(tasks)
-cli.add_command(completions)
-cli.add_command(tmux_cmd)
+# Register commands based on AGENCY_ROLE
+_agency_role = os.environ.get("AGENCY_ROLE", "").upper()
+
+if _agency_role == "MANAGER":
+    # Manager sees: all commands except completions
+    cli.add_command(init_project, name="init")
+    cli.add_command(start)
+    cli.add_command(stop)
+    cli.add_command(kill)
+    cli.add_command(resume)
+    cli.add_command(attach)
+    cli.add_command(list)
+    cli.add_command(members)
+    cli.add_command(tasks)
+    cli.add_command(tmux_cmd)
+elif _agency_role == "AGENT":
+    # Agent sees: only task and member commands
+    cli.add_command(members)
+    cli.add_command(tasks)
+    cli.add_command(list)
+else:
+    # Default: all commands
+    cli.add_command(init_project, name="init")
+    cli.add_command(start)
+    cli.add_command(stop)
+    cli.add_command(kill)
+    cli.add_command(resume)
+    cli.add_command(attach)
+    cli.add_command(list)
+    cli.add_command(members)
+    cli.add_command(tasks)
+    cli.add_command(completions)
+    cli.add_command(tmux_cmd)
 
 
 def main():
