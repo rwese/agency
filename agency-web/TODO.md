@@ -5,10 +5,10 @@
 ## Tasks
 
 ### Phase 1: Infrastructure
-- [ ] 1.1 Backend project scaffolding (Hono, Prisma, TypeScript)
-- [ ] 1.2 Frontend project scaffolding (React, Vite, Tailwind)
-- [ ] 1.3 Docker Compose setup (backend, frontend, postgres)
-- [ ] 1.4 CI/CD pipeline (GitHub Actions)
+- [x] 1.1 Backend project scaffolding (Hono, Prisma, TypeScript)
+- [x] 1.2 Frontend project scaffolding (React, Vite, Tailwind)
+- [x] 1.3 Docker Compose setup (backend, frontend, postgres)
+- [x] 1.4 CI/CD pipeline (GitHub Actions)
 
 ### Phase 2: Backend Core
 - [ ] 2.1 Prisma schema from DATA_MODEL.md

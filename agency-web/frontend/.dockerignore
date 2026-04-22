@@ -1,0 +1,45 @@
+# Git
+.git
+.gitignore
+
+# Dependencies (will be rebuilt in container)
+node_modules/
+
+# Build outputs
+dist/
+
+# Environment files
+.env
+.env.*
+.env.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+
+# Playwright
+playwright-report/
+test-results/
+
+# Docker
+docker-compose.yml
+Dockerfile
+Dockerfile.dev
+.dockerignore
+
+# Development files
+*.md
+LICENSE

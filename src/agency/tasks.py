@@ -34,6 +34,7 @@ class Task:
     completed_at: str | None = None
     result: str | None = None
     result_path: str | None = None
+    depends_on: list[str] | None = None  # List of task IDs this task depends on
 
     def to_dict(self) -> dict:
         return {
@@ -47,6 +48,7 @@ class Task:
             "completed_at": self.completed_at,
             "result": self.result,
             "result_path": self.result_path,
+            "depends_on": self.depends_on,
         }
 
     @classmethod
@@ -62,6 +64,7 @@ class Task:
             completed_at=data.get("completed_at"),
             result=data.get("result"),
             result_path=data.get("result_path"),
+            depends_on=data.get("depends_on"),
         )
 
 
@@ -110,8 +113,15 @@ class TaskStore:
         self,
         status: str | None = None,
         assignee: str | None = None,
+        include_blocked: bool = False,
     ) -> list[Task]:
-        """List tasks with optional filtering."""
+        """List tasks with optional filtering.
+        
+        Args:
+            status: Filter by task status
+            assignee: Filter by assigned agent
+            include_blocked: If False, filter out tasks with incomplete dependencies
+        """
         data = self._read_tasks_json()
         tasks = [Task.from_dict(t) for t in data.get("tasks", {}).values()]
 
@@ -121,7 +131,42 @@ class TaskStore:
         if assignee:
             tasks = [t for t in tasks if t.assigned_to == assignee]
 
+        if not include_blocked:
+            tasks = [t for t in tasks if not self._has_blocked_dependencies(t)]
+
         return tasks
+
+    def _has_blocked_dependencies(self, task: Task) -> bool:
+        """Check if task has incomplete dependencies.
+        
+        A task is blocked if any of its dependencies are not completed.
+        """
+        if not task.depends_on:
+            return False
+
+        for dep_id in task.depends_on:
+            dep_task = self.get_task(dep_id)
+            if dep_task is None:
+                # Dependency task doesn't exist - consider it as blocking
+                return True
+            if dep_task.status != "completed":
+                return True
+
+        return False
+
+    def get_blocked_by(self, task_id: str) -> list[Task]:
+        """Get list of tasks blocking the given task."""
+        task = self.get_task(task_id)
+        if not task or not task.depends_on:
+            return []
+
+        blocking = []
+        for dep_id in task.depends_on:
+            dep_task = self.get_task(dep_id)
+            if dep_task and dep_task.status != "completed":
+                blocking.append(dep_task)
+
+        return blocking
 
     def get_task(self, task_id: str) -> Task | None:
         """Get a single task by ID."""
@@ -193,6 +238,14 @@ class TaskStore:
             if task_id not in tasks:
                 return False
 
+            task = Task.from_dict(tasks[task_id])
+
+            # Check if task is blocked by dependencies
+            if self._has_blocked_dependencies(task):
+                blocking = self.get_blocked_by(task_id)
+                blocking_ids = [t.task_id for t in blocking]
+                raise ValueError(f"Task {task_id} is blocked by incomplete dependencies: {blocking_ids}")
+
             # Check if agent is free (no in_progress tasks)
             for tid, t in tasks.items():
                 if t.get("assigned_to") == agent and t.get("status") == "in_progress":
@@ -211,6 +264,100 @@ class TaskStore:
                 )
 
             return True
+
+    def set_dependencies(self, task_id: str, depends_on: list[str]) -> bool:
+        """Set dependencies for a task.
+        
+        Args:
+            task_id: The task to add dependencies to
+            depends_on: List of task IDs this task depends on
+            
+        Returns:
+            True if dependencies were set successfully
+        """
+        with self._lock():
+            data = self._read_tasks_json()
+            tasks = data.get("tasks", {})
+
+            if task_id not in tasks:
+                return False
+
+            # Validate that all dependency tasks exist
+            for dep_id in depends_on:
+                if dep_id not in tasks:
+                    raise ValueError(f"Dependency task does not exist: {dep_id}")
+                if dep_id == task_id:
+                    raise ValueError(f"Task cannot depend on itself: {task_id}")
+
+            # Check for circular dependencies
+            if self._would_create_cycle(task_id, depends_on):
+                raise ValueError(f"Setting these dependencies would create a circular dependency")
+
+            tasks[task_id]["depends_on"] = depends_on
+            self._write_tasks_json(data)
+
+            # Update task.json in task directory
+            task_json_path = self.agency_dir / TASKS_DIR / task_id / "task.json"
+            if task_json_path.exists():
+                task_json_path.write_text(json.dumps(tasks[task_id], indent=2))
+
+            # Audit log
+            audit = self._get_audit_store()
+            if audit:
+                audit.log_task(
+                    action="update",
+                    task_id=task_id,
+                    details={"depends_on": depends_on},
+                )
+
+            return True
+
+    def _would_create_cycle(self, task_id: str, new_depends_on: list[str]) -> bool:
+        """Check if adding dependencies would create a cycle.
+        
+        A cycle exists if task_id depends on a task that (directly or indirectly)
+        depends on task_id.
+        """
+        visited: set[str] = set()
+        stack: list[str] = list(new_depends_on)
+
+        while stack:
+            current = stack.pop()
+            if current == task_id:
+                return True  # Found a cycle
+            if current in visited:
+                continue
+            visited.add(current)
+
+            task = self.get_task(current)
+            if task and task.depends_on:
+                stack.extend(task.depends_on)
+
+        return False
+
+    def add_dependency(self, task_id: str, depends_on: str) -> bool:
+        """Add a single dependency to a task."""
+        task = self.get_task(task_id)
+        if not task:
+            return False
+
+        current_deps = list(task.depends_on) if task.depends_on else []
+        if depends_on not in current_deps:
+            current_deps.append(depends_on)
+            return self.set_dependencies(task_id, current_deps)
+        return True  # Already has this dependency
+
+    def remove_dependency(self, task_id: str, depends_on: str) -> bool:
+        """Remove a dependency from a task."""
+        task = self.get_task(task_id)
+        if not task or not task.depends_on:
+            return False
+
+        if depends_on not in task.depends_on:
+            return False
+
+        new_deps = [d for d in task.depends_on if d != depends_on]
+        return self.set_dependencies(task_id, new_deps)
 
     def update_task(
         self,

@@ -362,3 +362,197 @@ class TestTaskStoreFileLocking:
 
         assert data["version"] == 2
         assert "tasks" in data
+
+
+class TestTaskDependencies:
+    """Test task dependency functionality."""
+
+    @pytest.fixture
+    def temp_agency_dir(self):
+        """Create a temporary .agency directory."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            agency_dir = Path(tmpdir) / ".agency"
+            agency_dir.mkdir()
+            (agency_dir / "tasks").mkdir()
+            (agency_dir / "pending").mkdir()
+            yield agency_dir
+
+    @pytest.fixture
+    def store(self, temp_agency_dir):
+        """Create a TaskStore instance."""
+        return TaskStore(temp_agency_dir)
+
+    def test_set_dependencies(self, store):
+        """Test setting dependencies for a task."""
+        task1 = store.add_task(description="Task 1")
+        task2 = store.add_task(description="Task 2")
+
+        result = store.set_dependencies(task2.task_id, [task1.task_id])
+
+        assert result is True
+        updated = store.get_task(task2.task_id)
+        assert updated.depends_on == [task1.task_id]
+
+    def test_set_dependencies_nonexistent(self, store):
+        """Test setting dependencies with nonexistent task."""
+        task1 = store.add_task(description="Task 1")
+
+        with pytest.raises(ValueError, match="does not exist"):
+            store.set_dependencies(task1.task_id, ["nonexistent-id"])
+
+    def test_set_dependencies_self_reference(self, store):
+        """Test that a task cannot depend on itself."""
+        task1 = store.add_task(description="Task 1")
+
+        with pytest.raises(ValueError, match="cannot depend on itself"):
+            store.set_dependencies(task1.task_id, [task1.task_id])
+
+    def test_circular_dependency_detection(self, store):
+        """Test that circular dependencies are detected."""
+        task1 = store.add_task(description="Task 1")
+        task2 = store.add_task(description="Task 2")
+        task3 = store.add_task(description="Task 3")
+
+        # Task1 depends on nothing
+        # Task2 depends on Task1 (ok)
+        store.set_dependencies(task2.task_id, [task1.task_id])
+        # Task3 depends on Task2 (ok)
+        store.set_dependencies(task3.task_id, [task2.task_id])
+
+        # Now try to make Task1 depend on Task3 (would create cycle)
+        with pytest.raises(ValueError, match="circular dependency"):
+            store.set_dependencies(task1.task_id, [task3.task_id])
+
+    def test_add_dependency(self, store):
+        """Test adding a single dependency."""
+        task1 = store.add_task(description="Task 1")
+        task2 = store.add_task(description="Task 2")
+        task3 = store.add_task(description="Task 3")
+
+        store.add_dependency(task2.task_id, task1.task_id)
+        store.add_dependency(task2.task_id, task3.task_id)
+
+        updated = store.get_task(task2.task_id)
+        assert task1.task_id in updated.depends_on
+        assert task3.task_id in updated.depends_on
+
+    def test_add_duplicate_dependency(self, store):
+        """Test adding a dependency that already exists."""
+        task1 = store.add_task(description="Task 1")
+        task2 = store.add_task(description="Task 2")
+
+        store.add_dependency(task2.task_id, task1.task_id)
+        result = store.add_dependency(task2.task_id, task1.task_id)
+
+        # Should return True but not add duplicate
+        assert result is True
+        updated = store.get_task(task2.task_id)
+        assert updated.depends_on == [task1.task_id]
+
+    def test_remove_dependency(self, store):
+        """Test removing a dependency."""
+        task1 = store.add_task(description="Task 1")
+        task2 = store.add_task(description="Task 2")
+        task3 = store.add_task(description="Task 3")
+
+        store.set_dependencies(task2.task_id, [task1.task_id, task3.task_id])
+        store.remove_dependency(task2.task_id, task1.task_id)
+
+        updated = store.get_task(task2.task_id)
+        assert task1.task_id not in updated.depends_on
+        assert task3.task_id in updated.depends_on
+
+    def test_has_blocked_dependencies(self, store):
+        """Test detecting blocked tasks."""
+        task1 = store.add_task(description="Task 1")
+        task2 = store.add_task(description="Task 2")
+
+        # Task2 depends on Task1 (not completed yet)
+        store.set_dependencies(task2.task_id, [task1.task_id])
+
+        task2_obj = store.get_task(task2.task_id)
+        assert store._has_blocked_dependencies(task2_obj) is True
+
+    def test_has_blocked_dependencies_completed(self, store):
+        """Test that completed dependencies don't block."""
+        task1 = store.add_task(description="Task 1")
+        task2 = store.add_task(description="Task 2")
+
+        store.set_dependencies(task2.task_id, [task1.task_id])
+        store.complete_task(task1.task_id, result="Done")
+        store.approve_task(task1.task_id)
+
+        task2_obj = store.get_task(task2.task_id)
+        assert store._has_blocked_dependencies(task2_obj) is False
+
+    def test_list_tasks_excludes_blocked_by_default(self, store):
+        """Test that list_tasks excludes blocked tasks by default."""
+        task1 = store.add_task(description="Task 1")
+        task2 = store.add_task(description="Task 2")
+        task3 = store.add_task(description="Task 3")  # No dependencies
+
+        store.set_dependencies(task2.task_id, [task1.task_id])
+
+        tasks = store.list_tasks()
+        task_ids = [t.task_id for t in tasks]
+
+        assert task1.task_id in task_ids
+        assert task3.task_id in task_ids
+        assert task2.task_id not in task_ids  # Blocked by incomplete dependency
+
+    def test_list_tasks_include_blocked(self, store):
+        """Test listing tasks including blocked ones."""
+        task1 = store.add_task(description="Task 1")
+        task2 = store.add_task(description="Task 2")
+
+        store.set_dependencies(task2.task_id, [task1.task_id])
+
+        tasks = store.list_tasks(include_blocked=True)
+        task_ids = [t.task_id for t in tasks]
+
+        assert task1.task_id in task_ids
+        assert task2.task_id in task_ids
+
+    def test_assign_blocked_task_fails(self, store):
+        """Test that assigning a blocked task raises error."""
+        task1 = store.add_task(description="Task 1")
+        task2 = store.add_task(description="Task 2")
+
+        store.set_dependencies(task2.task_id, [task1.task_id])
+
+        with pytest.raises(ValueError, match="blocked by incomplete dependencies"):
+            store.assign_task(task2.task_id, "coder")
+
+    def test_get_blocked_by(self, store):
+        """Test getting blocking tasks."""
+        task1 = store.add_task(description="Task 1")
+        task2 = store.add_task(description="Task 2")
+        task3 = store.add_task(description="Task 3")
+
+        store.set_dependencies(task2.task_id, [task1.task_id, task3.task_id])
+
+        blocking = store.get_blocked_by(task2.task_id)
+        blocking_ids = [t.task_id for t in blocking]
+
+        assert task1.task_id in blocking_ids
+        assert task3.task_id in blocking_ids
+
+        # Complete task3, should only show task1 as blocking
+        store.complete_task(task3.task_id, result="Done")
+        store.approve_task(task3.task_id)
+
+        blocking = store.get_blocked_by(task2.task_id)
+        blocking_ids = [t.task_id for t in blocking]
+
+        assert task1.task_id in blocking_ids
+        assert task3.task_id not in blocking_ids
+
+    def test_task_serialization_includes_depends_on(self, store):
+        """Test that depends_on is serialized correctly."""
+        task1 = store.add_task(description="Task 1")
+        task2 = store.add_task(description="Task 2")
+
+        store.set_dependencies(task2.task_id, [task1.task_id])
+
+        data = store._read_tasks_json()
+        assert data["tasks"][task2.task_id]["depends_on"] == [task1.task_id]

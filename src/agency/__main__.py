@@ -1416,13 +1416,13 @@ def _verify_task_ownership(agency_dir: Path, task_id: str, agent: str) -> bool:
 
 @tasks_agent.command("list")
 def agent_tasks_list():
-    """List tasks assigned to you."""
+    """List tasks assigned to you (only unblocked tasks)."""
     agency_dir = find_agency_dir()
     if not agency_dir:
         click.echo("[ERROR] No .agency/ found", err=True)
         sys.exit(1)
     agent = _get_agent_name()
-    _list_tasks(agency_dir, status=None, assignee=agent)
+    _list_tasks(agency_dir, status=None, assignee=agent, include_blocked=False)
 
 
 @tasks_agent.command("show")
