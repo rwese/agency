@@ -10,6 +10,10 @@ from pathlib import Path
 import yaml
 
 
+# Global defaults
+DEFAULT_PARALLEL_LIMIT = 2  # Default max parallel tasks across all agents
+
+
 @dataclass
 class AgencyConfig:
     """Project configuration."""
@@ -20,7 +24,7 @@ class AgencyConfig:
     stop_timeout: int = 30
     additional_context_files: list[str] | None = None  # Files to add as context (env vars expanded on load)
     template_delimiter: str | None = None  # Custom template delimiter, e.g. "{{...}}"
-    parallel_limit: int | None = None  # Max parallel tasks (None = unlimited)
+    parallel_limit: int = DEFAULT_PARALLEL_LIMIT  # Max parallel tasks (default: 2)
 
 
 @dataclass

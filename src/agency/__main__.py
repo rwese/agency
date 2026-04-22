@@ -491,6 +491,8 @@ def _create_default_agency_structure(agency_dir: Path, additional_context_files:
         agency_dir: Path to the .agency/ directory
         additional_context_files: List of paths to agent context files to reference
     """
+    from agency.config import DEFAULT_PARALLEL_LIMIT
+
     agency_dir.mkdir(parents=True, exist_ok=True)
     (agency_dir / "agents").mkdir(exist_ok=True)
     (agency_dir / "tasks").mkdir(exist_ok=True)
@@ -506,7 +508,7 @@ def _create_default_agency_structure(agency_dir: Path, additional_context_files:
         config_path.write_text(
             f"""project: default
 shell: bash
-# parallel_limit: 4  # Max parallel tasks across all agents (None = unlimited)
+parallel_limit: {DEFAULT_PARALLEL_LIMIT}  # Max parallel tasks across all agents
 {context_section}
 """
         )
