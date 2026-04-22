@@ -12,8 +12,7 @@ build/
 venv/
 ENV/
 
-# uv
-uv.lock
+# uv (tracked in repo for reproducible builds)
 
 # IDE
 .idea/

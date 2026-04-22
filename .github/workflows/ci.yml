@@ -17,15 +17,20 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
 
       - name: Set up Python
         run: uv python install 3.11
 
       - name: Install dependencies
-        run: uv sync --all-extras
+        run: uv sync --group dev
 
       - name: Install tmux
         run: sudo apt-get update && sudo apt-get install -y tmux
+
+      - name: Format check
+        run: uvx ruff format --check src/
 
       - name: Lint
         run: uvx ruff check src/
@@ -37,18 +42,21 @@ jobs:
     name: E2E Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: [test]
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
 
       - name: Set up Python
         run: uv python install 3.11
 
       - name: Install dependencies
-        run: uv sync --all-extras
+        run: uv sync --group dev
 
       - name: Install tmux
         run: sudo apt-get update && sudo apt-get install -y tmux
