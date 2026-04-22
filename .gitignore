@@ -26,6 +26,11 @@ Thumbs.db
 
 # Agency
 sessions/
+.agency/audit.db
+.agency/var/
+.agency/*.log
+.agency/*.pid
+.agency/.*.halted
 
 # Agency project configs (per-user)
 # Note: .agency/ is normally gitignored but included in subdirectory projects

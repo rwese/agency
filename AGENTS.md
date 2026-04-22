@@ -84,6 +84,23 @@ agency stop agency-api
 | `agency tasks delete <id>` | any | Delete task |
 | `agency tasks history` | any | List completed tasks |
 
+### Heartbeat Commands
+
+Background processes that monitor tasks and notify agents of available work.
+Role determined by `AGENCY_ROLE` env var, agent name from `AGENCY_AGENT`.
+
+| Command | Description |
+|---------|-------------|
+| `AGENCY_ROLE=manager agency heartbeat start` | Start manager heartbeat |
+| `AGENCY_ROLE=agent AGENCY_AGENT=<name> agency heartbeat start` | Start agent heartbeat |
+| `agency heartbeat stop` | Stop heartbeats |
+| `agency heartbeat status` | Show heartbeat status |
+| `agency heartbeat logs` | View own heartbeat logs |
+
+**Behavior:**
+- Manager heartbeat notifies coordinator of unassigned tasks (only when nothing in progress)
+- Agent heartbeat notifies agent of assigned tasks (only when no task in progress)
+
 ### Audit Trail
 
 SQLite-based audit logging for all agency operations.
@@ -117,7 +134,10 @@ SQLite-based audit logging for all agency operations.
 │   ├── agents.yaml           # Agent registry
 │   ├── tasks.json            # Active tasks
 │   ├── audit.db              # Audit trail (SQLite)
+│   ├── notifications.json    # Heartbeat notifications
 │   ├── .halted              # Halt marker
+│   ├── .heartbeat-*.pid      # Heartbeat PID files
+│   ├── .heartbeat-*.log      # Heartbeat log files
 │   ├── agents/
 │   │   ├── coder.yaml
 │   │   └── coder/
@@ -238,6 +258,47 @@ pending → in_progress → pending_approval → completed
 | `AGENCY_MANAGER` | Manager name (set for manager) |
 | `AGENCY_ROLE` | `MANAGER` or `AGENT` |
 | `AGENCY_RESUMING` | `true` on resume |
+
+## pi Extensions
+
+Bundled extensions in `extras/pi/extensions/`:
+
+| Extension | Description |
+|-----------|-------------|
+| `pi-status` | Status bar for tmux windows |
+| `no-frills` | Hide/modify TUI decorations |
+
+### Setup
+
+```bash
+# Link extensions to ~/.pi/agent/extensions/
+just pi-extensions-link
+
+# Or individually
+just pi-status-link
+just pi-no-frills-link
+```
+
+### no-frills Commands
+
+| Command | Description |
+|---------|-------------|
+| `/deco` | Interactive settings UI |
+| `/deco tools [full\|borderless\|minimal]` | Tool box style |
+| `/deco thinking [on\|off]` | Toggle thinking blocks |
+| `/deco working [on\|off]` | Toggle working indicator |
+| `/deco footer [on\|off]` | Toggle footer |
+| `/deco header [on\|off]` | Toggle header |
+
+### no-frills Environment Variables
+
+| Variable | Values | Description |
+|----------|--------|-------------|
+| `PI_NOFILLS_TOOLS` | `full`, `borderless`, `minimal` | Tool box style |
+| `PI_NOFILLS_THINKING` | `1`, `0`, `true`, `false` | Hide thinking |
+| `PI_NOFILLS_WORKING` | `1`, `0`, `true`, `false` | Hide spinner |
+| `PI_NOFILLS_FOOTER` | `1`, `0`, `true`, `false` | Hide footer |
+| `PI_NOFILLS_HEADER` | `1`, `0`, `true`, `false` | Hide header |
 
 ## Development
 

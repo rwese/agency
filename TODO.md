@@ -72,3 +72,6 @@ New stop command behavior:
 1. Stop command sometimes times out even with idle detection (pi may be waiting on input)
 2. Session may not fully exit after all windows killed
 3. Task assignment bug needs investigation in tasks.py
+4. ~~Heartbeat idle detection false positive~~ - **FIXED**: Replaced scrollback hashing with visible pane content hashing. Now tracks when the same content has been displayed for 120s, correctly handling pre-existing idle windows.
+5. ~~Heartbeat spam~~ - **FIXED**: Added stable task selection by priority + created_at. Only re-notify after ping_interval passes.
+6. ~~pi-status integration~~ - **FIXED**: Added PI_STATUS_SOCKET env var and -e extension flag to agent/manager scripts. pi-status extension now creates status-<name>.sock and heartbeat queries it for idle detection.

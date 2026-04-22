@@ -9,7 +9,6 @@ from pathlib import Path
 
 import yaml
 
-
 # Global defaults
 DEFAULT_PARALLEL_LIMIT = 2  # Default max parallel tasks across all agents
 
