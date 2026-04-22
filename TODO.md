@@ -45,17 +45,23 @@ Refactor Agency to use tasks as the canonical source of truth, removing session 
 
 ### Phase 4: Manager Orchestration
 
-- [ ] 4.1: Implement `should_start_agent(agent)` check
+- [x] 4.1: Implement `should_start_agent(agent)` check
   - Check available slots (parallel_limit - busy_count)
   - Check unblocked tasks available
-- [ ] 4.2: Implement crash detection in manager heartbeat
-- [ ] 4.3: Implement agent lifecycle management
-  - Start agents when work available
-  - Stop agents when idle too long
-- [ ] 4.4: Update heartbeat to notify manager about:
-  - Available slots
-  - Unblocked tasks
-  - Crash events
+- [x] 4.2: Create orchestrator module (`orchestrator.py`)
+  - `Orchestrator` class for agent lifecycle management
+  - `assign_tasks_to_agents()` for task distribution
+  - `start_agents_for_work()` for on-demand agent starting
+- [x] 4.3: Implement `manager_heartbeat_v2()` with orchestration
+  - Crash detection + task assignment + agent starting
+- [x] 4.4: Update heartbeat status notifications
+
+### Phase 5: Review Flow
+
+- [ ] 5.1: Create reviewer agent config template
+- [ ] 5.2: Implement `start_reviewer(task)` in manager
+- [ ] 5.3: Reviewer receives fresh context + task info
+- [ ] 5.4: Approve/reject commands for reviewer
 
 ### Phase 5: Review Flow
 

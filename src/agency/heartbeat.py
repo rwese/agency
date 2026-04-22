@@ -669,3 +669,98 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def manager_heartbeat_v2(
+    agency_dir: Path,
+    socket_name: str,
+    manager_name: str,
+    poll_interval: int = 30,
+):
+    """Heartbeat loop for manager with orchestration.
+
+    This is the new task-centric heartbeat that:
+    1. Detects crashed agents and reverts their tasks
+    2. Starts agents when work is available
+    3. Assigns tasks to available agents
+    4. Notifies about pending approvals
+
+    Args:
+        agency_dir: Path to .agency/ directory
+        socket_name: Tmux socket name
+        manager_name: Name of the manager window
+        poll_interval: Seconds between checks
+    """
+    from agency.orchestrator import Orchestrator, assign_tasks_to_agents, start_agents_for_work
+
+    # Prevent duplicate heartbeats
+    if _check_pid_file(agency_dir, f"manager-{manager_name}"):
+        return
+
+    window_ref = f"{socket_name}:[MGR] {manager_name}"
+    orchestrator = Orchestrator(agency_dir)
+
+    print(f"[HEARTBEAT-V2] Starting for manager '{manager_name}'")
+    print(f"[HEARTBEAT-V2] Agency dir: {agency_dir}")
+    print(f"[HEARTBEAT-V2] Poll interval: {poll_interval}s")
+
+    last_approval_count = 0
+    _idle_cycles = 0
+
+    while True:
+        try:
+            # 1. CRASH DETECTION: Check for stale tasks and revert them
+            stale = check_stale_tasks(agency_dir)
+            if stale:
+                print(f"[HEARTBEAT-V2] Reverted {len(stale)} stale tasks")
+                audit = _get_audit_store(agency_dir)
+                if audit:
+                    for event in stale:
+                        audit.log_agent(
+                            action="crash_detected",
+                            agency_role="agent",
+                            details={
+                                "task_id": event["task_id"],
+                                "agent": event["agent"],
+                                "pid": event["pid"],
+                            },
+                        )
+
+            # 2. ORCHESTRATION: Start agents if there's work
+            started = start_agents_for_work(agency_dir)
+            if started:
+                print(f"[HEARTBEAT-V2] Started agents: {started}")
+
+            # 3. ASSIGNMENT: Assign pending tasks to available agents
+            assigned = assign_tasks_to_agents(agency_dir)
+            if assigned:
+                print(f"[HEARTBEAT-V2] Assigned tasks: {assigned}")
+
+            # 4. NOTIFICATION: Notify about pending approvals
+            status = orchestrator.get_status_summary()
+            pending_approval = len([t for t in get_all_tasks(agency_dir) if t.get("status") == "pending_approval"])
+
+            if pending_approval > 0 and pending_approval != last_approval_count:
+                msg = f"👀 {pending_approval} task(s) pending approval. Run 'agency tasks list' to review."
+                if send_notification(window_ref, msg):
+                    print("[HEARTBEAT-V2] Notified about pending approvals")
+                    last_approval_count = pending_approval
+
+            # 5. STATUS: Log status summary periodically
+            _idle_cycles += 1
+            if _idle_cycles % 10 == 0:
+                print(
+                    f"[HEARTBEAT-V2] Status: {status['total_busy']}/{status['parallel_limit']} busy, "
+                    f"{len(status['running_agents'])} running, "
+                    f"{status['unblocked_tasks']} unblocked tasks"
+                )
+
+            time.sleep(poll_interval)
+
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            print(f"[HEARTBEAT-V2] Error: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc()
+            time.sleep(poll_interval)
