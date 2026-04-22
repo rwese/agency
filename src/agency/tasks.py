@@ -88,6 +88,7 @@ class TaskStore:
         if self._audit_store is None:
             try:
                 from agency.audit import AuditStore
+
                 self._audit_store = AuditStore(self.agency_dir)
             except Exception:
                 self._audit_store = False  # Mark as unavailable
@@ -117,7 +118,7 @@ class TaskStore:
         include_blocked: bool = False,
     ) -> list[Task]:
         """List tasks with optional filtering.
-        
+
         Args:
             status: Filter by task status
             assignee: Filter by assigned agent
@@ -141,7 +142,7 @@ class TaskStore:
 
     def _has_blocked_dependencies(self, task: Task) -> bool:
         """Check if task has incomplete dependencies.
-        
+
         A task is blocked if any of its dependencies are not completed.
         """
         if not task.depends_on:
@@ -270,11 +271,11 @@ class TaskStore:
 
     def set_dependencies(self, task_id: str, depends_on: list[str]) -> bool:
         """Set dependencies for a task.
-        
+
         Args:
             task_id: The task to add dependencies to
             depends_on: List of task IDs this task depends on
-            
+
         Returns:
             True if dependencies were set successfully
         """
@@ -294,7 +295,7 @@ class TaskStore:
 
             # Check for circular dependencies
             if self._would_create_cycle(task_id, depends_on):
-                raise ValueError(f"Setting these dependencies would create a circular dependency")
+                raise ValueError("Setting these dependencies would create a circular dependency")
 
             tasks[task_id]["depends_on"] = depends_on
             self._write_tasks_json(data)
@@ -317,7 +318,7 @@ class TaskStore:
 
     def _would_create_cycle(self, task_id: str, new_depends_on: list[str]) -> bool:
         """Check if adding dependencies would create a cycle.
-        
+
         A cycle exists if task_id depends on a task that (directly or indirectly)
         depends on task_id.
         """
