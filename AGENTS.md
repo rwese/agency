@@ -84,6 +84,29 @@ agency stop agency-api
 | `agency tasks delete <id>` | any | Delete task |
 | `agency tasks history` | any | List completed tasks |
 
+### Audit Trail
+
+SQLite-based audit logging for all agency operations.
+
+| Command | Role | Description |
+|---------|------|-------------|
+| `agency audit list` | any | List audit events |
+| `agency audit list --type task` | any | Filter by event type (cli, task, session, agent) |
+| `agency audit list --task <id>` | any | Filter by task ID |
+| `agency audit stats` | any | Show audit statistics |
+| `agency audit export` | any | Export events to JSON |
+| `agency audit export --format csv` | any | Export to CSV |
+| `agency audit clear` | any | Preview old events |
+| `agency audit clear --force` | any | Delete events older than 30 days |
+
+**Event Types:**
+- `cli` - CLI command invocations
+- `task` - Task lifecycle (create, assign, update, complete, approve, reject, delete)
+- `session` - Session events (start, stop)
+- `agent` - Agent activity (start, heartbeat)
+
+**Storage:** `.agency/audit.db` (SQLite)
+
 ## File Structure
 
 ```
@@ -93,6 +116,7 @@ agency stop agency-api
 │   ├── manager.yaml          # Manager personality
 │   ├── agents.yaml           # Agent registry
 │   ├── tasks.json            # Active tasks
+│   ├── audit.db              # Audit trail (SQLite)
 │   ├── .halted              # Halt marker
 │   ├── agents/
 │   │   ├── coder.yaml
@@ -149,6 +173,52 @@ agents:
 name: coder
 personality: personality.md
 ```
+
+## Template Injection
+
+Personality files and context files support dynamic placeholders that are processed before injection.
+
+### Syntax
+
+```
+${{file:path}}      → Read file at path, inject contents
+${{shell:cmd}}       → Execute command, inject stdout
+```
+
+### Examples
+
+**Include a common file:**
+```yaml
+personality: |
+  # Base personality
+  You are a helpful developer.
+
+  ${{file:./common-knowledge.md}}
+```
+
+**Include shell output:**
+```yaml
+personality: |
+  Current project info:
+  ${{shell:git remote -v}}
+```
+
+**Custom delimiters:**
+
+For files containing `${{...}}` syntax (e.g., code with template literals), use custom delimiters via config:
+
+```yaml
+template_delimiter: "{{...}}"
+```
+
+This changes the pattern to `{{file:path}}` / `{{shell:cmd}}`.
+
+### Behavior
+
+- **File paths**: Relative paths resolved from `.agency/` directory
+- **Shell commands**: Run fresh every time (no caching), 60s timeout
+- **Errors**: Warnings logged to console, placeholder replaced with empty string on error
+- **Nesting**: Not supported (processed once only)
 
 ## Task Lifecycle
 

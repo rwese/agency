@@ -8,6 +8,21 @@ import os
 import subprocess
 from pathlib import Path
 
+# Lazy import for audit to avoid circular imports
+_audit_store = None
+
+
+def _get_audit_store(agency_dir: Path | None = None):
+    """Get audit store lazily."""
+    global _audit_store
+    if _audit_store is None and agency_dir:
+        try:
+            from agency.audit import AuditStore
+            _audit_store = AuditStore(agency_dir)
+        except Exception:
+            _audit_store = False
+    return _audit_store if _audit_store else None
+
 # Constants
 SESSION_PREFIX = "agency-"
 MANAGER_PREFIX = "[MGR] "
@@ -341,6 +356,19 @@ def start_manager_window(
         capture_output=True,
     )
 
+    # Audit log
+    audit = _get_audit_store(agency_dir)
+    if audit:
+        audit.log_agent(
+            action="start",
+            agency_role="manager",
+            details={
+                "session": session_name,
+                "manager_name": manager_name,
+                "work_dir": str(work_dir),
+            },
+        )
+
 
 def start_agent_window(
     session_name: str,
@@ -390,6 +418,19 @@ def start_agent_window(
         capture_output=True,
     )
 
+    # Audit log
+    audit = _get_audit_store(agency_dir)
+    if audit:
+        audit.log_agent(
+            action="start",
+            agency_role="agent",
+            details={
+                "session": session_name,
+                "agent_name": agent_name,
+                "work_dir": str(work_dir),
+            },
+        )
+
 
 def _escape_prompt(s: str) -> str:
     """Escape string for shell prompt injection."""
@@ -410,6 +451,9 @@ def _generate_manager_launch_script(
     scripts_dir.mkdir(parents=True, exist_ok=True)
     script_path = scripts_dir / f"manager-{manager_name}.sh"
 
+    # Load agency config first (needed for template delimiter)
+    agency_config = load_agency_config(agency_dir)
+
     # Get manager personality from config (user additions)
     manager_config_path = agency_dir / "manager.yaml"
     user_personality = ""
@@ -419,6 +463,23 @@ def _generate_manager_launch_script(
 
         config = yaml.safe_load(manager_config_path.read_text())
         user_personality = config.get("personality", "")
+
+    # Process template injection for user personality
+    from agency.template_inject import TemplateInjector, InjectionOptions, process_string
+    inj_options = InjectionOptions(base_dir=agency_dir)
+    if agency_config.template_delimiter:
+        # Parse "{{...}}" format
+        parts = agency_config.template_delimiter.split("...")
+        if len(parts) == 2:
+            injector = TemplateInjector.with_delimiters(parts[0], parts[1], inj_options)
+            inj_result = injector.process(user_personality)
+        else:
+            inj_result = process_string(user_personality, base_dir=agency_dir)
+    else:
+        inj_result = process_string(user_personality, base_dir=agency_dir)
+    user_personality = inj_result.content
+    for err in inj_result.errors:
+        print(err, flush=True)
 
     # Build full personality: base + manager additions + user
     full_personality = (
@@ -436,11 +497,13 @@ def _generate_manager_launch_script(
     personality_args = f' --append-system-prompt "{escaped}"'
 
     # Discover context files from work_dir to git_root
-    agency_config = load_agency_config(agency_dir)
     context_files = discover_context_files(work_dir, work_dir)  # Use work_dir as git_root for now
 
     # Add custom context files from config if specified
     if agency_config.additional_context_files:
+        from agency.template_inject import process_file
+        # Counter for unique temp file names
+        context_idx = 0
         for cf in agency_config.additional_context_files:
             # Substitute AGENCY_* vars and expand ~ and ${HOME}
             cf_expanded = (
@@ -453,19 +516,24 @@ def _generate_manager_launch_script(
             cf_expanded = os.path.expanduser(cf_expanded)
 
             cf_path = Path(cf_expanded)
-            # Absolute paths used directly, relative paths resolved from work_dir
-            if cf_path.is_absolute():
-                if cf_path.exists():
-                    context_files.append(cf_path)
-                else:
-                    print(f"[WARN] Context file not found: {cf_expanded}")
-            else:
-                # Relative path - resolve from work_dir
-                abs_path = work_dir / cf_path
-                if abs_path.exists():
-                    context_files.append(abs_path)
-                else:
-                    print(f"[WARN] Context file not found: {abs_path}")
+            # Resolve absolute/relative paths
+            if not cf_path.is_absolute():
+                cf_path = work_dir / cf_path
+
+            if not cf_path.exists():
+                print(f"[WARN] Context file not found: {cf_expanded}", flush=True)
+                continue
+
+            # Process template injection and write to temp file
+            inj_result = process_file(cf_path)
+            for err in inj_result.errors:
+                print(err, flush=True)
+
+            # Write processed content to temp file in scripts_dir
+            temp_path = scripts_dir / f"_context_{context_idx}_{cf_path.name}"
+            temp_path.write_text(inj_result.content, encoding="utf-8")
+            context_files.append(temp_path)
+            context_idx += 1
 
     context_args = format_context_args(context_files)
 
@@ -548,6 +616,9 @@ def _generate_agent_launch_script(
     scripts_dir.mkdir(parents=True, exist_ok=True)
     script_path = scripts_dir / f"agent-{agent_name}.sh"
 
+    # Load agency config first (needed for template delimiter)
+    agency_config = load_agency_config(agency_dir)
+
     # Get agent personality from config (user additions)
     agent_config_path = agency_dir / "agents" / f"{agent_name}.yaml"
     user_personality = ""
@@ -566,6 +637,23 @@ def _generate_agent_launch_script(
         elif personality_ref:
             user_personality = personality_ref
 
+    # Process template injection for user personality
+    from agency.template_inject import TemplateInjector, InjectionOptions, process_string
+    inj_options = InjectionOptions(base_dir=agency_dir)
+    if agency_config.template_delimiter:
+        # Parse "{{...}}" format
+        parts = agency_config.template_delimiter.split("...")
+        if len(parts) == 2:
+            injector = TemplateInjector.with_delimiters(parts[0], parts[1], inj_options)
+            inj_result = injector.process(user_personality)
+        else:
+            inj_result = process_string(user_personality, base_dir=agency_dir)
+    else:
+        inj_result = process_string(user_personality, base_dir=agency_dir)
+    user_personality = inj_result.content
+    for err in inj_result.errors:
+        print(err, flush=True)
+
     # Build full personality: base + agent additions + user
     full_personality = (
         BASE_PERSONALITY.format(
@@ -582,11 +670,13 @@ def _generate_agent_launch_script(
     personality_args = f' --append-system-prompt "{escaped}"'
 
     # Discover context files from work_dir to git_root
-    agency_config = load_agency_config(agency_dir)
     context_files = discover_context_files(work_dir, work_dir)
 
     # Add custom context files from config if specified
     if agency_config.additional_context_files:
+        from agency.template_inject import process_file
+        # Counter for unique temp file names
+        context_idx = 0
         for cf in agency_config.additional_context_files:
             # Substitute AGENCY_* vars
             cf_expanded = (
@@ -595,19 +685,24 @@ def _generate_agent_launch_script(
                 .replace("${AGENCY_PROJECT}", session_name)
             )
             cf_path = Path(cf_expanded)
-            # Absolute paths used directly, relative paths resolved from work_dir
-            if cf_path.is_absolute():
-                if cf_path.exists():
-                    context_files.append(cf_path)
-                else:
-                    print(f"[WARN] Context file not found: {cf_expanded}")
-            else:
-                # Relative path - resolve from work_dir
-                abs_path = work_dir / cf_path
-                if abs_path.exists():
-                    context_files.append(abs_path)
-                else:
-                    print(f"[WARN] Context file not found: {abs_path}")
+            # Resolve absolute/relative paths
+            if not cf_path.is_absolute():
+                cf_path = work_dir / cf_path
+
+            if not cf_path.exists():
+                print(f"[WARN] Context file not found: {cf_expanded}", flush=True)
+                continue
+
+            # Process template injection and write to temp file
+            inj_result = process_file(cf_path)
+            for err in inj_result.errors:
+                print(err, flush=True)
+
+            # Write processed content to temp file in scripts_dir
+            temp_path = scripts_dir / f"_context_{context_idx}_{cf_path.name}"
+            temp_path.write_text(inj_result.content, encoding="utf-8")
+            context_files.append(temp_path)
+            context_idx += 1
 
     context_args = format_context_args(context_files)
 

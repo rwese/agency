@@ -19,6 +19,7 @@ class AgencyConfig:
     template_url: str | None = "https://github.com/rwese/agency-templates"
     stop_timeout: int = 30
     additional_context_files: list[str] | None = None  # Files to add as context (env vars expanded on load)
+    template_delimiter: str | None = None  # Custom template delimiter, e.g. "{{...}}"
 
 
 @dataclass
@@ -73,6 +74,7 @@ def load_agency_config(agency_dir: Path) -> AgencyConfig:
         template_url=data.get("template_url"),
         stop_timeout=data.get("stop_timeout", 30),
         additional_context_files=context_files_expanded if context_files_expanded else None,
+        template_delimiter=data.get("template_delimiter"),
     )
 
 
