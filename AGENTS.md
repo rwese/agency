@@ -292,6 +292,63 @@ pending → in_progress → pending_approval → completed
                   failed (on reject)
 ```
 
+### Lazy Agent Spawning
+
+Agents are spawned **only when work is assigned to them**. This reduces overhead by only running agents when needed.
+
+**Spawning rules:**
+1. Task must be **assigned** to an agent
+2. Agent must **not already be running**
+3. Agent must have **available slot** (capacity < parallel_limit)
+
+**Slot coordination:**
+- Tracked in `.agency/signals/slots-available.json`
+- When task completes → slot released → waiting agents notified
+- Uses file-based signaling for efficient waiting
+
+### Automated Review
+
+When a task reaches `pending_approval`, the manager heartbeat automatically:
+1. Detects orphaned tasks (no reviewer assigned)
+2. Spawns a reviewer agent for each pending task
+3. Tracks `reviewer_assigned` field in task
+4. Auto-recovers if reviewer crashes
+
+## File Structure
+
+```
+<project-root>/
+├── .agency/
+│   ├── config.yaml           # Project settings
+│   ├── manager.yaml           # Manager personality
+│   ├── agents.yaml            # Agent registry
+│   ├── tasks.json             # Active tasks
+│   ├── audit.db               # Audit trail (SQLite)
+│   ├── notifications.json     # Heartbeat notifications
+│   ├── signals/              # Slot coordination
+│   │   └── slots-available.json
+│   ├── .halted               # Halt marker
+│   ├── .heartbeat-*.pid       # Heartbeat PID files
+│   ├── .heartbeat-*.log       # Heartbeat log files
+│   ├── pi/
+│   │   └── extensions/        # pi extensions (self-contained)
+│   │       ├── pi-inject/
+│   │       ├── pi-status/
+│   │       └── no-frills/
+│   ├── agents/
+│   │   ├── coder.yaml
+│   │   └── coder/
+│   │       └── personality.md
+│   ├── tasks/
+│   │   └── <task_id>/
+│   │       ├── task.json
+│   │       └── result.json
+│   └── pending/
+│       └── <task_id>.json
+├── src/
+└── ...
+```
+
 ## Environment Variables
 
 | Variable | Description |
