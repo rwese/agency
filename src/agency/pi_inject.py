@@ -12,7 +12,6 @@ import socket
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 
 class MessageType(Enum):
@@ -25,7 +24,7 @@ class MessageType(Enum):
 @dataclass
 class InjectResponse:
     type: str
-    message: Optional[str] = None
+    message: str | None = None
 
     @property
     def is_ok(self) -> bool:
@@ -43,10 +42,10 @@ class InjectResponse:
 class PiInjectClient:
     """Client for pi-inject Unix socket."""
 
-    def __init__(self, socket_path: Optional[Path] = None):
+    def __init__(self, socket_path: Path | None = None):
         """
         Args:
-            socket_path: Path to the injector socket. 
+            socket_path: Path to the injector socket.
                         Defaults to ~/.pi/injector.sock or PI_INJECTOR_SOCKET env var.
         """
         if socket_path:
@@ -67,17 +66,19 @@ class PiInjectClient:
         """Send a message and return the response."""
         client = self._connect()
         try:
-            msg = json.dumps({msg_type.value: content}) if msg_type != MessageType.PING else json.dumps({"type": "ping"})
+            msg = (
+                json.dumps({msg_type.value: content}) if msg_type != MessageType.PING else json.dumps({"type": "ping"})
+            )
             if msg_type == MessageType.STEER:
                 msg = json.dumps({"type": "steer", "message": content})
             elif msg_type == MessageType.FOLLOWUP:
                 msg = json.dumps({"type": "followup", "message": content})
             elif msg_type == MessageType.COMMAND:
                 msg = json.dumps({"type": "command", "command": content})
-            
+
             client.sendall((msg + "\n").encode())
             response = client.recv(1024).decode()
-            
+
             if response:
                 data = json.loads(response)
                 return InjectResponse(type=data.get("type", ""), message=data.get("message"))
@@ -106,11 +107,11 @@ class PiInjectClient:
         try:
             resp = self.ping()
             return resp.is_pong
-        except (socket.error, FileNotFoundError, ConnectionRefusedError):
+        except (OSError, FileNotFoundError, ConnectionRefusedError):
             return False
 
 
-def get_client(socket_path: Optional[str] = None) -> PiInjectClient:
+def get_client(socket_path: str | None = None) -> PiInjectClient:
     """Get a PiInjectClient instance."""
     path = Path(socket_path) if socket_path else None
     return PiInjectClient(path)
@@ -134,12 +135,12 @@ def main():
 
     if args.ping:
         resp = client.ping()
-        print(f"Pong!" if resp.is_pong else f"Error: {resp.message}")
+        print("Pong!" if resp.is_pong else f"Error: {resp.message}")
         return
 
     if args.command:
         resp = client.command(args.command)
-        print(f"OK" if resp.is_ok else f"Error: {resp.message}")
+        print("OK" if resp.is_ok else f"Error: {resp.message}")
         return
 
     if args.message:
@@ -149,7 +150,7 @@ def main():
             resp = client.followup(args.message)
         else:
             resp = client.steer(args.message)  # Default to steer
-        print(f"OK" if resp.is_ok else f"Error: {resp.message}")
+        print("OK" if resp.is_ok else f"Error: {resp.message}")
         return
 
     parser.print_help()

@@ -110,9 +110,9 @@ def get_agent_tasks(agency_dir: Path, agent_name: str) -> list[dict]:
 def write_notification(agency_dir: Path, role: str, agent_name: str, message: str):
     """Write notification to files that pi can read."""
     import json
-    
+
     notifications_file = agency_dir / "notifications.json"
-    
+
     # Load existing notifications
     notifications = []
     if notifications_file.exists():
@@ -120,7 +120,7 @@ def write_notification(agency_dir: Path, role: str, agent_name: str, message: st
             notifications = json.loads(notifications_file.read_text())
         except json.JSONDecodeError:
             notifications = []
-    
+
     # Add new notification
     notification = {
         "role": role,
@@ -129,13 +129,13 @@ def write_notification(agency_dir: Path, role: str, agent_name: str, message: st
         "timestamp": time.time(),
     }
     notifications.append(notification)
-    
+
     # Keep only last 10 notifications
     notifications = notifications[-10:]
-    
+
     # Write to notifications file
     notifications_file.write_text(json.dumps(notifications, indent=2))
-    
+
     # Also write to a system prompt file that can be loaded
     system_hint_file = agency_dir / "system_hint.txt"
     system_hint_file.write_text(f"\n## NEW NOTIFICATION\n{message}\n")
@@ -156,6 +156,7 @@ def send_notification(window_ref: str, message: str) -> bool:
 
     # Import here to avoid circular imports and use module directly
     import sys
+
     sys.path.insert(0, str(Path(__file__).parent))
     from pi_inject import get_client
 
@@ -205,26 +206,29 @@ def manager_heartbeat(agency_dir: Path, socket_name: str, manager_name: str, pol
             available_agents = get_available_agents(agency_dir, chunk_size)
             current_time = time.time()
 
-            print(f"[HEARTBEAT] Tasks: {counts['unassigned']} unassigned, "
-                  f"{len(available_agents)} agents available: {available_agents}")
+            print(
+                f"[HEARTBEAT] Tasks: {counts['unassigned']} unassigned, "
+                f"{len(available_agents)} agents available: {available_agents}"
+            )
 
             if counts["unassigned"] > 0 and available_agents:
-                should_notify = (
-                    counts["unassigned"] != last_unassigned and
-                    (current_time - last_notification_time) > 30
-                )
+                should_notify = counts["unassigned"] != last_unassigned and (current_time - last_notification_time) > 30
                 if should_notify:
                     agent_list = ", ".join(available_agents)
-                    msg = (f"📋 {counts['unassigned']} unassigned task(s), "
-                           f"{len(available_agents)} agent(s) available ({agent_list}). "
-                           f"Run 'agency tasks list' to review and assign.")
+                    msg = (
+                        f"📋 {counts['unassigned']} unassigned task(s), "
+                        f"{len(available_agents)} agent(s) available ({agent_list}). "
+                        f"Run 'agency tasks list' to review and assign."
+                    )
                     if send_notification(window_ref, msg):
                         print(f"[HEARTBEAT] Notified manager: {msg}")
                         last_unassigned = counts["unassigned"]
                         last_notification_time = current_time
 
             if counts["pending_approval"] > 0 and counts["pending_approval"] != last_approval:
-                msg = f"👀 {counts['pending_approval']} task(s) pending your approval - run 'agency tasks list' to review"
+                msg = (
+                    f"👀 {counts['pending_approval']} task(s) pending your approval - run 'agency tasks list' to review"
+                )
                 if send_notification(window_ref, msg):
                     print(f"[HEARTBEAT] Notified manager: {msg}")
                     last_approval = counts["pending_approval"]
@@ -240,7 +244,7 @@ def manager_heartbeat(agency_dir: Path, socket_name: str, manager_name: str, pol
 
 def agent_heartbeat(agency_dir: Path, socket_name: str, agent_name: str, poll_interval: int):
     """Heartbeat loop for agent.
-    
+
     Only ONE notification at a time. Waits until agent marks task as in_progress
     before sending notification for next task.
     """
@@ -269,7 +273,7 @@ def agent_heartbeat(agency_dir: Path, socket_name: str, agent_name: str, poll_in
             elif pending_tasks and not pending_notification_task_id:
                 next_task = pending_tasks[0]
                 task_id = next_task.get("task_id")
-                
+
                 msg = f"📌 New task: {task_id} - run 'agency tasks show {task_id}' to view"
                 if send_notification(window_ref, msg):
                     print(f"[HEARTBEAT] Notified agent about: {task_id}")
