@@ -28,11 +28,15 @@ Thumbs.db
 sessions/
 
 # Agency project configs (per-user)
-.agency/
-
-# Agency
+# Note: .agency/ is normally gitignored but included in subdirectory projects
 /agency-web/.agency/
+
+# Include config files in subdirectory projects
 !/agency-web/.agency/config.yaml
 !/agency-web/.agency/agents.yaml
 !/agency-web/.agency/manager.yaml
-/agency-web/.agency/agents/
+!/agency-web/.agency/agents/
+
+# Node dependencies (for subdirectory projects)
+/agency-web/backend/node_modules/
+/agency-web/frontend/node_modules/
