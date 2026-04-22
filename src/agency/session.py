@@ -782,20 +782,17 @@ def _generate_manager_launch_script(
     # Get pi session directory (default: .agency/pi/sessions/)
     pi_session_dir = os.environ.get("AGENCY_PI_SESSION_DIR", str(agency_dir / "pi" / "sessions"))
 
-    # Get pi-inject extension path
+    # Get pi extensions from project-local .agency/pi/extensions/ (self-contained)
+    # pi-inject and pi-status have extensions/ subdirectory; no-frills is at root
     inject_extension = os.environ.get(
-        "AGENCY_PI_INJECT_EXT", str(Path.home() / ".pi" / "agent" / "extensions" / "pi-inject" / "extensions")
+        "AGENCY_PI_INJECT_EXT", str(agency_dir / "pi" / "extensions" / "pi-inject" / "extensions")
     )
 
-    # Get pi-status extension path
     status_extension = os.environ.get(
-        "AGENCY_PI_STATUS_EXT", str(Path.home() / ".pi" / "agent" / "extensions" / "pi-status" / "extensions")
+        "AGENCY_PI_STATUS_EXT", str(agency_dir / "pi" / "extensions" / "pi-status" / "extensions")
     )
 
-    # Get no-frills extension path
-    nofrills_extension = os.environ.get(
-        "AGENCY_PI_NOFILLS_EXT", str(Path.home() / ".pi" / "agent" / "extensions" / "no-frills")
-    )
+    nofrills_extension = os.environ.get("AGENCY_PI_NOFILLS_EXT", str(agency_dir / "pi" / "extensions" / "no-frills"))
 
     # Import heartbeat module for path
     from agency import heartbeat as heartbeat_module
@@ -974,20 +971,17 @@ def _generate_agent_launch_script(
     # Get agent command
     agent_cmd = os.environ.get("AGENCY_AGENT_CMD", "pi")
 
-    # Get pi-inject extension path
+    # Get pi extensions from project-local .agency/pi/extensions/ (self-contained)
+    # pi-inject and pi-status have extensions/ subdirectory; no-frills is at root
     inject_extension = os.environ.get(
-        "AGENCY_PI_INJECT_EXT", str(Path.home() / ".pi" / "agent" / "extensions" / "pi-inject" / "extensions")
+        "AGENCY_PI_INJECT_EXT", str(agency_dir / "pi" / "extensions" / "pi-inject" / "extensions")
     )
 
-    # Get pi-status extension path
     status_extension = os.environ.get(
-        "AGENCY_PI_STATUS_EXT", str(Path.home() / ".pi" / "agent" / "extensions" / "pi-status" / "extensions")
+        "AGENCY_PI_STATUS_EXT", str(agency_dir / "pi" / "extensions" / "pi-status" / "extensions")
     )
 
-    # Get no-frills extension path
-    nofrills_extension = os.environ.get(
-        "AGENCY_PI_NOFILLS_EXT", str(Path.home() / ".pi" / "agent" / "extensions" / "no-frills")
-    )
+    nofrills_extension = os.environ.get("AGENCY_PI_NOFILLS_EXT", str(agency_dir / "pi" / "extensions" / "no-frills"))
 
     # Import heartbeat module for path
     from agency import heartbeat as heartbeat_module

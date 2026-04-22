@@ -137,14 +137,19 @@ SQLite-based audit logging for all agency operations.
 <project-root>/
 ├── .agency/
 │   ├── config.yaml           # Project settings
-│   ├── manager.yaml          # Manager personality
-│   ├── agents.yaml           # Agent registry
-│   ├── tasks.json            # Active tasks
-│   ├── audit.db              # Audit trail (SQLite)
-│   ├── notifications.json    # Heartbeat notifications
-│   ├── .halted              # Halt marker
-│   ├── .heartbeat-*.pid      # Heartbeat PID files
-│   ├── .heartbeat-*.log      # Heartbeat log files
+│   ├── manager.yaml           # Manager personality
+│   ├── agents.yaml            # Agent registry
+│   ├── tasks.json             # Active tasks
+│   ├── audit.db               # Audit trail (SQLite)
+│   ├── notifications.json     # Heartbeat notifications
+│   ├── .halted               # Halt marker
+│   ├── .heartbeat-*.pid       # Heartbeat PID files
+│   ├── .heartbeat-*.log       # Heartbeat log files
+│   ├── pi/
+│   │   └── extensions/        # pi extensions (self-contained)
+│   │       ├── pi-inject/
+│   │       ├── pi-status/
+│   │       └── no-frills/
 │   ├── agents/
 │   │   ├── coder.yaml
 │   │   └── coder/
@@ -300,23 +305,30 @@ pending → in_progress → pending_approval → completed
 
 ## pi Extensions
 
-Bundled extensions in `extras/pi/extensions/`:
+Bundled extensions are **automatically copied** to each project's `.agency/pi/extensions/` during `agency init`. Agency is self-contained - no global installation required.
 
 | Extension | Description |
 |-----------|-------------|
 | `pi-status` | Status bar for tmux windows |
+| `pi-inject` | Message injection via Unix socket |
 | `no-frills` | Hide/modify TUI decorations |
 
-### Setup
+### Info
 
 ```bash
-# Link extensions to ~/.pi/agent/extensions/
-just pi-extensions-link
-
-# Or individually
-just pi-status-link
-just pi-no-frills-link
+# Show extensions location for current project
+just pi-extensions-info
 ```
+
+### Manual Override (optional)
+
+If needed, override extension paths via environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `AGENCY_PI_INJECT_EXT` | Path to pi-inject extension |
+| `AGENCY_PI_STATUS_EXT` | Path to pi-status extension |
+| `AGENCY_PI_NOFILLS_EXT` | Path to no-frills extension |
 
 ### no-frills Commands
 

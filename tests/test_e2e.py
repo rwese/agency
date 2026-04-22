@@ -98,6 +98,85 @@ class TestInitProject:
         session_name = f"agency-{unique_project.name}"
         subprocess.run(["tmux", "kill-session", "-t", session_name], capture_output=True)
 
+    def test_init_project_with_context_file(self, unique_project):
+        """Test init-project with --context-file option."""
+        # Create a context file
+        context_file = unique_project / "context.md"
+        context_file.write_text("# Context file content")
+
+        result = run_agency(
+            [
+                "init",
+                "--dir",
+                str(unique_project),
+                "--context-file",
+                str(context_file),
+            ],
+            check=False,
+        )
+
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        assert (unique_project / ".agency").exists()
+
+        # Check config contains the context file
+        config = (unique_project / ".agency" / "config.yaml").read_text()
+        assert str(context_file) in config
+
+        # Cleanup
+        session_name = f"agency-{unique_project.name}"
+        subprocess.run(["tmux", "kill-session", "-t", session_name], capture_output=True)
+
+    def test_init_project_with_invalid_context_file(self, unique_project):
+        """Test init-project with --context-file pointing to non-existent file."""
+        result = run_agency(
+            [
+                "init",
+                "--dir",
+                str(unique_project),
+                "--context-file",
+                "/nonexistent/path/to/file.md",
+            ],
+            check=False,
+        )
+
+        assert result.returncode == 1
+        assert "not found" in result.stderr or "ERROR" in result.stderr
+
+        # Ensure .agency was not created
+        assert not (unique_project / ".agency").exists()
+
+    def test_init_project_with_multiple_context_files(self, unique_project):
+        """Test init-project with multiple --context-file options."""
+        # Create multiple context files
+        context1 = unique_project / "context1.md"
+        context2 = unique_project / "context2.md"
+        context1.write_text("# Context 1")
+        context2.write_text("# Context 2")
+
+        result = run_agency(
+            [
+                "init",
+                "--dir",
+                str(unique_project),
+                "--context-file",
+                str(context1),
+                "--context-file",
+                str(context2),
+            ],
+            check=False,
+        )
+
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+
+        # Check config contains both context files
+        config = (unique_project / ".agency" / "config.yaml").read_text()
+        assert str(context1) in config
+        assert str(context2) in config
+
+        # Cleanup
+        session_name = f"agency-{unique_project.name}"
+        subprocess.run(["tmux", "kill-session", "-t", session_name], capture_output=True)
+
 
 class TestTaskWorkflow:
     """Test task management workflow using in-project .agency."""

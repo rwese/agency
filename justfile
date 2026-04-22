@@ -147,17 +147,18 @@ task-delete task-id:
 
 # === pi Extensions ===
 
-# Link pi-status extension to ~/.pi/agent/extensions/
-pi-status-link:
-    ln -sf {{justfile_directory()}}/extras/pi/extensions/pi-status ~/.pi/agent/extensions/pi-status
+# Extensions are now copied to .agency/pi/extensions/ during `agency init`
+# No manual linking required - agency is self-contained
 
-# Link no-frills extension to ~/.pi/agent/extensions/
-pi-no-frills-link:
-    ln -sf {{justfile_directory()}}/extras/pi/extensions/no-frills ~/.pi/agent/extensions/no-frills
-
-# Link all pi extensions
-pi-extensions-link: pi-status-link pi-no-frills-link
-    @echo "All pi extensions linked"
+# Show where extensions are located for current project
+pi-extensions-info:
+	@AGENCY_DIR="$(find . -name '.agency' -type d 2>/dev/null | head -1)"; \
+	if [ -z "$$AGENCY_DIR" ]; then \
+		echo "No .agency/ directory found. Run 'agency init' first."; \
+	else \
+		echo "Project pi extensions:"; \
+		ls -la "$$AGENCY_DIR/pi/extensions/" 2>/dev/null || echo "  (not yet initialized - run 'agency init')"; \
+	fi
 
 # Test pi-status CLI
 pi-status-test:
@@ -231,9 +232,8 @@ help:
     @echo "  task-history                          Show history"
     @echo ""
     @echo "=== pi Extensions ==="
-    @echo "  pi-extensions-link                   Link all extensions"
-    @echo "  pi-status-link                       Link pi-status"
-    @echo "  pi-no-frills-link                    Link no-frills"
+    @echo "  pi-extensions-info                   Show project extensions location"
+    @echo "  (Extensions auto-copied during agency init)"
     @echo ""
     @echo "=== Development ==="
     @echo "  test-mock <dir>                      Test with mock agent"
