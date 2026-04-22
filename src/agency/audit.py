@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 # Constants
-AUDIT_FILE = "audit.db"
+AUDIT_FILE = "var/audit.db"
 SCHEMA_VERSION = 1
 
 # Event types

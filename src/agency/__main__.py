@@ -502,9 +502,11 @@ def _create_default_agency_structure(agency_dir: Path, additional_context_files:
 
     agency_dir.mkdir(parents=True, exist_ok=True)
     (agency_dir / "agents").mkdir(exist_ok=True)
-    (agency_dir / "tasks").mkdir(exist_ok=True)
-    (agency_dir / "pending").mkdir(exist_ok=True)
-    (agency_dir / ".scripts").mkdir(exist_ok=True)
+    (agency_dir / "var").mkdir(exist_ok=True)
+    (agency_dir / "var" / "tasks").mkdir(exist_ok=True)
+    (agency_dir / "var" / "pending").mkdir(exist_ok=True)
+    (agency_dir / "run").mkdir(exist_ok=True)
+    (agency_dir / "run" / ".scripts").mkdir(exist_ok=True)
 
     config_path = agency_dir / "config.yaml"
     if not config_path.exists():

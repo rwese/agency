@@ -666,7 +666,7 @@ def _generate_manager_launch_script(
     """Generate the manager launch script."""
     from agency.config import load_agency_config
 
-    scripts_dir = agency_dir / ".scripts"
+    scripts_dir = agency_dir / "run" / ".scripts"
     scripts_dir.mkdir(parents=True, exist_ok=True)
     script_path = scripts_dir / f"manager-{manager_name}.sh"
 
@@ -799,8 +799,8 @@ def _generate_manager_launch_script(
 
     # Build command with heartbeat in background
     # Use unique socket path per member
-    injector_socket = f"{agency_dir}/injector-{manager_name}.sock"
-    status_socket = f"{agency_dir}/status-{manager_name}.sock"
+    injector_socket = f"{agency_dir}/run/injector-{manager_name}.sock"
+    status_socket = f"{agency_dir}/run/status-{manager_name}.sock"
 
     # Build parallel limit env var
     parallel_limit_env = f"AGENCY_PARALLEL_LIMIT={parallel_limit} " if parallel_limit else ""
@@ -874,7 +874,7 @@ def _generate_agent_launch_script(
     """Generate the agent launch script."""
     from agency.config import load_agency_config
 
-    scripts_dir = agency_dir / ".scripts"
+    scripts_dir = agency_dir / "run" / ".scripts"
     scripts_dir.mkdir(parents=True, exist_ok=True)
     script_path = scripts_dir / f"agent-{agent_name}.sh"
 
@@ -995,8 +995,8 @@ def _generate_agent_launch_script(
 
     # Build command with heartbeat in background
     # Use unique socket path per member
-    injector_socket = f"{agency_dir}/injector-{agent_name}.sock"
-    status_socket = f"{agency_dir}/status-{agent_name}.sock"
+    injector_socket = f"{agency_dir}/run/injector-{agent_name}.sock"
+    status_socket = f"{agency_dir}/run/status-{agent_name}.sock"
 
     # Get poll and ping intervals from manager config
     poll_interval = 30

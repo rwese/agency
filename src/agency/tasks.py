@@ -14,9 +14,9 @@ from pathlib import Path
 from filelock import FileLock
 
 # Constants
-TASKS_FILE = "tasks.json"
-TASKS_DIR = "tasks"
-PENDING_DIR = "pending"
+TASKS_FILE = "var/tasks.json"
+TASKS_DIR = "var/tasks"
+PENDING_DIR = "var/pending"
 HALTED_FILE = ".halted"
 
 
@@ -74,11 +74,12 @@ class TaskStore:
     def __init__(self, agency_dir: Path):
         self.agency_dir = agency_dir
         self.tasks_file = agency_dir / TASKS_FILE
-        self.lock_file = agency_dir / ".tasks.lock"
+        self.lock_file = agency_dir / "var" / ".tasks.lock"
         self._audit_store = None
 
         # Ensure directories exist
         agency_dir.mkdir(parents=True, exist_ok=True)
+        (agency_dir / "var").mkdir(exist_ok=True)
         (agency_dir / TASKS_DIR).mkdir(exist_ok=True)
         (agency_dir / PENDING_DIR).mkdir(exist_ok=True)
 
@@ -126,7 +127,9 @@ class TaskStore:
         tasks = [Task.from_dict(t) for t in data.get("tasks", {}).values()]
 
         if status:
-            tasks = [t for t in tasks if t.status == status]
+            # Support comma-separated status values (e.g., "pending,in_progress")
+            status_list = [s.strip() for s in status.split(",")]
+            tasks = [t for t in tasks if t.status in status_list]
 
         if assignee:
             tasks = [t for t in tasks if t.assigned_to == assignee]

@@ -12,6 +12,7 @@ Role-based behavior:
 
 import json
 import os
+import socket
 import sys
 import time
 from pathlib import Path
@@ -37,7 +38,7 @@ def _get_audit_store(agency_dir: Path):
 
 def get_all_tasks(agency_dir: Path) -> list[dict]:
     """Get all tasks as a list."""
-    tasks_json = agency_dir / "tasks.json"
+    tasks_json = agency_dir / "var/tasks.json"
     tasks = []
 
     if tasks_json.exists():
@@ -132,11 +133,51 @@ def get_agent_tasks(agency_dir: Path, agent_name: str) -> list[dict]:
     return [t for t in get_all_tasks(agency_dir) if t.get("assigned_to") == agent_name]
 
 
+def is_agent_idle() -> bool:
+    """Check if agent is idle via pi-status socket.
+
+    Queries the PI_STATUS_SOCKET for health status.
+    Returns True if agent is idle (not actively working).
+    Returns True if socket unavailable (conservative - allows notifications).
+    """
+    socket_path = os.environ.get("PI_STATUS_SOCKET", "")
+
+    if socket_path:
+        try:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.settimeout(2)  # 2 second timeout
+            sock.connect(socket_path)
+
+            # Send health query
+            sock.sendall(b'{"action":"health"}\n')
+
+            # Read response
+            data = b""
+            while True:
+                chunk = sock.recv(4096)
+                if not chunk:
+                    break
+                data += chunk
+                break  # Single response expected
+
+            sock.close()
+            if data:
+                response = json.loads(data.decode("utf-8"))
+                if response.get("type") == "ok" and "data" in response:
+                    return response["data"].get("idle", True)
+
+        except (json.JSONDecodeError, OSError):
+            # Socket error - assume idle to allow notifications through
+            pass
+
+    return True  # Default to idle if we can't check
+
+
 def write_notification(agency_dir: Path, role: str, agent_name: str, message: str):
     """Write notification to files that pi can read."""
     import json
 
-    notifications_file = agency_dir / "notifications.json"
+    notifications_file = agency_dir / "var/notifications.json"
 
     # Load existing notifications
     notifications = []
@@ -162,7 +203,7 @@ def write_notification(agency_dir: Path, role: str, agent_name: str, message: st
     notifications_file.write_text(json.dumps(notifications, indent=2))
 
     # Also write to a system prompt file that can be loaded
-    system_hint_file = agency_dir / "system_hint.txt"
+    system_hint_file = agency_dir / "var/system_hint.txt"
     system_hint_file.write_text(f"\n## NEW NOTIFICATION\n{message}\n")
 
 
@@ -217,7 +258,7 @@ def send_notification(window_ref: str, message: str) -> bool:
                     cmd = f"agency tasks show {part}"
                     break
 
-        # Send as steer message
+        # Send as steer message with correct format for pi-inject
         resp = client.steer(cmd)
 
         if resp.is_ok:
@@ -238,6 +279,37 @@ def send_notification(window_ref: str, message: str) -> bool:
         return False
 
 
+def _check_pid_file(agency_dir: Path, member_name: str) -> bool:
+    """Check if a heartbeat is already running for this member.
+
+    Returns True if we should exit (another instance is running).
+    Returns False if we should continue (no other instance).
+    """
+    import os
+
+    pid_file = agency_dir / "run" / f".heartbeat-{member_name}.pid"
+    current_pid = os.getpid()
+
+    if pid_file.exists():
+        try:
+            old_pid = int(pid_file.read_text().strip())
+            # Check if the old process is still running
+            if old_pid != current_pid:
+                try:
+                    os.kill(old_pid, 0)  # Signal 0 just checks if process exists
+                    print(f"[HEARTBEAT] Another instance already running (PID: {old_pid})")
+                    return True
+                except OSError:
+                    # Old process is dead, we'll replace it
+                    pass
+        except (ValueError, OSError):
+            pass
+
+    # Write our PID
+    pid_file.write_text(str(current_pid))
+    return False
+
+
 def manager_heartbeat(
     agency_dir: Path,
     socket_name: str,
@@ -256,6 +328,10 @@ def manager_heartbeat(
         chunk_size: Max tasks per agent (per-agent limit)
         parallel_limit: Max total parallel tasks (None = unlimited)
     """
+    # Prevent duplicate heartbeats
+    if _check_pid_file(agency_dir, f"manager-{manager_name}"):
+        return
+
     window_ref = f"{socket_name}:[MGR] {manager_name}"
 
     print(f"[HEARTBEAT] Starting heartbeat for manager '{manager_name}'")
@@ -265,6 +341,7 @@ def manager_heartbeat(
     last_unassigned = 0
     last_approval = 0
     last_notification_time = 0
+    _idle_cycles = 0  # Track cycles with nothing to dispatch
 
     while True:
         try:
@@ -276,14 +353,28 @@ def manager_heartbeat(
             # Check parallel limit
             at_parallel_limit = parallel_limit is not None and active_count >= parallel_limit
 
-            print(
-                f"[HEARTBEAT] Active: {active_count}/{parallel_limit or '∞'}, "
-                f"{counts['unassigned']} unassigned, "
-                f"{len(available_agents)} agents available: {available_agents}"
-            )
+            # Determine if there's anything dispatchable
+            has_unassigned = counts["unassigned"] > 0 and available_agents
+            has_pending_approval = counts["pending_approval"] > 0
+            is_dispatchable = has_unassigned or has_pending_approval
 
-            # Always notify about unassigned tasks, but warn about parallel limit
-            if counts["unassigned"] > 0 and available_agents:
+            if not is_dispatchable:
+                _idle_cycles += 1
+                # Only log every 10 cycles to reduce noise
+                if _idle_cycles == 1 or _idle_cycles % 10 == 0:
+                    print(
+                        f"[HEARTBEAT] Idle: {counts['in_progress']} in progress, "
+                        f"{counts['pending']} assigned (not started), "
+                        f"{len(available_agents)} agents available. Nothing to dispatch."
+                    )
+                time.sleep(poll_interval)
+                continue
+
+            # Reset idle counter when there's work
+            _idle_cycles = 0
+
+            # Only notify about unassigned tasks when nothing is in progress
+            if has_unassigned and counts["in_progress"] == 0:
                 should_notify = counts["unassigned"] != last_unassigned and (current_time - last_notification_time) > 30
                 if should_notify:
                     agent_list = ", ".join(available_agents)
@@ -319,7 +410,8 @@ def manager_heartbeat(
                                 },
                             )
 
-            if counts["pending_approval"] > 0 and counts["pending_approval"] != last_approval:
+            # Only notify about pending approval when nothing is in progress
+            elif has_pending_approval and counts["pending_approval"] != last_approval:
                 msg = (
                     f"👀 {counts['pending_approval']} task(s) pending your approval - run 'agency tasks list' to review"
                 )
@@ -363,27 +455,38 @@ def agent_heartbeat(
         poll_interval: Seconds between checks
         ping_interval: Seconds between idle pings (default: 2 minutes)
     """
-    from agency.session import SessionManager
+    # Prevent duplicate heartbeats
+    if _check_pid_file(agency_dir, f"agent-{agent_name}"):
+        return
 
     window_ref = f"{socket_name}:{agent_name}"
 
     print(f"[HEARTBEAT] Starting heartbeat for agent '{agent_name}'")
     print(f"[HEARTBEAT] Agency dir: {agency_dir}")
     print(f"[HEARTBEAT] Poll interval: {poll_interval}s, ping interval: {ping_interval}s")
+    print(f"[HEARTBEAT] Status socket: {os.environ.get('PI_STATUS_SOCKET', 'not set')}")
 
     last_ping_time = 0  # Track when we last sent a ping
-    # SessionManager(session_name, socket_name) - in agency, session and socket names match
-    sm = SessionManager(socket_name, socket_name)
+    last_notified_task_id = None  # Track last notified task
 
     while True:
         try:
             tasks = get_agent_tasks(agency_dir, agent_name)
-            pending_tasks = [t for t in tasks if t.get("status") == "pending"]
+
+            # Sort pending tasks by priority (high > normal > low) then created_at
+            priority_order = {"high": 0, "normal": 1, "low": 2}
+            pending_tasks = sorted(
+                [t for t in tasks if t.get("status") == "pending"],
+                key=lambda t: (
+                    priority_order.get(t.get("priority", "normal"), 1),
+                    t.get("created_at", "")
+                )
+            )
             in_progress_tasks = [t for t in tasks if t.get("status") == "in_progress"]
             current_time = time.time()
 
-            # Check if pane is idle (at least 2 minutes since last change)
-            pane_is_idle = sm.is_window_idle(agent_name, idle_seconds=120)
+            # Check if agent is idle via pi-status socket
+            pane_is_idle = is_agent_idle()
 
             # If agent has task in progress, check if it needs attention
             if in_progress_tasks:
@@ -396,16 +499,26 @@ def agent_heartbeat(
                         print(f"[HEARTBEAT] Pinged idle agent about task: {task_id}")
                         last_ping_time = current_time
 
-            # If we have pending tasks, notify agent (only if idle)
-            elif pending_tasks and pane_is_idle:
+            # Only notify about pending tasks when nothing is in progress AND pane is idle
+            # NEVER interrupt a working agent
+            # Stable selection: first task by priority + created_at
+            if pending_tasks and not in_progress_tasks and pane_is_idle:
                 next_task = pending_tasks[0]
                 task_id = next_task.get("task_id")
-                desc = next_task.get("description", "")[:50]
 
-                msg = f"📌 Task ready: {task_id} - {desc}... Run 'agency tasks show {task_id}' to start"
-                if send_notification(window_ref, msg):
-                    print(f"[HEARTBEAT] Notified idle agent about: {task_id}")
-                    last_ping_time = current_time
+                # Only notify if new task or been idle since last notify
+                should_notify = (
+                    task_id != last_notified_task_id or
+                    current_time - last_ping_time >= ping_interval
+                )
+
+                if should_notify:
+                    desc = next_task.get("description", "")[:50]
+                    msg = f"📌 Task ready: {task_id} - {desc}... Run 'agency tasks show {task_id}' to start"
+                    if send_notification(window_ref, msg):
+                        print(f"[HEARTBEAT] Notified agent about: {task_id}")
+                        last_ping_time = current_time
+                        last_notified_task_id = task_id
 
                     # Audit log
                     audit = _get_audit_store(agency_dir)
@@ -419,7 +532,7 @@ def agent_heartbeat(
                             },
                         )
 
-            # Periodic ping even with no tasks (keep agent engaged) - only if idle
+            # Periodic ping with no tasks (keep agent engaged) - only if idle
             elif pane_is_idle and current_time - last_ping_time >= ping_interval * 2:
                 msg = "🏃 No tasks assigned. Check 'agency tasks list' or wait for new assignments."
                 if send_notification(window_ref, msg):
