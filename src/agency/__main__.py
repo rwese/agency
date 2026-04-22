@@ -264,28 +264,27 @@ def init_project(dir, template, template_subdir, force, refresh, no_context):
     if not no_context:
         additional_context_files = _prompt_context_files(work_dir, project_name)
 
-    # Download template if specified
-    template_url = template or "https://github.com/rwese/agency-templates"
-
-    # Extract subdir from URL if specified inline (e.g., /tree/main/fullstack-ts)
-    resolved_subdir = template_subdir
-    if not resolved_subdir and "/tree/" in template_url:
-        parts = template_url.split("/tree/")
-        if len(parts) > 1:
-            path_parts = parts[1].split("/")
-            if len(path_parts) >= 2:  # branch/template or branch/path/to/template
-                resolved_subdir = "/".join(path_parts[1:])  # template or path/to/template
-
-    if template_url:
-        tm = TemplateManager(template_url, cache_dir=Path.home() / ".cache" / "agency" / "templates")
-        template_path = tm.get_template(resolved_subdir or "basic", refresh=refresh)
-        if template_path:
-            click.echo(f"[INFO] Using template from {template_url}")
-            _copy_template_to_agency(template_path, agency_dir)
-        else:
-            click.echo("[WARN] Could not download template, creating default structure", err=True)
-            _create_default_agency_structure(agency_dir, additional_context_files)
+    # Determine template to use
+    # If template is a simple name (e.g., 'fullstack-ts'), use agency-templates repo
+    template_name = template or ""
+    
+    # Resolve template URL and subdir
+    if template_name and "/" not in template_name and "github.com" not in template_name:
+        # Simple template name - use agency-templates repo
+        tm = TemplateManager("https://github.com/rwese/agency-templates", cache_dir=Path.home() / ".cache" / "agency" / "templates")
+        template_path = tm.get_template(template_name, refresh=refresh)
+    elif template_name:
+        # Full URL or path
+        tm = TemplateManager(template_name, cache_dir=Path.home() / ".cache" / "agency" / "templates")
+        template_path = tm.get_template(template_subdir or "", refresh=refresh)
     else:
+        template_path = None
+    
+    if template_path:
+        click.echo(f"[INFO] Using template: {template_path}")
+        _copy_template_to_agency(template_path, agency_dir)
+    else:
+        click.echo("[INFO] Creating default .agency/ structure")
         _create_default_agency_structure(agency_dir, additional_context_files)
 
     # Create tmux session with socket
@@ -373,12 +372,63 @@ def _prompt_context_files(work_dir: Path, project_name: str) -> list[str]:
     return selected
 
 
+def _fix_yaml_multiline_blocks(content: str) -> str:
+    """Fix YAML multiline block syntax issues.
+    
+    The issue: In YAML literal blocks (|), blank lines end the block.
+    After a blank line, ALL lines must be indented until the next top-level key.
+    
+    Properly indents markdown headers (## Title) and list items (- item).
+    """
+    import re
+    
+    lines = content.split('\n')
+    fixed_lines = []
+    in_block = False
+    block_indent = 0
+    
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        
+        # Detect start of literal block (key: |)
+        if re.match(r'^\s*\w+: \|$', line):
+            in_block = True
+            # Content indent = 2 spaces (for continuation of block)
+            block_indent = len(line) - len(line.lstrip()) + 2
+            fixed_lines.append(line)
+            continue
+        
+        if in_block:
+            if stripped == '':
+                # Blank line - add indent to continue block
+                fixed_lines.append(' ' * block_indent)
+            elif line.startswith(' ' * 2):
+                # Already indented - OK
+                fixed_lines.append(line)
+            elif stripped.startswith('## ') or stripped.startswith('- '):
+                # Markdown header or list item - indent it
+                fixed_lines.append(' ' * block_indent + stripped)
+            elif re.match(r'^\s*\w+:', line):
+                # Next top-level key - end block
+                in_block = False
+                fixed_lines.append(line)
+            else:
+                # Other content - indent it
+                fixed_lines.append(' ' * block_indent + stripped)
+        else:
+            fixed_lines.append(line)
+    
+    return '\n'.join(fixed_lines)
+
+
 def _copy_template_to_agency(template_path: Path, agency_dir: Path) -> None:
     """Copy template files to project.
-
+    
     Copies .agency/ to project's .agency/ and other project files to project root.
+    Fixes YAML files with multiline block syntax issues.
     """
     import shutil
+    import yaml
 
     work_dir = agency_dir.parent  # Project root
     agency_dir.mkdir(parents=True, exist_ok=True)
@@ -398,14 +448,27 @@ def _copy_template_to_agency(template_path: Path, agency_dir: Path) -> None:
         else:
             agency_source = None
 
-    # Copy .agency contents
+    # Copy .agency contents with YAML fix
     if agency_source and agency_source.exists():
         for item in agency_source.rglob("*"):
             if item.is_file():
                 rel_path = item.relative_to(agency_source)
                 dest = agency_dir / rel_path
                 dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(item, dest)
+                
+                # Fix YAML files
+                if item.suffix in (".yaml", ".yml"):
+                    content = item.read_text()
+                    fixed_content = _fix_yaml_multiline_blocks(content)
+                    try:
+                        # Verify it parses
+                        data = yaml.safe_load(fixed_content)
+                        dest.write_text(fixed_content)
+                    except Exception:
+                        # Still broken - use raw copy
+                        shutil.copy2(item, dest)
+                else:
+                    shutil.copy2(item, dest)
 
     # Copy other project files (backend, frontend, k8s, etc.)
     for item in template_path.iterdir():
