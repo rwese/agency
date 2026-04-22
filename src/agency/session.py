@@ -33,7 +33,6 @@ def _get_audit_store(agency_dir: Path | None = None):
 # Constants
 SESSION_PREFIX = "agency-"
 MANAGER_PREFIX = "[MGR] "
-HALTED_SUFFIX = "-HALTED"
 SHUTDOWN_MESSAGE = "Please wrap up, save your work, then exit gracefully. Say 'Goodbye' when done."
 WRAPUP_MESSAGE = """Please perform cleanup: (1) Save all work, (2) Update pending tasks with remaining work status using 'agency tasks-agent update <task-id> --status pending --result incomplete: <what remains>', (3) Say 'Goodbye' in your response, then exit."""
 
@@ -1061,46 +1060,6 @@ def _generate_agent_launch_script(
     script_path.chmod(0o755)
 
     return script_path
-
-
-def resume_halted_session(
-    session_name: str,
-    socket_name: str,
-    agency_dir: Path,
-    work_dir: Path,
-) -> bool:
-    """Resume a halted session."""
-    sm = SessionManager(session_name, socket_name)
-
-    # Check if session is halted
-    if session_name.endswith(HALTED_SUFFIX):
-        # Remove HALTED suffix
-        new_name = session_name[: -len(HALTED_SUFFIX)]
-        sm.rename_session(new_name)
-        session_name = new_name
-
-    # Rename manager window if needed
-    windows = sm.list_windows()
-    for window in windows:
-        if window.startswith("[HALTED]"):
-            new_name = window.replace("[HALTED]", "[MGR]")
-            sm.rename_window(window, new_name)
-            break
-
-    # Restart manager
-    manager_config_path = agency_dir / "manager.yaml"
-    if manager_config_path.exists():
-        import yaml
-
-        _config = yaml.safe_load(manager_config_path.read_text())
-
-        # Send resume signal to manager
-        for window in windows:
-            if window.startswith("[MGR]") or window.startswith("[HALTED]"):
-                sm.send_keys(window, "# RESUMED")
-                break
-
-    return True
 
 
 def list_agency_sessions() -> list[dict]:

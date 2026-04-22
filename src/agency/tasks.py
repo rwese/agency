@@ -17,7 +17,6 @@ from filelock import FileLock
 TASKS_FILE = "var/tasks.json"
 TASKS_DIR = "var/tasks"
 PENDING_DIR = "var/pending"
-HALTED_FILE = ".halted"
 
 
 @dataclass

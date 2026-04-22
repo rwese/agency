@@ -1676,54 +1676,6 @@ def session_kill(session):
     click.echo(f"[INFO] Session {session} killed")
 
 
-@session_cmd.command("resume")
-@click.option(
-    "--dir",
-    "dir",
-    type=click.Path(),
-    default=None,
-    help="Project directory (auto-detected from .agency/)",
-)
-def session_resume(dir):
-    """Resume a halted session.
-
-    Auto-detects session from .agency/ if not specified.
-    """
-    _log_cli_command("session resume", dir=dir)
-    # Auto-detect from .agency/ if --dir not provided
-    if dir:
-        work_dir = Path(dir).expanduser().absolute()
-    else:
-        agency_dir_path = find_agency_dir()
-        if not agency_dir_path:
-            click.echo("[ERROR] No .agency/ found", err=True)
-            sys.exit(1)
-        work_dir = agency_dir_path.parent
-
-    git_root = find_git_root(work_dir)
-    if not git_root:
-        click.echo("[ERROR] Not in a git repository", err=True)
-        sys.exit(1)
-
-    agency_dir = git_root / ".agency"
-    halted_file = agency_dir / ".halted"
-
-    if not halted_file.exists():
-        click.echo("[WARN] No halt marker found. Session may not be halted.", err=True)
-
-    project_name = work_dir.name
-    session_name = f"agency-{project_name}"
-    socket_name = session_name
-
-    from agency.session import resume_halted_session
-
-    if resume_halted_session(session_name, socket_name, agency_dir, work_dir):
-        click.echo(f"[INFO] Resumed session: {session_name}")
-    else:
-        click.echo("[ERROR] Failed to resume session", err=True)
-        sys.exit(1)
-
-
 @session_cmd.command("attach")
 @click.option(
     "--dir",

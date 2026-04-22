@@ -28,7 +28,7 @@ _agency_completions()
                     esac
                     ;;
                 *)
-                    COMPREPLY=($(compgen -W "start stop kill resume attach list members windows" -- "${cur}"))
+                    COMPREPLY=($(compgen -W "start stop kill attach list members windows" -- "${cur}"))
                     ;;
             esac
             ;;
@@ -68,7 +68,6 @@ _agency() {
         "start:Start the session"
         "stop:Stop session gracefully"
         "kill:Force kill session"
-        "resume:Resume halted session"
         "attach:Attach to session"
         "list:List sessions"
         "members:Show session members"
@@ -152,7 +151,6 @@ complete -c agency -n '__fish_use_subcommand' -a 'completions' -d 'Print complet
 complete -c agency -n '__fish_seen_subcommand_from session' -a 'start' -d 'Start session'
 complete -c agency -n '__fish_seen_subcommand_from session' -a 'stop' -d 'Stop session'
 complete -c agency -n '__fish_seen_subcommand_from session' -a 'kill' -d 'Kill session'
-complete -c agency -n '__fish_seen_subcommand_from session' -a 'resume' -d 'Resume session'
 complete -c agency -n '__fish_seen_subcommand_from session' -a 'attach' -d 'Attach to session'
 complete -c agency -n '__fish_seen_subcommand_from session' -a 'list' -d 'List sessions'
 complete -c agency -n '__fish_seen_subcommand_from session' -a 'members' -d 'Show members'
