@@ -13,7 +13,7 @@ Replace the broken Click-based wizard with `questionary` library for interactive
 - [x] 1.5: Rewrite `_confirm` using questionary.confirm
 - [x] 1.6: Remove manual `_getch` and termios usage
 - [x] 1.7: Simplify `run_wizard` flow
-- [ ] 1.8: Test wizard end-to-end (interactive)
+- [x] 1.8: Test wizard end-to-end (interactive) - FIXED in tmux!
 
 ## Done
 

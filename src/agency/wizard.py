@@ -111,10 +111,23 @@ def _checkbox(prompt: str, choices: list[str], defaults: list[str] = None) -> li
     if not _is_interactive():
         return defaults or []
 
+    # Pre-select items by marking them as checked
+    from questionary import Choice
+    formatted_choices = []
+    for c in choices:
+        # Extract the path from format "Name (path)" if present
+        choice_value = c
+        is_checked = False
+        if defaults:
+            for d in defaults:
+                if d in c:
+                    is_checked = True
+                    break
+        formatted_choices.append(Choice(title=c, value=c, checked=is_checked))
+
     result = questionary.checkbox(
         prompt,
-        choices=choices,
-        defaults=defaults or [],
+        choices=formatted_choices,
     ).ask()
 
     return result or []
@@ -145,7 +158,7 @@ def step_project(state: WizardState) -> WizardState:
     state.project_name = _prompt_text(
         "Project name",
         default=state.project_name,
-        validate=lambda x: "Project name cannot be empty" if not x else None,
+        validate=lambda x: True if x else "Project name cannot be empty",
     )
 
     # Shell selection
@@ -165,7 +178,7 @@ def step_agents(state: WizardState) -> WizardState:
     state.manager_name = _prompt_text(
         "Manager name",
         default=state.manager_name,
-        validate=_validate_agent_name,
+        validate=lambda x: True if _validate_agent_name(x) is None else _validate_agent_name(x),
     )
 
     # Manager personality (optional)
@@ -192,10 +205,14 @@ def step_agents(state: WizardState) -> WizardState:
             options.append("Remove agent")
         options.append("Done")
 
-        choice = _select("What would you like to do?", choices=options)
+        # Default to last option (Done)
+        choice = _select("What would you like to do?", choices=options, default=options[-1])
 
         if choice == "Add agent":
-            name = _prompt_text("Agent name", validate=_validate_agent_name)
+            name = _prompt_text(
+                "Agent name",
+                validate=lambda x: True if _validate_agent_name(x) is None else _validate_agent_name(x),
+            )
             if name in (a.name for a in state.agents):
                 click.echo(f"[WARN] Agent '{name}' already exists")
                 continue
