@@ -148,9 +148,6 @@ def _validate_agent_name(name: str) -> str | None:
     if not re.match(r"^[a-zA-Z][a-zA-Z0-9_-]*$", name):
         return "Agent name must start with letter, contain only alphanumeric, hyphen, underscore"
 
-    if name in ("coordinator", "manager"):
-        return f"'{name}' is reserved"
-
     return None
 
 
