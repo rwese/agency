@@ -553,12 +553,16 @@ def _get_manager_name(agency_dir: Path) -> str | None:
 @click.argument("session", required=False)
 @click.option("--timeout", type=int, help="Grace period in seconds (default: 300)")
 @click.option("--force", is_flag=True, help="Force kill without graceful shutdown")
-def stop(session, timeout, force):
+@click.option("--idle", type=int, default=10, help="Seconds of inactivity before SIGTERM (default: 10)")
+def stop(session, timeout, force, idle):
     """Stop a session gracefully.
+
+    Waits for agents to become idle (no output for --idle seconds) before sending
+    SIGTERM. Falls back to force kill after --timeout seconds total.
 
     Auto-detects session from .agency/ if not specified.
     """
-    _log_cli_command("stop", session=session, timeout=timeout, force=force)
+    _log_cli_command("stop", session=session, timeout=timeout, force=force, idle=idle)
     # Auto-detect from .agency/ if session not provided
     if not session:
         agency_dir_path = find_agency_dir()
@@ -588,22 +592,38 @@ def stop(session, timeout, force):
     # Broadcast shutdown to all windows
     sm.broadcast_shutdown()
 
-    # Wait for graceful exit
+    # Wait for graceful exit with idle detection
     import time
 
     timeout = timeout or 300  # 5 minutes default
-    interval = 0.5
+    idle_check_interval = 2  # Check idle status every 2 seconds
+    idle_target = idle  # Seconds of inactivity to consider idle
 
     elapsed = 0.0
+    last_progress = 0.0
+    
     while elapsed < timeout:
-        time.sleep(interval)
-        elapsed += interval
+        time.sleep(idle_check_interval)
+        elapsed += idle_check_interval
+        
         if not sm.session_exists():
             click.echo("[INFO] Session stopped gracefully")
             sm.cleanup_socket()
             return
+        
+        # Check idle status
+        windows = sm.list_windows()
+        idle_windows = sm.get_idle_windows(idle_target)
+        
+        if idle_windows:
+            click.echo(f"[INFO] Idle windows: {', '.join(idle_windows)}")
+        
+        # Progress indicator every 30 seconds
+        if elapsed - last_progress >= 30:
+            click.echo(f"[INFO] Waiting for graceful shutdown... ({elapsed:.0f}s elapsed)")
+            last_progress = elapsed
 
-    # Force kill
+    # Force kill after timeout
     click.echo("[WARN] Graceful shutdown timed out, force killing...", err=True)
     sm.kill_session()
     sm.cleanup_socket()

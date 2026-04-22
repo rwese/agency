@@ -240,6 +240,104 @@ class SessionManager:
 
         return False
 
+    # Instance variable to track pane state for idle detection
+    _idle_tracker: dict[str, dict] = {}  # window_name -> {last_time, last_scrollback_lines, last_hash}
+
+    def get_scrollback_hash(self, window_name: str) -> tuple[int, str] | None:
+        """Get scrollback line count and hash of scrollback content.
+        
+        Returns (scrollback_lines, content_hash) or None if unavailable.
+        Uses capture-pane -a to get full scrollback.
+        """
+        import hashlib
+        
+        # Get scrollback with -S to get all lines including scrollback
+        result = self._tmux(
+            "capture-pane", "-p", "-t", f"{self.session_name}:{window_name}"
+        )
+        if result.returncode != 0:
+            return None
+        
+        lines = result.stdout
+        line_count = len(lines.split('\n'))
+        
+        # Fast hash of the content (first 1000 chars + last 1000 chars for efficiency)
+        if len(lines) > 2000:
+            content = lines[:1000] + lines[-1000:]
+        else:
+            content = lines
+        
+        hash_val = hashlib.md5(content.encode('utf-8', errors='ignore')).hexdigest()[:16]
+        
+        return (line_count, hash_val)
+
+    def get_window_activity(self, window_name: str) -> int | None:
+        """Get the last activity timestamp based on scrollback changes.
+        
+        Returns Unix timestamp of last scrollback change, or None if unavailable.
+        Compares scrollback line count and content hash.
+        """
+        import time
+        
+        current = self.get_scrollback_hash(window_name)
+        if current is None:
+            return None
+        
+        current_lines, current_hash = current
+        current_time = int(time.time())
+        
+        if window_name not in self._idle_tracker:
+            # First check - mark as active now
+            self._idle_tracker[window_name] = {
+                'last_time': current_time,
+                'last_lines': current_lines,
+                'last_hash': current_hash
+            }
+            return current_time
+        
+        tracker = self._idle_tracker[window_name]
+        
+        if current_lines != tracker['last_lines'] or current_hash != tracker['last_hash']:
+            # Scrollback changed - update timestamp
+            tracker['last_time'] = current_time
+            tracker['last_lines'] = current_lines
+            tracker['last_hash'] = current_hash
+            return current_time
+        
+        # No change - return last activity time
+        return tracker['last_time']
+
+    def is_window_idle(self, window_name: str, idle_seconds: int = 5) -> bool:
+        """Check if a window pane has been idle for specified seconds.
+        
+        Args:
+            window_name: Name of the window
+            idle_seconds: Number of seconds of inactivity required
+            
+        Returns:
+            True if pane has been idle for idle_seconds, False otherwise
+        """
+        import time
+        activity = self.get_window_activity(window_name)
+        if activity is None:
+            return False
+        return (int(time.time()) - activity) >= idle_seconds
+
+    def get_idle_windows(self, idle_seconds: int = 5) -> list[str]:
+        """Get list of windows that have been idle for specified seconds.
+        
+        Args:
+            idle_seconds: Number of seconds of inactivity required
+            
+        Returns:
+            List of window names that are idle
+        """
+        idle_windows = []
+        for window in self.list_windows():
+            if self.is_window_idle(window, idle_seconds):
+                idle_windows.append(window)
+        return idle_windows
+
 
 def create_project_session(
     session_name: str,
