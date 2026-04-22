@@ -1,62 +1,55 @@
-# agency-web Planning
+# agency-web Implementation
+
+## Status: In Progress
 
 ## Tasks
 
-| # | Task | Status | Notes |
-|---|------|--------|-------|
-| 1 | Create PRD with user stories | [x] | v1.2 complete |
-| 2 | Define API endpoints outline | [x] | Full REST API spec |
-| 3 | Define data model sketch | [x] | SQLite schema with FTS |
-| 4 | Define UI wireframes (text) | [x] | 8 pages |
-| 5 | Clarify requirements via questions | [x] | Complete |
+### Phase 1: Infrastructure
+- [ ] 1.1 Backend project scaffolding (Hono, Prisma, TypeScript)
+- [ ] 1.2 Frontend project scaffolding (React, Vite, Tailwind)
+- [ ] 1.3 Docker Compose setup (backend, frontend, postgres)
+- [ ] 1.4 CI/CD pipeline (GitHub Actions)
 
-## Requirements Summary
+### Phase 2: Backend Core
+- [ ] 2.1 Prisma schema from DATA_MODEL.md
+- [ ] 2.2 Database migrations
+- [ ] 2.3 Auth endpoints (login, logout, API keys)
+- [ ] 2.4 User management endpoints
+- [ ] 2.5 Team management endpoints
 
-### Entities
-- Team, User, Epic, Task, Comment, Attachment
-- GitHubRef, Webhook, ActivityLog, GitHubAppConfig
+### Phase 3: Backend Features
+- [ ] 3.1 Epic CRUD endpoints
+- [ ] 3.2 Task CRUD endpoints
+- [ ] 3.3 Comment endpoints
+- [ ] 3.4 Attachment upload/download
+- [ ] 3.5 Webhook system
+- [ ] 3.6 GitHub webhook receiver
+- [ ] 3.7 Full-text search
+- [ ] 3.8 Admin metrics & activity logs
 
-### Features
-- [x] Teams (group users, team-scoped epics/tasks)
-- [x] Tags/labels on epics and tasks
-- [x] External ID (GitHub issue references)
-- [x] Full-text search
-- [x] Dashboard widgets (my tasks, epic progress, activity)
-- [x] Kanban board (by status columns)
-- [x] GitHub App bidirectional sync
-- [x] Slack notifications via webhooks
-- [x] Webhook system for all CRUD events
-- [x] Activity logging with configurable retention
-- [x] Admin metrics dashboard
-- [x] Health endpoint
-- [x] Bulk task actions
-- [x] Inline editing
-- [x] Keyboard shortcuts (J/K/N)
-- [x] Magic link email invites
-- [x] Configurable blocked file types
-- [x] Full database backup/export
-- [x] Auto-migrations (configurable)
-- [x] JSON structured logging
+### Phase 4: Frontend Core
+- [ ] 4.1 Layout shell (sidebar, navigation)
+- [ ] 4.2 Auth pages (login, register)
+- [ ] 4.3 Dashboard with widgets
+- [ ] 4.4 Epics list & detail pages
+- [ ] 4.5 Tasks list & detail pages
+- [ ] 4.6 Kanban board view
 
-### Constraints
-- [x] On-premise only
-- [x] Self-contained (no external auth)
-- [x] Single binary (Go)
-- [x] Docker containerized (GHCR)
-- [x] Mobile-first UI
-- [x] Screen reader optimized (WCAG AA)
-- [x] Custom branding via CSS variables
-- [x] Full markdown support
+### Phase 5: Frontend Features
+- [ ] 5.1 Inline editing
+- [ ] 5.2 Bulk actions
+- [ ] 5.3 Keyboard shortcuts
+- [ ] 5.4 Mobile responsiveness
+- [ ] 5.5 Accessibility (WCAG AA)
 
-### Tech Decisions (from clarifications)
-- Session auth: Implementation-defined
-- Real-time: Implementation-defined (polling or WebSocket)
-- File blocking: Configurable blocklist
-- GitHub: GitHub App, configured repo list
-- User invites: Magic links
-- Kanban: By status columns
-- Dashboard: Simple counts, no charts
+### Phase 6: Integration
+- [ ] 6.1 E2E tests (Playwright)
+- [ ] 6.2 Health check endpoint
+- [ ] 6.3 Docker image to GHCR
+- [ ] 6.4 Documentation
 
-## Status
-
-**Completed:** All planning documents ready for handoff
+## References
+- PRD.md: Full requirements
+- API.md: API specification
+- DATA_MODEL.md: Database schema
+- UI_WIREFRAMES.md: UI layouts

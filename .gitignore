@@ -29,3 +29,10 @@ sessions/
 
 # Agency project configs (per-user)
 .agency/
+
+# Agency
+/agency-web/.agency/
+!/agency-web/.agency/config.yaml
+!/agency-web/.agency/agents.yaml
+!/agency-web/.agency/manager.yaml
+/agency-web/.agency/agents/
