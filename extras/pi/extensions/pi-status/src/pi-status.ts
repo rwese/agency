@@ -5,7 +5,7 @@
  * Enables external monitoring, health checks, and integration
  * with external dashboards or scripts.
  *
- * Socket path: PI_STATUS_SOCKET env var or ~/.pi/status.sock
+ * Socket path: PI_STATUS_SOCKET env var or ~/.pi/pi-status-<pid>.sock
  */
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
@@ -16,7 +16,7 @@ import { existsSync, unlinkSync } from "node:fs";
 
 // Socket file path
 const getSocketPath = (): string =>
-	process.env.PI_STATUS_SOCKET || join(homedir(), ".pi", "status.sock");
+	process.env.PI_STATUS_SOCKET || join(homedir(), ".pi", `pi-status-${process.pid}.sock`);
 
 // Response types
 interface StatusResponse {
