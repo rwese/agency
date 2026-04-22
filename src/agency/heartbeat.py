@@ -209,6 +209,60 @@ def check_stale_tasks(agency_dir: Path) -> list[dict]:
     return stale
 
 
+def check_orphan_pending_approval_tasks(agency_dir: Path) -> list[dict]:
+    """Check for orphaned pending_approval tasks (no active reviewer).
+
+    Tasks in pending_approval need a reviewer. If no reviewer is assigned
+    or the reviewer's process is gone, the task is orphaned.
+
+    Args:
+        agency_dir: Path to .agency directory
+
+    Returns:
+        List of orphaned task info dicts with task_id and reason
+    """
+    orphans = []
+
+    for task in get_all_tasks(agency_dir):
+        status = task.get("status", "")
+        if status != "pending_approval":
+            continue
+
+        task_id = task.get("task_id")
+        reviewer = task.get("reviewer_assigned")
+
+        # If no reviewer assigned, it's orphaned
+        if not reviewer:
+            orphans.append(
+                {
+                    "task_id": task_id,
+                    "reviewer": None,
+                    "reason": "no_reviewer_assigned",
+                }
+            )
+            continue
+
+        # Check if reviewer process exists
+        agent_info = task.get("reviewer_agent_info")
+        if agent_info:
+            pid = agent_info.get("pid")
+            if pid and not process_exists(pid):
+                orphans.append(
+                    {
+                        "task_id": task_id,
+                        "reviewer": reviewer,
+                        "reason": "reviewer_process_not_found",
+                        "pid": pid,
+                    }
+                )
+                continue
+
+        # Reviewer assigned but we need to check if it's running in tmux
+        # This is handled by the review spawning logic in heartbeat
+
+    return orphans
+
+
 def is_agent_idle() -> bool:
     """Check if agent is idle via pi-status socket.
 
@@ -738,6 +792,19 @@ def manager_heartbeat_v2(
                                 "pid": event["pid"],
                             },
                         )
+
+            # 1b. ORPHAN DETECTION: Check for orphaned pending_approval tasks
+            orphans = check_orphan_pending_approval_tasks(agency_dir)
+            if orphans:
+                print(f"[HEARTBEAT-V2] Found {len(orphans)} orphaned pending_approval tasks")
+                # Clear reviewer assignment so new reviewer can be spawned
+                from agency.tasks import TaskStore
+
+                store = TaskStore(agency_dir)
+                for orphan in orphans:
+                    task_id = orphan["task_id"]
+                    store.update_task(task_id, reviewer_assigned=None)
+                    print(f"[HEARTBEAT-V2] Cleared orphan reviewer for {task_id}")
 
             # 2. REVIEW: Spawn reviewer agents for pending_approval tasks
             pending_approval = get_pending_approval_tasks(agency_dir)
