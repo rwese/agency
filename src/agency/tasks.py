@@ -5,6 +5,7 @@ Handles task operations with file locking and directory management.
 """
 
 import json
+import os
 import shutil
 from dataclasses import dataclass
 from datetime import datetime
@@ -71,11 +72,22 @@ class TaskStore:
         self.agency_dir = agency_dir
         self.tasks_file = agency_dir / TASKS_FILE
         self.lock_file = agency_dir / ".tasks.lock"
+        self._audit_store = None
 
         # Ensure directories exist
         agency_dir.mkdir(parents=True, exist_ok=True)
         (agency_dir / TASKS_DIR).mkdir(exist_ok=True)
         (agency_dir / PENDING_DIR).mkdir(exist_ok=True)
+
+    def _get_audit_store(self):
+        """Get audit store lazily."""
+        if self._audit_store is None:
+            try:
+                from agency.audit import AuditStore
+                self._audit_store = AuditStore(self.agency_dir)
+            except Exception:
+                self._audit_store = False  # Mark as unavailable
+        return self._audit_store if self._audit_store else None
 
     def _read_tasks_json(self) -> dict:
         """Read tasks.json."""
@@ -157,6 +169,19 @@ class TaskStore:
             # Write task.json to task directory
             task_json.write_text(json.dumps(task.to_dict(), indent=2))
 
+            # Audit log
+            audit = self._get_audit_store()
+            if audit:
+                audit.log_task(
+                    action="create",
+                    task_id=task_id,
+                    details={
+                        "description": description,
+                        "priority": priority,
+                        "assigned_to": assigned_to,
+                    },
+                )
+
             return task
 
     def assign_task(self, task_id: str, agent: str) -> bool:
@@ -175,6 +200,15 @@ class TaskStore:
 
             tasks[task_id]["assigned_to"] = agent
             self._write_tasks_json(data)
+
+            # Audit log
+            audit = self._get_audit_store()
+            if audit:
+                audit.log_task(
+                    action="assign",
+                    task_id=task_id,
+                    details={"agent": agent},
+                )
 
             return True
 
@@ -213,6 +247,15 @@ class TaskStore:
             task_json_path = self.agency_dir / TASKS_DIR / task_id / "task.json"
             if task_json_path.exists():
                 task_json_path.write_text(json.dumps(tasks[task_id], indent=2))
+
+            # Audit log
+            audit = self._get_audit_store()
+            if audit:
+                audit.log_task(
+                    action="update",
+                    task_id=task_id,
+                    details={"status": status, "priority": priority},
+                )
 
             return True
 
@@ -262,6 +305,18 @@ class TaskStore:
 
             self._write_tasks_json(data)
 
+            # Audit log
+            audit = self._get_audit_store()
+            if audit:
+                audit.log_task(
+                    action="complete",
+                    task_id=task_id,
+                    details={
+                        "result_length": len(result),
+                        "files": files,
+                    },
+                )
+
             return True
 
     def approve_task(self, task_id: str) -> bool:
@@ -294,6 +349,15 @@ class TaskStore:
             task_json_path = self.agency_dir / TASKS_DIR / task_id / "task.json"
             if task_json_path.exists():
                 task_json_path.write_text(json.dumps(task, indent=2))
+
+            # Audit log
+            audit = self._get_audit_store()
+            if audit:
+                audit.log_task(
+                    action="approve",
+                    task_id=task_id,
+                    details={"approved_by": os.environ.get("AGENCY_AGENT", "unknown")},
+                )
 
             return True
 
@@ -337,6 +401,18 @@ class TaskStore:
             if task_json_path.exists():
                 task_json_path.write_text(json.dumps(task, indent=2))
 
+            # Audit log
+            audit = self._get_audit_store()
+            if audit:
+                audit.log_task(
+                    action="reject",
+                    task_id=task_id,
+                    details={
+                        "reason": reason,
+                        "rejected_by": os.environ.get("AGENCY_AGENT", "unknown"),
+                    },
+                )
+
             return True
 
     def delete_task(self, task_id: str) -> bool:
@@ -361,6 +437,14 @@ class TaskStore:
             pending_file = self.agency_dir / PENDING_DIR / f"{task_id}.json"
             if pending_file.exists():
                 pending_file.unlink()
+
+            # Audit log
+            audit = self._get_audit_store()
+            if audit:
+                audit.log_task(
+                    action="delete",
+                    task_id=task_id,
+                )
 
             return True
 

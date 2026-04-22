@@ -19,6 +19,22 @@ from pathlib import Path
 import yaml
 
 
+# Lazy audit store
+_audit_store = None
+
+
+def _get_audit_store(agency_dir: Path):
+    """Get audit store lazily."""
+    global _audit_store
+    if _audit_store is None:
+        try:
+            from agency.audit import AuditStore
+            _audit_store = AuditStore(agency_dir)
+        except Exception:
+            _audit_store = False
+    return _audit_store if _audit_store else None
+
+
 def get_all_tasks(agency_dir: Path) -> list[dict]:
     """Get all tasks as a list."""
     tasks_json = agency_dir / "tasks.json"
@@ -225,6 +241,19 @@ def manager_heartbeat(agency_dir: Path, socket_name: str, manager_name: str, pol
                         last_unassigned = counts["unassigned"]
                         last_notification_time = current_time
 
+                        # Audit log
+                        audit = _get_audit_store(agency_dir)
+                        if audit:
+                            audit.log_agent(
+                                action="heartbeat",
+                                agency_role="manager",
+                                details={
+                                    "notification": "unassigned_tasks",
+                                    "unassigned": counts["unassigned"],
+                                    "available_agents": available_agents,
+                                },
+                            )
+
             if counts["pending_approval"] > 0 and counts["pending_approval"] != last_approval:
                 msg = (
                     f"👀 {counts['pending_approval']} task(s) pending your approval - run 'agency tasks list' to review"
@@ -232,6 +261,18 @@ def manager_heartbeat(agency_dir: Path, socket_name: str, manager_name: str, pol
                 if send_notification(window_ref, msg):
                     print(f"[HEARTBEAT] Notified manager: {msg}")
                     last_approval = counts["pending_approval"]
+
+                    # Audit log
+                    audit = _get_audit_store(agency_dir)
+                    if audit:
+                        audit.log_agent(
+                            action="heartbeat",
+                            agency_role="manager",
+                            details={
+                                "notification": "pending_approval",
+                                "pending_count": counts["pending_approval"],
+                            },
+                        )
 
             time.sleep(poll_interval)
 
@@ -278,6 +319,18 @@ def agent_heartbeat(agency_dir: Path, socket_name: str, agent_name: str, poll_in
                 if send_notification(window_ref, msg):
                     print(f"[HEARTBEAT] Notified agent about: {task_id}")
                     pending_notification_task_id = task_id
+
+                    # Audit log
+                    audit = _get_audit_store(agency_dir)
+                    if audit:
+                        audit.log_agent(
+                            action="heartbeat",
+                            agency_role="agent",
+                            details={
+                                "notification": "new_task",
+                                "task_id": task_id,
+                            },
+                        )
 
             time.sleep(poll_interval)
 

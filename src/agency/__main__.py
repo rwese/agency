@@ -25,9 +25,18 @@ from agency.session import (
     start_manager_window,
 )
 from agency.tasks import TaskStore
+from agency.audit import AuditStore, EVENT_AGENT, EVENT_CLI, EVENT_SESSION, EVENT_TASK
 from agency.template import TemplateManager
 
 VERSION = __version__
+
+
+def _log_cli_command(command: str, **opts):
+    """Log a CLI command invocation to audit trail."""
+    agency_dir = find_agency_dir()
+    if agency_dir:
+        audit = AuditStore(agency_dir)
+        audit.log_cli(command=command, args=opts, cwd=os.getcwd())
 
 
 def find_agency_dir(path: Path = Path.cwd()) -> Path | None:
@@ -221,6 +230,7 @@ def init_project(dir, template, template_subdir, force, refresh, no_context):
 
     Optionally discovers and includes agent configuration files like AGENTS.md and CLAUDE.md.
     """
+    _log_cli_command("init", dir=dir, template=template, force=force)
     work_dir = Path(dir).expanduser().absolute()
 
     if not work_dir.exists():
@@ -454,6 +464,7 @@ def start(dir):
 
     Auto-detects project directory from .agency/ if not specified.
     """
+    _log_cli_command("start", dir=dir)
     # Auto-detect from .agency/ if --dir not provided
     if dir:
         work_dir = Path(dir).expanduser().absolute()
@@ -545,6 +556,7 @@ def stop(session, timeout, force):
 
     Auto-detects session from .agency/ if not specified.
     """
+    _log_cli_command("stop", session=session, timeout=timeout, force=force)
     # Auto-detect from .agency/ if session not provided
     if not session:
         agency_dir_path = find_agency_dir()
@@ -603,6 +615,7 @@ def kill(session):
 
     Auto-detects session from .agency/ if not specified.
     """
+    _log_cli_command("kill", session=session)
     # Auto-detect from .agency/ if session not provided
     if not session:
         agency_dir_path = find_agency_dir()
@@ -640,6 +653,7 @@ def resume(dir):
 
     Auto-detects session from .agency/ if not specified.
     """
+    _log_cli_command("resume", dir=dir)
     # Auto-detect from .agency/ if --dir not provided
     if dir:
         work_dir = Path(dir).expanduser().absolute()
@@ -693,6 +707,7 @@ def attach(dir):
 
     Auto-detects session from .agency/ directory.
     """
+    _log_cli_command("attach", dir=dir)
     # Auto-detect from .agency/ if --dir not provided
     if dir:
         work_dir = Path(dir).expanduser().absolute()
@@ -733,6 +748,7 @@ def list(dir):
 
     Shows sessions from current project or all agency sessions.
     """
+    _log_cli_command("list", dir=dir)
     # Check if we're in an agency project
     if dir:
         work_dir = Path(dir).expanduser().absolute()
@@ -781,6 +797,7 @@ def list(dir):
 )
 def members(dir):
     """Show all configured members (manager and agents)."""
+    _log_cli_command("members", dir=dir)
     # Auto-detect from .agency/ if --dir not provided
     if dir:
         work_dir = Path(dir).expanduser().absolute()
@@ -1427,6 +1444,163 @@ def tmux_run(ctx, window, command):
     click.echo(f"[OK] Running in {window}: {command}")
 
 
+# === Audit Commands ===
+
+
+@click.group("audit")
+def audit_cmd():
+    """Audit trail management."""
+    pass
+
+
+@audit_cmd.command("list")
+@click.option("--type", "event_type", help="Filter by event type (cli, task, session, agent)")
+@click.option("--action", help="Filter by action")
+@click.option("--task", help="Filter by task ID")
+@click.option("--since", help="Events since timestamp (ISO format)")
+@click.option("--until", help="Events until timestamp (ISO format)")
+@click.option("--limit", default=50, help="Max events to show")
+@click.pass_context
+def audit_list(ctx, event_type, action, task, since, until, limit):
+    """List audit events."""
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        ctx.exit(1)
+
+    store = AuditStore(agency_dir)
+    events = store.query(
+        event_type=event_type,
+        action=action,
+        task_id=task,
+        since=since,
+        until=until,
+        limit=limit,
+    )
+
+    if not events:
+        click.echo("No audit events found")
+        return
+
+    type_icon = {
+        EVENT_CLI: "⌨️",
+        EVENT_TASK: "📋",
+        EVENT_SESSION: "🖥️",
+        EVENT_AGENT: "🤖",
+    }
+
+    for event in events:
+        icon = type_icon.get(event.event_type, "?")
+        ts = event.timestamp or "unknown"
+        user = event.os_user or "unknown"
+        session = event.agency_session or "-"
+
+        click.echo(f"{icon} [{ts}] {event.event_type}/{event.action}")
+        click.echo(f"   user={user} session={session}")
+
+        if event.cli_command:
+            click.echo(f"   cli={event.cli_command}")
+
+        if event.task_id:
+            click.echo(f"   task={event.task_id}")
+
+        if event.details:
+            import json
+            details_str = json.dumps(event.details, indent=None)
+            if len(details_str) <= 100:
+                click.echo(f"   details={details_str}")
+            else:
+                click.echo(f"   details={details_str[:100]}...")
+
+        click.echo("")
+
+
+@audit_cmd.command("stats")
+@click.pass_context
+def audit_stats(ctx):
+    """Show audit statistics."""
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        ctx.exit(1)
+
+    store = AuditStore(agency_dir)
+    stats = store.stats()
+
+    click.echo("# Audit Statistics")
+    click.echo("")
+    click.echo(f"- **Total events**: {stats['total_events']}")
+    click.echo(f"- **Last 24 hours**: {stats['last_24h']}")
+    click.echo(f"- **First event**: {stats['first_event'] or 'none'}")
+    click.echo(f"- **Last event**: {stats['last_event'] or 'none'}")
+    click.echo("")
+
+    if stats["by_event_type"]:
+        click.echo("## By Event Type")
+        click.echo("")
+        for etype, count in stats["by_event_type"].items():
+            click.echo(f"- {etype}: {count}")
+        click.echo("")
+
+    if stats["by_action"]:
+        click.echo("## By Action")
+        click.echo("")
+        for action, count in stats["by_action"].items():
+            click.echo(f"- {action}: {count}")
+        click.echo("")
+
+
+@audit_cmd.command("export")
+@click.option("--format", "fmt", default="json", type=click.Choice(["json", "csv"]), help="Export format")
+@click.option("--output", "-o", help="Output file (default: stdout)")
+@click.option("--since", help="Export since timestamp")
+@click.option("--until", help="Export until timestamp")
+@click.pass_context
+def audit_export(ctx, fmt, output, since, until):
+    """Export audit events."""
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        ctx.exit(1)
+
+    store = AuditStore(agency_dir)
+    output_content = store.export(format=fmt, since=since, until=until)
+
+    if output:
+        Path(output).write_text(output_content)
+        click.echo(f"[INFO] Exported to {output}")
+    else:
+        click.echo(output_content)
+
+
+@audit_cmd.command("clear")
+@click.option("--before", help="Delete events before timestamp")
+@click.option("--force", is_flag=True, help="Actually delete events")
+@click.pass_context
+def audit_clear(ctx, before, force):
+    """Clear old audit events."""
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        ctx.exit(1)
+
+    store = AuditStore(agency_dir)
+
+    if not force:
+        # Preview
+        if before:
+            events = store.query(until=before, limit=100000)
+        else:
+            events = store.query(until="datetime('now', '-30 days')", limit=100000)
+
+        click.echo(f"[INFO] Would delete {len(events)} events")
+        click.echo("[INFO] Use --force to confirm")
+        return
+
+    deleted = store.clear(before=before)
+    click.echo(f"[INFO] Deleted {deleted} events")
+
+
 # Register commands based on AGENCY_ROLE
 _agency_role = os.environ.get("AGENCY_ROLE", "").upper()
 
@@ -1442,6 +1616,7 @@ if _agency_role == "MANAGER":
     cli.add_command(members)
     cli.add_command(tasks)
     cli.add_command(tmux_cmd)
+    cli.add_command(audit_cmd)
 elif _agency_role == "AGENT":
     # Agent sees: tasks_agent only (limited commands)
     cli.add_command(tasks_agent)
@@ -1459,6 +1634,7 @@ else:
     cli.add_command(tasks)
     cli.add_command(completions)
     cli.add_command(tmux_cmd)
+    cli.add_command(audit_cmd)
 
 
 def main():
