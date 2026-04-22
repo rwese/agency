@@ -123,8 +123,8 @@ def _prompt_text(prompt: str, default: str = "", validate: Callable[[str], str |
         return default
 
     while True:
-        suffix = f" [{default}]" if default else ""
-        response = click.prompt(f"{prompt}{suffix}: ", default=default, type=str, show_default=bool(default)).strip()
+        # click.prompt with show_default=True displays the default in brackets
+        response = click.prompt(f"{prompt}: ", default=default, type=str, show_default=True).strip()
 
         if not response:
             response = default
