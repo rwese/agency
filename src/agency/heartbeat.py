@@ -63,6 +63,7 @@ def get_task_count(agency_dir: Path) -> dict:
     """Get task counts by status."""
     counts = {
         "pending": 0,
+        "in_progress": 0,
         "unassigned": 0,
         "pending_approval": 0,
     }
@@ -70,14 +71,21 @@ def get_task_count(agency_dir: Path) -> dict:
     for task in get_all_tasks(agency_dir):
         status = task.get("status", "")
         assigned = task.get("assigned_to")
-        if status == "pending" or status == "in_progress":
+        if status == "pending":
             counts["pending"] += 1
             if not assigned:
                 counts["unassigned"] += 1
+        elif status == "in_progress":
+            counts["in_progress"] += 1
         elif status == "pending_approval":
             counts["pending_approval"] += 1
 
     return counts
+
+def get_active_task_count(agency_dir: Path) -> int:
+    """Get count of active tasks (pending + in_progress)."""
+    counts = get_task_count(agency_dir)
+    return counts["pending"] + counts["in_progress"]
 
 
 def get_agent_workload(agency_dir: Path) -> dict[str, int]:
@@ -204,13 +212,29 @@ def send_notification(window_ref: str, message: str) -> bool:
         return False
 
 
-def manager_heartbeat(agency_dir: Path, socket_name: str, manager_name: str, poll_interval: int, chunk_size: int = 1):
-    """Heartbeat loop for manager."""
+def manager_heartbeat(
+    agency_dir: Path,
+    socket_name: str,
+    manager_name: str,
+    poll_interval: int,
+    chunk_size: int = 1,
+    parallel_limit: int | None = None,
+):
+    """Heartbeat loop for manager.
+    
+    Args:
+        agency_dir: Path to .agency/ directory
+        socket_name: Tmux socket name
+        manager_name: Name of the manager window
+        poll_interval: Seconds between checks
+        chunk_size: Max tasks per agent (per-agent limit)
+        parallel_limit: Max total parallel tasks (None = unlimited)
+    """
     window_ref = f"{socket_name}:[MGR] {manager_name}"
 
     print(f"[HEARTBEAT] Starting heartbeat for manager '{manager_name}'")
     print(f"[HEARTBEAT] Agency dir: {agency_dir}")
-    print(f"[HEARTBEAT] Poll interval: {poll_interval}s, chunk size: {chunk_size}")
+    print(f"[HEARTBEAT] Poll interval: {poll_interval}s, chunk: {chunk_size}, parallel_limit: {parallel_limit}")
 
     last_unassigned = 0
     last_approval = 0
@@ -219,15 +243,29 @@ def manager_heartbeat(agency_dir: Path, socket_name: str, manager_name: str, pol
     while True:
         try:
             counts = get_task_count(agency_dir)
+            active_count = counts["pending"] + counts["in_progress"]
             available_agents = get_available_agents(agency_dir, chunk_size)
             current_time = time.time()
 
+            # Check parallel limit
+            at_parallel_limit = parallel_limit is not None and active_count >= parallel_limit
+
             print(
-                f"[HEARTBEAT] Tasks: {counts['unassigned']} unassigned, "
+                f"[HEARTBEAT] Active: {active_count}/{parallel_limit or '∞'}, "
+                f"{counts['unassigned']} unassigned, "
                 f"{len(available_agents)} agents available: {available_agents}"
             )
 
-            if counts["unassigned"] > 0 and available_agents:
+            if at_parallel_limit:
+                if counts["unassigned"] > 0 and (current_time - last_notification_time) > 60:
+                    msg = (
+                        f"⛔ Parallel limit reached: {active_count}/{parallel_limit} tasks active. "
+                        f"Waiting for completion before assigning more."
+                    )
+                    if send_notification(window_ref, msg):
+                        print(f"[HEARTBEAT] Notified manager: {msg}")
+                        last_notification_time = current_time
+            elif counts["unassigned"] > 0 and available_agents:
                 should_notify = counts["unassigned"] != last_unassigned and (current_time - last_notification_time) > 30
                 if should_notify:
                     agent_list = ", ".join(available_agents)
@@ -348,6 +386,8 @@ def run_heartbeat():
     role = os.environ.get("AGENCY_ROLE", "").upper()
     poll_interval = int(os.environ.get("AGENCY_POLL_INTERVAL", "30"))
     chunk_size = int(os.environ.get("AGENCY_CHUNK_SIZE", "1"))
+    parallel_limit_env = os.environ.get("AGENCY_PARALLEL_LIMIT", "")
+    parallel_limit = int(parallel_limit_env) if parallel_limit_env else None
 
     if not role:
         print("[HEARTBEAT] Error: AGENCY_ROLE must be set (MANAGER or AGENT)")
@@ -356,7 +396,7 @@ def run_heartbeat():
 
     if role == "MANAGER":
         manager_name = os.environ.get("AGENCY_MANAGER", "coordinator")
-        manager_heartbeat(agency_dir, socket_name, manager_name, poll_interval, chunk_size)
+        manager_heartbeat(agency_dir, socket_name, manager_name, poll_interval, chunk_size, parallel_limit)
     elif role == "AGENT":
         agent_name = os.environ.get("AGENCY_AGENT", "")
         if not agent_name:

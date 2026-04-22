@@ -638,7 +638,7 @@ def _generate_manager_launch_script(
     # Get agent command
     agent_cmd = os.environ.get("AGENCY_AGENT_CMD", "pi")
 
-    # Get poll interval and chunk size from config
+    # Get poll interval and chunk size from manager config
     poll_interval = 30
     chunk_size = 1
     if manager_config_path.exists():
@@ -646,6 +646,9 @@ def _generate_manager_launch_script(
         config = yaml.safe_load(manager_config_path.read_text())
         poll_interval = config.get("poll_interval", 30)
         chunk_size = config.get("chunk_size", 1)
+
+    # Get parallel limit from agency config
+    parallel_limit = agency_config.parallel_limit
 
     # Get pi-inject extension path
     inject_extension = os.environ.get(
@@ -660,6 +663,10 @@ def _generate_manager_launch_script(
     # Build command with heartbeat in background
     # Use unique socket path per member
     injector_socket = f"{agency_dir}/injector-{manager_name}.sock"
+    
+    # Build parallel limit env var
+    parallel_limit_env = f"AGENCY_PARALLEL_LIMIT={parallel_limit} " if parallel_limit else ""
+    
     cmd = (
         f'cd "{work_dir}" && '
         f"rm -f \"{injector_socket}\" && "
@@ -671,6 +678,7 @@ def _generate_manager_launch_script(
         f"AGENCY_SOCKET={socket_name} "
         f"AGENCY_POLL_INTERVAL={poll_interval} "
         f"AGENCY_CHUNK_SIZE={chunk_size} "
+        f"{parallel_limit_env}"
         f"PI_INJECTOR_SOCKET=\"{injector_socket}\" "
         f"python3 {heartbeat_path} > /dev/null 2>&1 & "
         # Give heartbeat a moment to start
@@ -685,6 +693,7 @@ def _generate_manager_launch_script(
         f"AGENCY_SOCKET={socket_name} "
         f"AGENCY_POLL_INTERVAL={poll_interval} "
         f"AGENCY_CHUNK_SIZE={chunk_size} "
+        f"{parallel_limit_env}"
         f"PI_INJECTOR_SOCKET=\"{injector_socket}\" "
         f"{agent_cmd} "
         f'-e "{inject_extension}" '

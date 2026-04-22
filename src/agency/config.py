@@ -20,6 +20,7 @@ class AgencyConfig:
     stop_timeout: int = 30
     additional_context_files: list[str] | None = None  # Files to add as context (env vars expanded on load)
     template_delimiter: str | None = None  # Custom template delimiter, e.g. "{{...}}"
+    parallel_limit: int | None = None  # Max parallel tasks (None = unlimited)
 
 
 @dataclass
@@ -75,6 +76,7 @@ def load_agency_config(agency_dir: Path) -> AgencyConfig:
         stop_timeout=data.get("stop_timeout", 30),
         additional_context_files=context_files_expanded if context_files_expanded else None,
         template_delimiter=data.get("template_delimiter"),
+        parallel_limit=data.get("parallel_limit"),
     )
 
 

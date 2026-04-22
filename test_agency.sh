@@ -184,8 +184,8 @@ test_base_personality() {
 from agency.session import BASE_PERSONALITY, MANAGER_BASE_ADDITION, AGENT_BASE_ADDITION
 assert 'tmux session' in BASE_PERSONALITY
 assert 'agency members' in BASE_PERSONALITY
-assert 'Manager Responsibilities' in MANAGER_BASE_ADDITION
-assert 'Agent Responsibilities' in AGENT_BASE_ADDITION
+assert 'Task Management Commands' in MANAGER_BASE_ADDITION
+assert 'Task Workflow' in AGENT_BASE_ADDITION
 assert 'agency tasks list' in MANAGER_BASE_ADDITION
 print('OK')
 " && pass "base personality" || fail "base personality"

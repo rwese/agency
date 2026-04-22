@@ -503,7 +503,13 @@ def _create_default_agency_structure(agency_dir: Path, additional_context_files:
         if additional_context_files:
             files_yaml = "\n".join(f"  - {f}" for f in additional_context_files)
             context_section = f"\nadditional_context_files:\n{files_yaml}"
-        config_path.write_text(f"project: default\nshell: bash{context_section}\n")
+        config_path.write_text(
+            f"""project: default
+shell: bash
+# parallel_limit: 4  # Max parallel tasks across all agents (None = unlimited)
+{context_section}
+"""
+        )
 
     agents_path = agency_dir / "agents.yaml"
     if not agents_path.exists():
