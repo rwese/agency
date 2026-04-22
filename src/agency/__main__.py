@@ -183,34 +183,34 @@ def list_templates(repo, refresh):
     try:
         import tempfile
         import json
-        
+
         repo_name = repo.replace("https://github.com/", "")
         api_url = f"https://api.github.com/repos/{repo_name}/contents"
-        
+
         result = subprocess.run(
             ["curl", "-sL", api_url],
             capture_output=True,
             text=True,
             timeout=30
         )
-        
+
         if result.returncode != 0:
             click.echo("[ERROR] Failed to fetch templates", err=True)
             return
-        
+
         contents = json.loads(result.stdout)
         templates = [item["name"] for item in contents if item.get("type") == "dir" and not item["name"].startswith(".")]
-        
+
         if not templates:
             click.echo("No templates found.")
             return
-        
+
         click.echo("Available templates:\n")
         for template in sorted(templates):
             click.echo(f"  • {template}")
-        
+
         click.echo(f"\nUse: agency init --template https://github.com/rwese/agency-templates/tree/main/<template>")
-        
+
     except Exception as e:
         click.echo(f"[ERROR] {e}", err=True)
 
@@ -266,7 +266,7 @@ def init_project(dir, template, template_subdir, force, refresh, no_context):
 
     # Download template if specified
     template_url = template or "https://github.com/rwese/agency-templates"
-    
+
     # Extract subdir from URL if specified inline (e.g., /tree/main/fullstack-ts)
     resolved_subdir = template_subdir
     if not resolved_subdir and "/tree/" in template_url:
@@ -375,7 +375,7 @@ def _prompt_context_files(work_dir: Path, project_name: str) -> list[str]:
 
 def _copy_template_to_agency(template_path: Path, agency_dir: Path) -> None:
     """Copy template files to project.
-    
+
     Copies .agency/ to project's .agency/ and other project files to project root.
     """
     import shutil
@@ -385,7 +385,7 @@ def _copy_template_to_agency(template_path: Path, agency_dir: Path) -> None:
 
     # Template structure may have .agency/ at root level or inside a subdir
     template_agency = template_path / ".agency"
-    
+
     # Find the actual .agency source
     if template_agency.exists():
         # .agency is at template root
@@ -406,7 +406,7 @@ def _copy_template_to_agency(template_path: Path, agency_dir: Path) -> None:
                 dest = agency_dir / rel_path
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(item, dest)
-    
+
     # Copy other project files (backend, frontend, k8s, etc.)
     for item in template_path.iterdir():
         if item.name == ".agency":
@@ -553,13 +553,13 @@ def _get_manager_name(agency_dir: Path) -> str | None:
 @click.argument("session", required=False)
 @click.option("--timeout", type=int, help="Grace period in seconds (default: 300)")
 @click.option("--force", is_flag=True, help="Force kill without graceful shutdown")
-@click.option("--idle", type=int, default=10, help="Seconds of inactivity before SIGTERM (default: 10)")
+@click.option("--idle", type=int, default=10, help="Seconds of inactivity before killing windows (default: 10)")
 def stop(session, timeout, force, idle):
     """Stop a session gracefully.
-
-    Waits for agents to become idle (no output for --idle seconds) before sending
-    SIGTERM. Falls back to force kill after --timeout seconds total.
-
+    
+    Waits for windows to become idle (no output for --idle seconds) then kills them.
+    Falls back to force kill after --timeout seconds total.
+    
     Auto-detects session from .agency/ if not specified.
     """
     _log_cli_command("stop", session=session, timeout=timeout, force=force, idle=idle)
@@ -592,7 +592,7 @@ def stop(session, timeout, force, idle):
     # Broadcast shutdown to all windows
     sm.broadcast_shutdown()
 
-    # Wait for graceful exit with idle detection
+    # Wait for idle with graceful kill of idle windows
     import time
 
     timeout = timeout or 300  # 5 minutes default
@@ -601,6 +601,7 @@ def stop(session, timeout, force, idle):
 
     elapsed = 0.0
     last_progress = 0.0
+    killed_windows: set[str] = set()
     
     while elapsed < timeout:
         time.sleep(idle_check_interval)
@@ -613,10 +614,16 @@ def stop(session, timeout, force, idle):
         
         # Check idle status
         windows = sm.list_windows()
-        idle_windows = sm.get_idle_windows(idle_target)
+        idle_windows = [w for w in sm.get_idle_windows(idle_target) if w not in killed_windows]
         
         if idle_windows:
             click.echo(f"[INFO] Idle windows: {', '.join(idle_windows)}")
+            
+            # Kill idle windows that haven't been killed yet
+            for window in idle_windows:
+                click.echo(f"[INFO] Killing idle window: {window}")
+                sm.kill_window(window)
+                killed_windows.add(window)
         
         # Progress indicator every 30 seconds
         if elapsed - last_progress >= 30:
