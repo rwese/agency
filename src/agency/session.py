@@ -81,6 +81,24 @@ def format_context_args(context_files: list[Path]) -> str:
     return " ".join(args)
 
 
+def format_context_args_heredoc(context_files: list[Path]) -> str:
+    """Format context files as heredoc-compatible command arguments.
+
+    Args:
+        context_files: List of file paths
+
+    Returns:
+        Shell variable assignment with context args or empty string
+    """
+    if not context_files:
+        return '""'
+    args = []
+    for f in context_files:
+        # Use process substitution for file contents
+        args.append(f'--append-system-prompt "<({f})"')
+    return '"' + " ".join(args) + '"'
+
+
 # Base personality injected into all agents (always included)
 BASE_PERSONALITY = """You are running in an Agency v2.0 tmux session.
 
@@ -601,6 +619,17 @@ def _escape_prompt(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`")
 
 
+def _escape_prompt_heredoc(s: str) -> str:
+    """Escape string for heredoc usage."""
+    # Escape backslashes, then $ (but not \$), backticks, and fix << redirection
+    lines = []
+    for line in s.split("\n"):
+        # Escape \$ to prevent variable expansion
+        line = line.replace("\\", "\\\\").replace("$", "\\$").replace("`", "\\`")
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def _generate_manager_launch_script(
     session_name: str,
     socket_name: str,
@@ -658,9 +687,6 @@ def _generate_manager_launch_script(
         + ("\n\n## Who am i\n" + user_personality if user_personality else "")
     )
 
-    escaped = _escape_prompt(full_personality)
-    personality_args = f' --append-system-prompt "{escaped}"'
-
     # Discover context files from work_dir to git_root
     context_files = discover_context_files(work_dir, work_dir)  # Use work_dir as git_root for now
 
@@ -701,7 +727,8 @@ def _generate_manager_launch_script(
             context_files.append(temp_path)
             context_idx += 1
 
-    context_args = format_context_args(context_files)
+    # Format context args for heredoc
+    context_args_heredoc = format_context_args_heredoc(context_files)
 
     # Get agent command
     agent_cmd = os.environ.get("AGENCY_AGENT_CMD", "pi")
@@ -745,58 +772,93 @@ def _generate_manager_launch_script(
     status_socket = f"{agency_dir}/run/status-{manager_name}.sock"
 
     # Build parallel limit env var
-    parallel_limit_env = f"AGENCY_PARALLEL_LIMIT={parallel_limit} " if parallel_limit else ""
+    parallel_limit_line = f"AGENCY_PARALLEL_LIMIT={parallel_limit}" if parallel_limit else ""
 
     # No-frills env vars for minimal UI (hide decorations)
     nofrills_env = (
-        "PI_NOFILLS_TOOLS=minimal PI_NOFILLS_THINKING=1 PI_NOFILLS_WORKING=1 PI_NOFILLS_FOOTER=1 PI_NOFILLS_HEADER=1 "
+        "PI_NOFILLS_TOOLS=minimal PI_NOFILLS_THINKING=1 PI_NOFILLS_WORKING=1 PI_NOFILLS_FOOTER=1 PI_NOFILLS_HEADER=1"
     )
 
-    cmd = (
-        f'cd "{work_dir}" && '
-        f'rm -f "{injector_socket}" && '
-        # Start heartbeat in background with all env vars
-        f"env "
-        f"AGENCY_ROLE=MANAGER "
-        f'AGENCY_DIR="{agency_dir}" '
-        f"AGENCY_MANAGER={manager_name} "
-        f"AGENCY_SOCKET={socket_name} "
-        f"AGENCY_POLL_INTERVAL={poll_interval} "
-        f"AGENCY_CHUNK_SIZE={chunk_size} "
-        f"{parallel_limit_env}"
-        f'PI_INJECTOR_SOCKET="{injector_socket}" '
-        f'PI_STATUS_SOCKET="{status_socket}" '
-        f"python3 {heartbeat_path} > /dev/null 2>&1 & "
-        # Give heartbeat a moment to start
-        f"sleep 1 && "
-        # Use env to ensure all vars are passed to pi
-        f"env "
-        f"AGENCY_ROLE=MANAGER "
-        f"AGENCY_PROJECT={session_name} "
-        f'AGENCY_DIR="{agency_dir}" '
-        f'AGENCY_WORKDIR="{work_dir}" '
-        f"AGENCY_MANAGER={manager_name} "
-        f"AGENCY_SOCKET={socket_name} "
-        f"AGENCY_POLL_INTERVAL={poll_interval} "
-        f"AGENCY_CHUNK_SIZE={chunk_size} "
-        f"{parallel_limit_env}"
-        f'PI_INJECTOR_SOCKET="{injector_socket}" '
-        f'PI_STATUS_SOCKET="{status_socket}" '
-        f"{nofrills_env}"
-        f"{agent_cmd} "
-        f'-e "{inject_extension}" '
-        f'-e "{status_extension}" '
-        f'-e "{nofrills_extension}" '
-        f"--no-extensions "
-        f"--no-themes "
-        f"--offline "
-        f'--session-dir "{pi_session_dir}" '
-        f"--no-context-files "
-        f"{context_args}"
-        f"{personality_args} "
-    )
+    # Build the script using heredoc for better readability
+    escaped_personality = _escape_prompt_heredoc(full_personality)
 
-    script_path.write_text(f"#!/bin/bash\n{cmd}\n")
+    script_content = f'''#!/usr/bin/env bash
+# Agency Manager Launch Script
+# Generated - do not edit manually
+set -euo pipefail
+
+# === Configuration ===
+readonly WORK_DIR="{work_dir}"
+readonly AGENCY_DIR="{agency_dir}"
+readonly SESSION_NAME="{session_name}"
+readonly SOCKET_NAME="{socket_name}"
+readonly MANAGER_NAME="{manager_name}"
+readonly INJECTOR_SOCKET="{injector_socket}"
+readonly STATUS_SOCKET="{status_socket}"
+readonly HEARTBEAT_PATH="{heartbeat_path}"
+readonly AGENT_CMD="{agent_cmd}"
+readonly PI_SESSION_DIR="{pi_session_dir}"
+readonly INJECT_EXT="{inject_extension}"
+readonly STATUS_EXT="{status_extension}"
+readonly NOFRILLS_EXT="{nofrills_extension}"
+readonly POLL_INTERVAL={poll_interval}
+readonly CHUNK_SIZE={chunk_size}
+readonly PARALLEL_LIMIT="{parallel_limit_line}"
+readonly NOFRILLS_ENV="{nofrills_env}"
+readonly CONTEXT_ARGS={context_args_heredoc if context_args_heredoc else '""'}
+
+# === System Prompt (heredoc) ===
+readonly SYSTEM_PROMPT=$(cat << 'AGENCY_EOF'
+{escaped_personality}
+AGENCY_EOF
+)
+
+# === Cleanup ===
+cd "$WORK_DIR"
+rm -f "$INJECTOR_SOCKET"
+
+# === Start Heartbeat (background) ===
+env \
+  AGENCY_ROLE=MANAGER \
+  AGENCY_DIR="$AGENCY_DIR" \
+  AGENCY_MANAGER="$MANAGER_NAME" \
+  AGENCY_SOCKET="$SOCKET_NAME" \
+  AGENCY_POLL_INTERVAL="$POLL_INTERVAL" \
+  AGENCY_CHUNK_SIZE="$CHUNK_SIZE" \
+  $PARALLEL_LIMIT \
+  PI_INJECTOR_SOCKET="$INJECTOR_SOCKET" \
+  PI_STATUS_SOCKET="$STATUS_SOCKET" \
+  python3 "$HEARTBEAT_PATH" > /dev/null 2>&1 &
+sleep 1
+
+# === Launch pi ===
+export AGENCY_ROLE=MANAGER
+export AGENCY_PROJECT="$SESSION_NAME"
+export AGENCY_DIR="$AGENCY_DIR"
+export AGENCY_WORKDIR="$WORK_DIR"
+export AGENCY_MANAGER="$MANAGER_NAME"
+export AGENCY_SOCKET="$SOCKET_NAME"
+export AGENCY_POLL_INTERVAL="$POLL_INTERVAL"
+export AGENCY_CHUNK_SIZE="$CHUNK_SIZE"
+[[ -n "$PARALLEL_LIMIT" ]] && export "$PARALLEL_LIMIT"
+export PI_INJECTOR_SOCKET="$INJECTOR_SOCKET"
+export PI_STATUS_SOCKET="$STATUS_SOCKET"
+$NOFRILLS_ENV
+
+$AGENT_CMD \
+  -e "$INJECT_EXT" \
+  -e "$STATUS_EXT" \
+  -e "$NOFRILLS_EXT" \
+  --no-extensions \
+  --no-themes \
+  --offline \
+  --session-dir "$PI_SESSION_DIR" \
+  --no-context-files \
+  $CONTEXT_ARGS \
+  --append-system-prompt "$SYSTEM_PROMPT"
+'''
+
+    script_path.write_text(script_content)
     script_path.chmod(0o755)
 
     return script_path
@@ -867,9 +929,6 @@ def _generate_agent_launch_script(
         + ("\n\n## Custom Personality\n" + user_personality if user_personality else "")
     )
 
-    escaped = _escape_prompt(full_personality)
-    personality_args = f' --append-system-prompt "{escaped}"'
-
     # Discover context files from work_dir to git_root
     context_files = discover_context_files(work_dir, work_dir)
 
@@ -906,7 +965,8 @@ def _generate_agent_launch_script(
             context_files.append(temp_path)
             context_idx += 1
 
-    context_args = format_context_args(context_files)
+    # Format context args for heredoc
+    context_args_heredoc = format_context_args_heredoc(context_files)
 
     # Get agent command
     agent_cmd = os.environ.get("AGENCY_AGENT_CMD", "pi")
@@ -949,55 +1009,84 @@ def _generate_agent_launch_script(
 
     # No-frills env vars for minimal UI (hide decorations)
     nofrills_env = (
-        "PI_NOFILLS_TOOLS=minimal PI_NOFILLS_THINKING=1 PI_NOFILLS_WORKING=1 PI_NOFILLS_FOOTER=1 PI_NOFILLS_HEADER=1 "
+        "PI_NOFILLS_TOOLS=minimal PI_NOFILLS_THINKING=1 PI_NOFILLS_WORKING=1 PI_NOFILLS_FOOTER=1 PI_NOFILLS_HEADER=1"
     )
 
-    # Build pi command with explicit extension and no global extensions/themes
-    pi_cmd = (
-        f"{agent_cmd} "
-        f'-e "{inject_extension}" '
-        f'-e "{status_extension}" '
-        f'-e "{nofrills_extension}" '
-        f"--no-extensions "
-        f"--no-themes "
-        f"--offline "
-        f'--session-dir "{pi_session_dir}" '
-        f"--no-context-files "
-        f"{personality_args} "
-        f"{context_args}"
-    )
+    # Build the script using heredoc for better readability
+    escaped_personality = _escape_prompt_heredoc(full_personality)
 
-    cmd = (
-        f'cd "{work_dir}" && '
-        f'rm -f "{injector_socket}" && '
-        # Start heartbeat in background with all env vars
-        f"env "
-        f"AGENCY_ROLE=AGENT "
-        f'AGENCY_DIR="{agency_dir}" '
-        f"AGENCY_AGENT={agent_name} "
-        f"AGENCY_SOCKET={socket_name} "
-        f"AGENCY_POLL_INTERVAL={poll_interval} "
-        f"AGENCY_PING_INTERVAL={ping_interval} "
-        f'PI_INJECTOR_SOCKET="{injector_socket}" '
-        f'PI_STATUS_SOCKET="{status_socket}" '
-        f"python3 {heartbeat_path} > /dev/null 2>&1 & "
-        # Give heartbeat a moment to start
-        f"sleep 1 && "
-        # Use env to ensure all vars are passed to pi
-        f"env "
-        f"AGENCY_ROLE=AGENT "
-        f"AGENCY_PROJECT={session_name} "
-        f'AGENCY_DIR="{agency_dir}" '
-        f'AGENCY_WORKDIR="{work_dir}" '
-        f"AGENCY_AGENT={agent_name} "
-        f"AGENCY_SOCKET={socket_name} "
-        f'PI_INJECTOR_SOCKET="{injector_socket}" '
-        f'PI_STATUS_SOCKET="{status_socket}" '
-        f"{nofrills_env}"
-        f"{pi_cmd}"
-    )
+    script_content = f'''#!/usr/bin/env bash
+# Agency Agent Launch Script
+# Generated - do not edit manually
+set -euo pipefail
 
-    script_path.write_text(f"#!/bin/bash\n{cmd}\n")
+# === Configuration ===
+readonly WORK_DIR="{work_dir}"
+readonly AGENCY_DIR="{agency_dir}"
+readonly SESSION_NAME="{session_name}"
+readonly SOCKET_NAME="{socket_name}"
+readonly AGENT_NAME="{agent_name}"
+readonly INJECTOR_SOCKET="{injector_socket}"
+readonly STATUS_SOCKET="{status_socket}"
+readonly HEARTBEAT_PATH="{heartbeat_path}"
+readonly AGENT_CMD="{agent_cmd}"
+readonly PI_SESSION_DIR="{pi_session_dir}"
+readonly INJECT_EXT="{inject_extension}"
+readonly STATUS_EXT="{status_extension}"
+readonly NOFRILLS_EXT="{nofrills_extension}"
+readonly POLL_INTERVAL={poll_interval}
+readonly PING_INTERVAL={ping_interval}
+readonly NOFRILLS_ENV="{nofrills_env}"
+readonly CONTEXT_ARGS={context_args_heredoc if context_args_heredoc else '""'}
+
+# === System Prompt (heredoc) ===
+readonly SYSTEM_PROMPT=$(cat << 'AGENCY_EOF'
+{escaped_personality}
+AGENCY_EOF
+)
+
+# === Cleanup ===
+cd "$WORK_DIR"
+rm -f "$INJECTOR_SOCKET"
+
+# === Start Heartbeat (background) ===
+env \
+  AGENCY_ROLE=AGENT \
+  AGENCY_DIR="$AGENCY_DIR" \
+  AGENCY_AGENT="$AGENT_NAME" \
+  AGENCY_SOCKET="$SOCKET_NAME" \
+  AGENCY_POLL_INTERVAL="$POLL_INTERVAL" \
+  AGENCY_PING_INTERVAL="$PING_INTERVAL" \
+  PI_INJECTOR_SOCKET="$INJECTOR_SOCKET" \
+  PI_STATUS_SOCKET="$STATUS_SOCKET" \
+  python3 "$HEARTBEAT_PATH" > /dev/null 2>&1 &
+sleep 1
+
+# === Launch pi ===
+export AGENCY_ROLE=AGENT
+export AGENCY_PROJECT="$SESSION_NAME"
+export AGENCY_DIR="$AGENCY_DIR"
+export AGENCY_WORKDIR="$WORK_DIR"
+export AGENCY_AGENT="$AGENT_NAME"
+export AGENCY_SOCKET="$SOCKET_NAME"
+export PI_INJECTOR_SOCKET="$INJECTOR_SOCKET"
+export PI_STATUS_SOCKET="$STATUS_SOCKET"
+$NOFRILLS_ENV
+
+$AGENT_CMD \
+  -e "$INJECT_EXT" \
+  -e "$STATUS_EXT" \
+  -e "$NOFRILLS_EXT" \
+  --no-extensions \
+  --no-themes \
+  --offline \
+  --session-dir "$PI_SESSION_DIR" \
+  --no-context-files \
+  $CONTEXT_ARGS \
+  --append-system-prompt "$SYSTEM_PROMPT"
+'''
+
+    script_path.write_text(script_content)
     script_path.chmod(0o755)
 
     return script_path

@@ -72,7 +72,7 @@ test_start_session() {
     dir=$(create_project "start")
     socket="agency-$(basename "$dir")"
     timeout 120 $AGENCY_CMD init --dir "$dir" >/dev/null 2>&1 || { fail "init timeout"; return; }
-    timeout 120 $AGENCY_CMD start --dir "$dir" >/dev/null 2>&1 || { fail "start timeout"; return; }
+    timeout 120 $AGENCY_CMD session start --dir "$dir" >/dev/null 2>&1 || { fail "start timeout"; return; }
     sleep 1
     tmux -L "$socket" has-session -t "$socket" 2>/dev/null && pass "start" || fail "start session"
     tmux -L "$socket" kill-session -t "$socket" 2>/dev/null || true
@@ -83,7 +83,7 @@ test_start_no_agency_dir() {
     local dir
     dir=$(create_project "nodir")
     # Expect failure (exit != 0) so we check for non-zero exit
-    if timeout 120 $AGENCY_CMD start --dir "$dir" 2>/dev/null; then
+    if timeout 120 $AGENCY_CMD session start --dir "$dir" 2>/dev/null; then
         fail "start_no_dir"
     else
         pass "start_no_dir"
@@ -97,10 +97,10 @@ test_list() {
     dir2=$(create_project "list2")
     timeout 120 $AGENCY_CMD init --dir "$dir1" >/dev/null 2>&1 || { fail "init list1 timeout"; return; }
     timeout 120 $AGENCY_CMD init --dir "$dir2" >/dev/null 2>&1 || { fail "init list2 timeout"; return; }
-    timeout 120 $AGENCY_CMD start --dir "$dir1" >/dev/null 2>&1 || { fail "start list1 timeout"; return; }
-    timeout 120 $AGENCY_CMD start --dir "$dir2" >/dev/null 2>&1 || { fail "start list2 timeout"; return; }
+    timeout 120 $AGENCY_CMD session start --dir "$dir1" >/dev/null 2>&1 || { fail "start list1 timeout"; return; }
+    timeout 120 $AGENCY_CMD session start --dir "$dir2" >/dev/null 2>&1 || { fail "start list2 timeout"; return; }
     sleep 1
-    out=$($AGENCY_CMD list 2>&1)
+    out=$($AGENCY_CMD session list 2>&1)
     echo "$out" | grep -q "list1" && echo "$out" | grep -q "list2" && pass "list" || fail "list"
     tmux -L agency-list1 kill-session -t agency-list1 2>/dev/null || true
     tmux -L agency-list2 kill-session -t agency-list2 2>/dev/null || true
@@ -121,9 +121,9 @@ MANAGEREOF
     echo '  - name: coder' >> "$dir/.agency/agents.yaml"
     mkdir -p "$dir/.agency/agents"
     echo 'name: coder' > "$dir/.agency/agents/coder.yaml"
-    timeout 120 $AGENCY_CMD start --dir "$dir" >/dev/null 2>&1 || { fail "start members timeout"; return; }
+    timeout 120 $AGENCY_CMD session start --dir "$dir" >/dev/null 2>&1 || { fail "start members timeout"; return; }
     sleep 1
-    out=$($AGENCY_CMD members --dir "$dir" 2>&1)
+    out=$($AGENCY_CMD session members --dir "$dir" 2>&1)
     echo "$out" | grep -q "coordinator" && echo "$out" | grep -q "coder" && pass "members" || fail "members"
     tmux -L agency-members kill-session -t agency-members 2>/dev/null || true
 }
@@ -136,10 +136,10 @@ test_stop() {
     timeout 120 $AGENCY_CMD init --dir "$dir" >/dev/null 2>&1 || { fail "init stop timeout"; return; }
     # Create manager config
     echo 'name: coordinator' > "$dir/.agency/manager.yaml"
-    timeout 120 $AGENCY_CMD start --dir "$dir" >/dev/null 2>&1 || { fail "start stop timeout"; return; }
+    timeout 120 $AGENCY_CMD session start --dir "$dir" >/dev/null 2>&1 || { fail "start stop timeout"; return; }
     sleep 1
     # Force stop since mock agent doesn't respond to graceful shutdown
-    timeout 60 $AGENCY_CMD stop "$session" --force >/dev/null 2>&1 && pass "stop" || fail "stop"
+    timeout 60 $AGENCY_CMD session stop "$session" --force >/dev/null 2>&1 && pass "stop" || fail "stop"
 }
 
 test_kill() {
@@ -150,9 +150,9 @@ test_kill() {
     timeout 120 $AGENCY_CMD init --dir "$dir" >/dev/null 2>&1 || { fail "init kill timeout"; return; }
     # Create manager config
     echo 'name: coordinator' > "$dir/.agency/manager.yaml"
-    timeout 120 $AGENCY_CMD start --dir "$dir" >/dev/null 2>&1 || { fail "start kill timeout"; return; }
+    timeout 120 $AGENCY_CMD session start --dir "$dir" >/dev/null 2>&1 || { fail "start kill timeout"; return; }
     sleep 1
-    timeout 60 $AGENCY_CMD kill "$session" >/dev/null 2>&1
+    timeout 60 $AGENCY_CMD session kill "$session" >/dev/null 2>&1
     ! tmux -L "$session" has-session -t "$session" 2>/dev/null && pass "kill" || fail "kill"
 }
 
@@ -183,7 +183,7 @@ test_base_personality() {
     uv run python3 -c "
 from agency.session import BASE_PERSONALITY, MANAGER_BASE_ADDITION, AGENT_BASE_ADDITION
 assert 'tmux session' in BASE_PERSONALITY
-assert 'agency members' in BASE_PERSONALITY
+assert 'agency session members' in BASE_PERSONALITY
 assert 'Task Management Commands' in MANAGER_BASE_ADDITION
 assert 'Task Workflow' in AGENT_BASE_ADDITION
 assert 'agency tasks list' in MANAGER_BASE_ADDITION
