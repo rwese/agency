@@ -1,20 +1,22 @@
-FROM node:20-alpine AS base
+# Production Dockerfile
+FROM node:20-alpine AS builder
 WORKDIR /app
 
-FROM base AS deps
-COPY package.json pnpm-lock.yaml* ./
-RUN npm install -g pnpm && pnpm install --frozen-lockfile
+# Copy package files
+COPY package*.json ./
+RUN npm ci && npm cache clean --force
 
-FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
+# Copy source
 COPY . .
-RUN pnpm build
 
-FROM base AS runner
-ENV NODE_ENV=production
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./
+# Build
+RUN npm run build
 
-EXPOSE 5173
-CMD ["pnpm", "preview", "--host"]
+# Serve with nginx
+FROM nginx:alpine AS runner
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

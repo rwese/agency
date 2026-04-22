@@ -697,6 +697,9 @@ def _generate_manager_launch_script(
         f"PI_INJECTOR_SOCKET=\"{injector_socket}\" "
         f"{agent_cmd} "
         f'-e "{inject_extension}" '
+        f"--no-extensions "
+        f"--no-themes "
+        f"--offline "
         f'--session-dir "{agency_dir}" '
         f"--no-context-files "
         f"{context_args}"
@@ -840,6 +843,19 @@ def _generate_agent_launch_script(
         poll_interval = config.get("poll_interval", 30)
         ping_interval = config.get("ping_interval", 120)
     
+    # Build pi command with explicit extension and no global extensions/themes
+    pi_cmd = (
+        f"{agent_cmd} "
+        f'-e "{inject_extension}" '
+        f"--no-extensions "
+        f"--no-themes "
+        f"--offline "
+        f'--session-dir "{agency_dir}" '
+        f"--no-context-files "
+        f"{personality_args} "
+        f"{context_args}"
+    )
+    
     cmd = (
         f'cd "{work_dir}" && '
         f"rm -f \"{injector_socket}\" && "
@@ -864,12 +880,7 @@ def _generate_agent_launch_script(
         f"AGENCY_AGENT={agent_name} "
         f"AGENCY_SOCKET={socket_name} "
         f"PI_INJECTOR_SOCKET=\"{injector_socket}\" "
-        f"{agent_cmd} "
-        f'-e "{inject_extension}" '
-        f'--session-dir "{agency_dir}" '
-        f"--no-context-files "
-        f"{personality_args} "
-        f"{context_args}"
+        f"{pi_cmd}"
     )
 
     script_path.write_text(f"#!/bin/bash\n{cmd}\n")

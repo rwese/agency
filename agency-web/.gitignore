@@ -6,32 +6,37 @@ node_modules/
 # Build
 dist/
 build/
-*.tsbuildinfo
-
-# IDE
-.idea/
-.vscode/
-
-# OS
-.DS_Store
-Thumbs.db
 
 # Environment
 .env
 .env.local
 .env.*.local
 
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
 # Logs
 *.log
 npm-debug.log*
 
-# Testing
+# Test coverage
 coverage/
 
-# Editor
-*.swp
-*.swo
+# Prisma
+prisma/*.db
+prisma/*.db-journal
 
-# Agency project config
-# Note: Include .agency/ in version control for team collaboration
-# .agency/
+# Docker volumes
+postgres_data/
+redis_data/
+
+# Playwright
+playwright-report/
+test-results/

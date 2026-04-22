@@ -985,17 +985,8 @@ def tasks_agent():
     pass
 
 
-@tasks.command("list")
-@click.option("--status", help="Filter by status")
-@click.option("--assignee", help="Filter by assignee")
-def tasks_list(status, assignee):
-    """List tasks."""
-    agency_dir = find_agency_dir()
-    if not agency_dir:
-        click.echo("[ERROR] No .agency/ found", err=True)
-        click.echo("[ERROR] Run 'agency init-project --dir <path>' first", err=True)
-        sys.exit(1)
-
+def _list_tasks(agency_dir, status, assignee):
+    """List tasks helper function."""
     store = TaskStore(agency_dir)
     task_list = store.list_tasks(status=status, assignee=assignee)
 
@@ -1024,6 +1015,20 @@ def tasks_list(status, assignee):
         if task.completed_at:
             click.echo(f"- completed_at: {task.completed_at}")
         click.echo("")
+
+
+@tasks.command("list")
+@click.option("--status", help="Filter by status")
+@click.option("--assignee", help="Filter by assignee")
+def tasks_list(status, assignee):
+    """List tasks."""
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        click.echo("[ERROR] Run 'agency init-project --dir <path>' first", err=True)
+        sys.exit(1)
+
+    _list_tasks(agency_dir, status, assignee)
 
 
 @tasks.command("add")
@@ -1326,8 +1331,12 @@ def _verify_task_ownership(agency_dir: Path, task_id: str, agent: str) -> bool:
 @tasks_agent.command("list")
 def agent_tasks_list():
     """List tasks assigned to you."""
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        sys.exit(1)
     agent = _get_agent_name()
-    tasks_list(status=None, assignee=agent)
+    _list_tasks(agency_dir, status=None, assignee=agent)
 
 
 @tasks_agent.command("show")
@@ -1718,8 +1727,9 @@ if _agency_role == "MANAGER":
     cli.add_command(tmux_cmd)
     cli.add_command(audit_cmd)
 elif _agency_role == "AGENT":
-    # Agent sees: tasks_agent only (limited commands)
+    # Agent sees: tasks_agent and tasks (limited commands)
     cli.add_command(tasks_agent)
+    cli.add_command(tasks)
 else:
     # Default: all commands
     cli.add_command(init_project, name="init")

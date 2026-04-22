@@ -1,36 +1,103 @@
-services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: agency
-      POSTGRES_PASSWORD: agency_dev
-      POSTGRES_DB: agency_web
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+version: '3.8'
 
-  backend:
+services:
+  # Backend API
+  api:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: postgresql://agency:agency_dev@postgres:5432/agency_web
-      AGENCY_PORT: 3000
-      AGENCY_SECRET_KEY: dev_secret_key_change_in_production
+      NODE_ENV: development
+      DATABASE_URL: postgresql://postgres:devpassword@db:5432/fullstack
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: dev-jwt-secret-change-in-production
+      ARCJET_KEY: ${ARCJET_KEY:-}
     depends_on:
-      - postgres
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    command: pnpm dev
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # Frontend App
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     ports:
       - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:3000
+      VITE_WS_URL: ws://localhost:3000
     depends_on:
-      - backend
+      - api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/dist
+    command: pnpm dev
+
+  # Database
+  db:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: devpassword
+      POSTGRES_DB: fullstack
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # PostgreSQL admin
+  adminer:
+    image: adminer:latest
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    profiles:
+      - tools
+
+  # Prisma Studio
+  prisma-studio:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5555:5555"
+    environment:
+      DATABASE_URL: postgresql://postgres:devpassword@db:5432/fullstack
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles:
+      - tools
+    command: pnpm db:studio
 
 volumes:
   postgres_data:
+  redis_data:

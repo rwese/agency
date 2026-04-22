@@ -1,0 +1,125 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: registry.yourdomain.com
+  NODE_VERSION: '20'
+
+jobs:
+  build:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    outputs:
+      backend_tag: ${{ steps.meta.outputs.backend_tag }}
+      frontend_tag: ${{ steps.meta.outputs.frontend_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract metadata
+        id: meta
+        run: |
+          SHA_SHORT=$(echo ${{ github.sha }} | cut -c1-7)
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          echo "backend_tag=${{ env.REGISTRY }}/fullstack/api:${SHA_SHORT}" >> $GITHUB_OUTPUT
+          echo "frontend_tag=${{ env.REGISTRY }}/fullstack/frontend:${SHA_SHORT}" >> $GITHUB_OUTPUT
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USER }}
+          password: ${{ secrets.REGISTRY_TOKEN }}
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ steps.meta.outputs.backend_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ steps.meta.outputs.frontend_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' || github.event.inputs.environment == 'staging'
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        uses: azure/k8s-deploy@v4
+        with:
+          namespace: fullstack-staging
+          manifests: |
+            k8s/deployment-api.yaml
+            k8s/deployment-frontend.yaml
+          images: |
+            ${{ needs.build.outputs.backend_tag }}
+            ${{ needs.build.outputs.frontend_tag }}
+
+      - name: Notify deployment
+        run: |
+          echo "Deployed to staging: ${{ needs.build.outputs.backend_tag }}"
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build, deploy-staging]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to production
+        uses: azure/k8s-deploy@v4
+        with:
+          namespace: fullstack
+          manifests: |
+            k8s/deployment-api.yaml
+            k8s/deployment-frontend.yaml
+          images: |
+            ${{ needs.build.outputs.backend_tag }}
+            ${{ needs.build.outputs.frontend_tag }}
+
+      - name: Create release
+        if: github.event_name == 'push'
+        run: |
+          gh release create "v${GITHUB_RUN_NUMBER}" \
+            --title "Release v${GITHUB_RUN_NUMBER}" \
+            --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify deployment
+        run: |
+          echo "Deployed to production: ${{ needs.build.outputs.backend_tag }}"

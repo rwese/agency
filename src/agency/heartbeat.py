@@ -324,7 +324,7 @@ def agent_heartbeat(agency_dir: Path, socket_name: str, agent_name: str, poll_in
     """Heartbeat loop for agent.
 
     Notifies agents about new tasks and periodically pings idle agents
-    to keep them working.
+    to keep them working. Pings only sent when tmux pane is idle.
 
     Args:
         agency_dir: Path to .agency/ directory
@@ -333,6 +333,8 @@ def agent_heartbeat(agency_dir: Path, socket_name: str, agent_name: str, poll_in
         poll_interval: Seconds between checks
         ping_interval: Seconds between idle pings (default: 2 minutes)
     """
+    from agency.session import SessionManager
+
     window_ref = f"{socket_name}:{agent_name}"
 
     print(f"[HEARTBEAT] Starting heartbeat for agent '{agent_name}'")
@@ -340,6 +342,7 @@ def agent_heartbeat(agency_dir: Path, socket_name: str, agent_name: str, poll_in
     print(f"[HEARTBEAT] Poll interval: {poll_interval}s, ping interval: {ping_interval}s")
 
     last_ping_time = 0  # Track when we last sent a ping
+    sm = SessionManager(session_name, socket_name, socket_name=socket_name)
 
     while True:
         try:
@@ -348,26 +351,29 @@ def agent_heartbeat(agency_dir: Path, socket_name: str, agent_name: str, poll_in
             in_progress_tasks = [t for t in tasks if t.get("status") == "in_progress"]
             current_time = time.time()
 
+            # Check if pane is idle (at least 2 minutes since last change)
+            pane_is_idle = sm.is_window_idle(agent_name, idle_seconds=120)
+
             # If agent has task in progress, check if it needs attention
             if in_progress_tasks:
                 task = in_progress_tasks[0]
                 task_id = task.get("task_id")
-                # Ping every ping_interval to keep agent moving
-                if current_time - last_ping_time >= ping_interval:
+                # Ping every ping_interval ONLY if pane is idle
+                if pane_is_idle and current_time - last_ping_time >= ping_interval:
                     msg = f"💡 Still working on {task_id}? Update status or complete the task."
                     if send_notification(window_ref, msg):
-                        print(f"[HEARTBEAT] Pinged agent about in_progress task: {task_id}")
+                        print(f"[HEARTBEAT] Pinged idle agent about task: {task_id}")
                         last_ping_time = current_time
 
-            # If we have pending tasks, notify agent
-            elif pending_tasks:
+            # If we have pending tasks, notify agent (only if idle)
+            elif pending_tasks and pane_is_idle:
                 next_task = pending_tasks[0]
                 task_id = next_task.get("task_id")
                 desc = next_task.get("description", "")[:50]
 
                 msg = f"📌 Task ready: {task_id} - {desc}... Run 'agency tasks show {task_id}' to start"
                 if send_notification(window_ref, msg):
-                    print(f"[HEARTBEAT] Notified agent about: {task_id}")
+                    print(f"[HEARTBEAT] Notified idle agent about: {task_id}")
                     last_ping_time = current_time
 
                     # Audit log
@@ -382,8 +388,8 @@ def agent_heartbeat(agency_dir: Path, socket_name: str, agent_name: str, poll_in
                             },
                         )
 
-            # Periodic ping even with no tasks (keep agent engaged)
-            elif current_time - last_ping_time >= ping_interval * 2:
+            # Periodic ping even with no tasks (keep agent engaged) - only if idle
+            elif pane_is_idle and current_time - last_ping_time >= ping_interval * 2:
                 msg = "🏃 No tasks assigned. Check 'agency tasks list' or wait for new assignments."
                 if send_notification(window_ref, msg):
                     print(f"[HEARTBEAT] Pinged idle agent")
