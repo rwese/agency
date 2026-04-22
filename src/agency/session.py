@@ -18,16 +18,19 @@ def _get_audit_store(agency_dir: Path | None = None):
     if _audit_store is None and agency_dir:
         try:
             from agency.audit import AuditStore
+
             _audit_store = AuditStore(agency_dir)
         except Exception:
             _audit_store = False
     return _audit_store if _audit_store else None
+
 
 # Constants
 SESSION_PREFIX = "agency-"
 MANAGER_PREFIX = "[MGR] "
 HALTED_SUFFIX = "-HALTED"
 SHUTDOWN_MESSAGE = "Please wrap up, save your work, then exit gracefully. Say 'Goodbye' when done."
+WRAPUP_MESSAGE = """Please perform cleanup: (1) Save all work, (2) Update pending tasks with remaining work status using 'agency tasks-agent update <task-id> --status pending --result incomplete: <what remains>', (3) Say 'Goodbye' in your response, then exit."""
 
 # Default context files to discover
 DEFAULT_CONTEXT_FILES = ["AGENTS.md", "CLAUDE.md", ".claude.md"]
@@ -207,15 +210,34 @@ class SessionManager:
             return []
         return [w.strip() for w in result.stdout.strip().split("\n") if w.strip() and w not in ("zsh", "tmux")]
 
-    def send_keys(self, window_name: str, msg: str) -> None:
+    def send_keys(self, window_name: str, msg: str, enter: bool = True) -> None:
         """Send keys to a window."""
-        self._tmux("send-keys", "-t", f"{self.session_name}:{window_name}", msg, "Enter")
+        if enter:
+            self._tmux("send-keys", "-t", f"{self.session_name}:{window_name}", msg, "Enter")
+        else:
+            self._tmux("send-keys", "-t", f"{self.session_name}:{window_name}", msg)
+
+    def send_escape(self, window_name: str) -> None:
+        """Send Escape key to a window to cancel any ongoing operation."""
+        self._tmux("send-keys", "-t", f"{self.session_name}:{window_name}", "Escape")
 
     def broadcast_shutdown(self) -> None:
         """Send shutdown message to all windows."""
         windows = self.list_windows()
         for window in windows:
             self.send_keys(window, SHUTDOWN_MESSAGE)
+
+    def broadcast_escape(self) -> None:
+        """Send Escape key to all windows to cancel ongoing operations."""
+        windows = self.list_windows()
+        for window in windows:
+            self.send_escape(window)
+
+    def broadcast_wrapup(self) -> None:
+        """Send wrapup message to all windows asking for cleanup and task updates."""
+        windows = self.list_windows()
+        for window in windows:
+            self.send_keys(window, WRAPUP_MESSAGE)
 
     def kill_window(self, window_name: str) -> None:
         """Kill a specific window."""
@@ -232,6 +254,10 @@ class SessionManager:
     def rename_window(self, window_name: str, new_name: str) -> None:
         """Rename a window."""
         self._tmux("rename-window", "-t", f"{self.session_name}:{window_name}", new_name)
+
+    def switch_to_window(self, window_name: str) -> None:
+        """Switch to a window (set as current)."""
+        self._tmux("select-window", "-t", f"{self.session_name}:{window_name}")
 
     def cleanup_socket(self) -> None:
         """Remove the tmux socket file."""
@@ -267,94 +293,86 @@ class SessionManager:
         return False
 
     # Instance variable to track pane state for idle detection
-    _idle_tracker: dict[str, dict] = {}  # window_name -> {last_time, last_scrollback_lines, last_hash}
+    _idle_tracker: dict[str, dict] = {}  # window_name -> {stable_since, last_hash, last_check}
 
-    def get_scrollback_hash(self, window_name: str) -> tuple[int, str] | None:
-        """Get scrollback line count and hash of scrollback content.
-        
-        Returns (scrollback_lines, content_hash) or None if unavailable.
-        Uses capture-pane -a to get full scrollback.
+    def get_pane_content_hash(self, window_name: str) -> str | None:
+        """Get a hash of the visible pane content (current screen only, not scrollback).
+
+        Returns content hash or None if unavailable.
+        This captures just the current visible lines, ignoring scrollback history.
         """
         import hashlib
-        
-        # Get scrollback with -S to get all lines including scrollback
-        result = self._tmux(
-            "capture-pane", "-p", "-t", f"{self.session_name}:{window_name}"
-        )
+
+        # Get current visible pane content (not scrollback)
+        result = self._tmux("capture-pane", "-p", "-t", f"{self.session_name}:{window_name}")
         if result.returncode != 0:
             return None
-        
-        lines = result.stdout
-        line_count = len(lines.split('\n'))
-        
-        # Fast hash of the content (first 1000 chars + last 1000 chars for efficiency)
-        if len(lines) > 2000:
-            content = lines[:1000] + lines[-1000:]
-        else:
-            content = lines
-        
-        hash_val = hashlib.md5(content.encode('utf-8', errors='ignore')).hexdigest()[:16]
-        
-        return (line_count, hash_val)
 
-    def get_window_activity(self, window_name: str) -> int | None:
-        """Get the last activity timestamp based on scrollback changes.
-        
-        Returns Unix timestamp of last scrollback change, or None if unavailable.
-        Compares scrollback line count and content hash.
-        """
-        import time
-        
-        current = self.get_scrollback_hash(window_name)
-        if current is None:
+        # Normalize: remove trailing whitespace, hash the content
+        content = result.stdout.rstrip()
+        if not content:
             return None
-        
-        current_lines, current_hash = current
-        current_time = int(time.time())
-        
-        if window_name not in self._idle_tracker:
-            # First check - mark as active now
-            self._idle_tracker[window_name] = {
-                'last_time': current_time,
-                'last_lines': current_lines,
-                'last_hash': current_hash
-            }
-            return current_time
-        
-        tracker = self._idle_tracker[window_name]
-        
-        if current_lines != tracker['last_lines'] or current_hash != tracker['last_hash']:
-            # Scrollback changed - update timestamp
-            tracker['last_time'] = current_time
-            tracker['last_lines'] = current_lines
-            tracker['last_hash'] = current_hash
-            return current_time
-        
-        # No change - return last activity time
-        return tracker['last_time']
 
-    def is_window_idle(self, window_name: str, idle_seconds: int = 5) -> bool:
-        """Check if a window pane has been idle for specified seconds.
-        
+        hash_val = hashlib.md5(content.encode("utf-8", errors="ignore")).hexdigest()
+        return hash_val
+
+    def is_window_idle(self, window_name: str, idle_seconds: int = 120) -> bool:
+        """Check if window pane has been showing the same content for idle_seconds.
+
+        Returns True only if the pane content has been stable (unchanged) for
+        the full idle_seconds period. This means the agent is truly idle,
+        not just between commands.
+
+        An agent is considered IDLE when:
+        - The same pane content has been displayed for idle_seconds
+
+        An agent is WORKING when:
+        - Pane content changes frequently (output, progress, etc.)
+        - Any change resets the idle timer
+
         Args:
             window_name: Name of the window
-            idle_seconds: Number of seconds of inactivity required
-            
+            idle_seconds: Seconds of stable content required (default: 120)
+
         Returns:
-            True if pane has been idle for idle_seconds, False otherwise
+            True if pane content stable for idle_seconds, False otherwise
         """
         import time
-        activity = self.get_window_activity(window_name)
-        if activity is None:
-            return False
-        return (int(time.time()) - activity) >= idle_seconds
 
-    def get_idle_windows(self, idle_seconds: int = 5) -> list[str]:
+        current_hash = self.get_pane_content_hash(window_name)
+        if current_hash is None:
+            return False
+
+        current_time = int(time.time())
+
+        if window_name not in self._idle_tracker:
+            # First check - initialize with current state
+            self._idle_tracker[window_name] = {
+                "stable_since": current_time,
+                "last_hash": current_hash,
+                "last_check": current_time,
+            }
+            return False  # Can't be idle on first check
+
+        tracker = self._idle_tracker[window_name]
+
+        if current_hash != tracker["last_hash"]:
+            # Content changed - reset stable timer
+            tracker["stable_since"] = current_time
+            tracker["last_hash"] = current_hash
+            tracker["last_check"] = current_time
+            return False
+
+        # Same content - check if stable long enough
+        tracker["last_check"] = current_time
+        return (current_time - tracker["stable_since"]) >= idle_seconds
+
+    def get_idle_windows(self, idle_seconds: int = 120) -> list[str]:
         """Get list of windows that have been idle for specified seconds.
-        
+
         Args:
             idle_seconds: Number of seconds of inactivity required
-            
+
         Returns:
             List of window names that are idle
         """
@@ -369,30 +387,27 @@ def create_project_session(
     session_name: str,
     socket_name: str,
     work_dir: Path,
-    initial_window_name: str | None = None,
 ) -> None:
-    """Create a new project session with named initial window.
+    """Create a new project session (no initial window).
+
+    The manager will be created as window:0.
 
     Args:
         session_name: Name of the tmux session
         socket_name: Name of the tmux socket
         work_dir: Working directory for the session
-        initial_window_name: Name for the initial window (default: session_name)
     """
-    window_name = initial_window_name or session_name
-
     result = subprocess.run(
         [
             "tmux",
-            "-f", "/dev/null",
+            "-f",
+            "/dev/null",
             "-L",
             socket_name,
             "new-session",
             "-d",
             "-s",
             session_name,
-            "-n",
-            window_name,
             "-c",
             str(work_dir),
         ],
@@ -410,29 +425,109 @@ def start_manager_window(
     agency_dir: Path,
     work_dir: Path,
 ) -> None:
-    """Start a manager window in the session."""
-    # Create window at next available index
+    """Start a manager window in the session as window:0 and switch to it."""
     window_name = f"{MANAGER_PREFIX}{manager_name}"
 
-    result = subprocess.run(
+    # Rename window:0 to manager name (session was created with a default window)
+    subprocess.run(
         [
             "tmux",
             "-L",
             socket_name,
-            "new-window",
-            "-d",
+            "rename-window",
             "-t",
-            f"{session_name}:",  # Colon to explicitly target session
-            "-n",
+            f"{session_name}:0",
             window_name,
-            "-c",
-            str(work_dir),
         ],
         capture_output=True,
-        text=True,
     )
-    if result.returncode != 0:
-        raise RuntimeError(f"Failed to create manager window: {result.stderr}")
+
+    # Set the working directory for window:0
+    subprocess.run(
+        [
+            "tmux",
+            "-L",
+            socket_name,
+            "send-keys",
+            "-t",
+            f"{session_name}:{window_name}",
+            f"cd {work_dir}",
+            "Enter",
+        ],
+        capture_output=True,
+    )
+
+    # Apply badge color to window
+    subprocess.run(
+        [
+            "tmux",
+            "-L",
+            socket_name,
+            "set-window-option",
+            "-t",
+            f"{session_name}:{window_name}",
+            "window-status-style",
+            "fg=black,bg=blue,bold",
+        ],
+        capture_output=True,
+    )
+    subprocess.run(
+        [
+            "tmux",
+            "-L",
+            socket_name,
+            "set-window-option",
+            "-t",
+            f"{session_name}:{window_name}",
+            "window-status-current-style",
+            "fg=black,bg=blue,bold",
+        ],
+        capture_output=True,
+    )
+
+    # Generate and execute launch script
+    script_path = _generate_manager_launch_script(session_name, socket_name, manager_name, agency_dir, work_dir)
+
+    # Send command to window
+    subprocess.run(
+        [
+            "tmux",
+            "-L",
+            socket_name,
+            "send-keys",
+            "-t",
+            f"{session_name}:{window_name}",
+            str(script_path),
+            "Enter",
+        ],
+        capture_output=True,
+    )
+
+    # Switch to manager window (make it the current window)
+    subprocess.run(
+        [
+            "tmux",
+            "-L",
+            socket_name,
+            "select-window",
+            "-t",
+            f"{session_name}:{window_name}",
+        ],
+        capture_output=True,
+    )
+
+    # Audit log
+    audit = _get_audit_store(agency_dir)
+    if audit:
+        audit.log_agent(
+            action="start",
+            agency_role="manager",
+            details={
+                "session": session_name,
+                "manager_name": manager_name,
+                "work_dir": str(work_dir),
+            },
+        )
 
     # Apply badge color to window
     subprocess.run(
@@ -589,7 +684,8 @@ def _generate_manager_launch_script(
         user_personality = config.get("personality", "")
 
     # Process template injection for user personality
-    from agency.template_inject import TemplateInjector, InjectionOptions, process_string
+    from agency.template_inject import InjectionOptions, TemplateInjector, process_string
+
     inj_options = InjectionOptions(base_dir=agency_dir)
     if agency_config.template_delimiter:
         # Parse "{{...}}" format
@@ -626,6 +722,7 @@ def _generate_manager_launch_script(
     # Add custom context files from config if specified
     if agency_config.additional_context_files:
         from agency.template_inject import process_file
+
         # Counter for unique temp file names
         context_idx = 0
         for cf in agency_config.additional_context_files:
@@ -669,6 +766,7 @@ def _generate_manager_launch_script(
     chunk_size = 1
     if manager_config_path.exists():
         import yaml
+
         config = yaml.safe_load(manager_config_path.read_text())
         poll_interval = config.get("poll_interval", 30)
         chunk_size = config.get("chunk_size", 1)
@@ -678,34 +776,34 @@ def _generate_manager_launch_script(
 
     # Get pi-inject extension path
     inject_extension = os.environ.get(
-        "AGENCY_PI_INJECT_EXT",
-        str(Path.home() / ".pi" / "agent" / "extensions" / "pi-inject" / "extensions")
+        "AGENCY_PI_INJECT_EXT", str(Path.home() / ".pi" / "agent" / "extensions" / "pi-inject" / "extensions")
     )
 
     # Import heartbeat module for path
     from agency import heartbeat as heartbeat_module
+
     heartbeat_path = Path(heartbeat_module.__file__).parent / "heartbeat.py"
 
     # Build command with heartbeat in background
     # Use unique socket path per member
     injector_socket = f"{agency_dir}/injector-{manager_name}.sock"
-    
+
     # Build parallel limit env var
     parallel_limit_env = f"AGENCY_PARALLEL_LIMIT={parallel_limit} " if parallel_limit else ""
-    
+
     cmd = (
         f'cd "{work_dir}" && '
-        f"rm -f \"{injector_socket}\" && "
+        f'rm -f "{injector_socket}" && '
         # Start heartbeat in background with all env vars
         f"env "
         f"AGENCY_ROLE=MANAGER "
-        f"AGENCY_DIR=\"{agency_dir}\" "
+        f'AGENCY_DIR="{agency_dir}" '
         f"AGENCY_MANAGER={manager_name} "
         f"AGENCY_SOCKET={socket_name} "
         f"AGENCY_POLL_INTERVAL={poll_interval} "
         f"AGENCY_CHUNK_SIZE={chunk_size} "
         f"{parallel_limit_env}"
-        f"PI_INJECTOR_SOCKET=\"{injector_socket}\" "
+        f'PI_INJECTOR_SOCKET="{injector_socket}" '
         f"python3 {heartbeat_path} > /dev/null 2>&1 & "
         # Give heartbeat a moment to start
         f"sleep 1 && "
@@ -713,14 +811,14 @@ def _generate_manager_launch_script(
         f"env "
         f"AGENCY_ROLE=MANAGER "
         f"AGENCY_PROJECT={session_name} "
-        f"AGENCY_DIR=\"{agency_dir}\" "
-        f"AGENCY_WORKDIR=\"{work_dir}\" "
+        f'AGENCY_DIR="{agency_dir}" '
+        f'AGENCY_WORKDIR="{work_dir}" '
         f"AGENCY_MANAGER={manager_name} "
         f"AGENCY_SOCKET={socket_name} "
         f"AGENCY_POLL_INTERVAL={poll_interval} "
         f"AGENCY_CHUNK_SIZE={chunk_size} "
         f"{parallel_limit_env}"
-        f"PI_INJECTOR_SOCKET=\"{injector_socket}\" "
+        f'PI_INJECTOR_SOCKET="{injector_socket}" '
         f"{agent_cmd} "
         f'-e "{inject_extension}" '
         f"--no-extensions "
@@ -774,7 +872,8 @@ def _generate_agent_launch_script(
             user_personality = personality_ref
 
     # Process template injection for user personality
-    from agency.template_inject import TemplateInjector, InjectionOptions, process_string
+    from agency.template_inject import InjectionOptions, TemplateInjector, process_string
+
     inj_options = InjectionOptions(base_dir=agency_dir)
     if agency_config.template_delimiter:
         # Parse "{{...}}" format
@@ -811,6 +910,7 @@ def _generate_agent_launch_script(
     # Add custom context files from config if specified
     if agency_config.additional_context_files:
         from agency.template_inject import process_file
+
         # Counter for unique temp file names
         context_idx = 0
         for cf in agency_config.additional_context_files:
@@ -847,28 +947,29 @@ def _generate_agent_launch_script(
 
     # Get pi-inject extension path
     inject_extension = os.environ.get(
-        "AGENCY_PI_INJECT_EXT",
-        str(Path.home() / ".pi" / "agent" / "extensions" / "pi-inject" / "extensions")
+        "AGENCY_PI_INJECT_EXT", str(Path.home() / ".pi" / "agent" / "extensions" / "pi-inject" / "extensions")
     )
 
     # Import heartbeat module for path
     from agency import heartbeat as heartbeat_module
+
     heartbeat_path = Path(heartbeat_module.__file__).parent / "heartbeat.py"
 
     # Build command with heartbeat in background
     # Use unique socket path per member
     injector_socket = f"{agency_dir}/injector-{agent_name}.sock"
-    
+
     # Get poll and ping intervals from manager config
     poll_interval = 30
     ping_interval = 120
     manager_config_path = agency_dir / "manager.yaml"
     if manager_config_path.exists():
         import yaml
+
         config = yaml.safe_load(manager_config_path.read_text())
         poll_interval = config.get("poll_interval", 30)
         ping_interval = config.get("ping_interval", 120)
-    
+
     # Build pi command with explicit extension and no global extensions/themes
     pi_cmd = (
         f"{agent_cmd} "
@@ -881,19 +982,19 @@ def _generate_agent_launch_script(
         f"{personality_args} "
         f"{context_args}"
     )
-    
+
     cmd = (
         f'cd "{work_dir}" && '
-        f"rm -f \"{injector_socket}\" && "
+        f'rm -f "{injector_socket}" && '
         # Start heartbeat in background with all env vars
         f"env "
         f"AGENCY_ROLE=AGENT "
-        f"AGENCY_DIR=\"{agency_dir}\" "
+        f'AGENCY_DIR="{agency_dir}" '
         f"AGENCY_AGENT={agent_name} "
         f"AGENCY_SOCKET={socket_name} "
         f"AGENCY_POLL_INTERVAL={poll_interval} "
         f"AGENCY_PING_INTERVAL={ping_interval} "
-        f"PI_INJECTOR_SOCKET=\"{injector_socket}\" "
+        f'PI_INJECTOR_SOCKET="{injector_socket}" '
         f"python3 {heartbeat_path} > /dev/null 2>&1 & "
         # Give heartbeat a moment to start
         f"sleep 1 && "
@@ -901,11 +1002,11 @@ def _generate_agent_launch_script(
         f"env "
         f"AGENCY_ROLE=AGENT "
         f"AGENCY_PROJECT={session_name} "
-        f"AGENCY_DIR=\"{agency_dir}\" "
-        f"AGENCY_WORKDIR=\"{work_dir}\" "
+        f'AGENCY_DIR="{agency_dir}" '
+        f'AGENCY_WORKDIR="{work_dir}" '
         f"AGENCY_AGENT={agent_name} "
         f"AGENCY_SOCKET={socket_name} "
-        f"PI_INJECTOR_SOCKET=\"{injector_socket}\" "
+        f'PI_INJECTOR_SOCKET="{injector_socket}" '
         f"{pi_cmd}"
     )
 

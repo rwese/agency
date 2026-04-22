@@ -13,6 +13,7 @@ from pathlib import Path
 import click
 
 from agency import __version__
+from agency.audit import EVENT_AGENT, EVENT_CLI, EVENT_SESSION, EVENT_TASK, AuditStore
 from agency.config import (
     load_agency_config,
     load_agents_config,
@@ -25,7 +26,6 @@ from agency.session import (
     start_manager_window,
 )
 from agency.tasks import TaskStore
-from agency.audit import AuditStore, EVENT_AGENT, EVENT_CLI, EVENT_SESSION, EVENT_TASK
 from agency.template import TemplateManager
 
 VERSION = __version__
@@ -162,7 +162,15 @@ def _get_agent_epilog() -> str:
   agency tasks complete task-001 --result "Done!"""
 
 
-@click.group(epilog=(_get_manager_epilog() if os.environ.get("AGENCY_ROLE", "").upper() == "MANAGER" else _get_agent_epilog() if os.environ.get("AGENCY_ROLE", "").upper() == "AGENT" else _get_default_epilog()))
+@click.group(
+    epilog=(
+        _get_manager_epilog()
+        if os.environ.get("AGENCY_ROLE", "").upper() == "MANAGER"
+        else _get_agent_epilog()
+        if os.environ.get("AGENCY_ROLE", "").upper() == "AGENT"
+        else _get_default_epilog()
+    )
+)
 @click.version_option(version=VERSION)
 @click.pass_context
 def cli(ctx):
@@ -181,25 +189,21 @@ def cli(ctx):
 def list_templates(repo, refresh):
     """List available project templates."""
     try:
-        import tempfile
         import json
 
         repo_name = repo.replace("https://github.com/", "")
         api_url = f"https://api.github.com/repos/{repo_name}/contents"
 
-        result = subprocess.run(
-            ["curl", "-sL", api_url],
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
+        result = subprocess.run(["curl", "-sL", api_url], capture_output=True, text=True, timeout=30)
 
         if result.returncode != 0:
             click.echo("[ERROR] Failed to fetch templates", err=True)
             return
 
         contents = json.loads(result.stdout)
-        templates = [item["name"] for item in contents if item.get("type") == "dir" and not item["name"].startswith(".")]
+        templates = [
+            item["name"] for item in contents if item.get("type") == "dir" and not item["name"].startswith(".")
+        ]
 
         if not templates:
             click.echo("No templates found.")
@@ -209,7 +213,7 @@ def list_templates(repo, refresh):
         for template in sorted(templates):
             click.echo(f"  • {template}")
 
-        click.echo(f"\nUse: agency init --template https://github.com/rwese/agency-templates/tree/main/<template>")
+        click.echo("\nUse: agency init --template https://github.com/rwese/agency-templates/tree/main/<template>")
 
     except Exception as e:
         click.echo(f"[ERROR] {e}", err=True)
@@ -267,11 +271,13 @@ def init_project(dir, template, template_subdir, force, refresh, no_context):
     # Determine template to use
     # If template is a simple name (e.g., 'fullstack-ts'), use agency-templates repo
     template_name = template or ""
-    
+
     # Resolve template URL and subdir
     if template_name and "/" not in template_name and "github.com" not in template_name:
         # Simple template name - use agency-templates repo
-        tm = TemplateManager("https://github.com/rwese/agency-templates", cache_dir=Path.home() / ".cache" / "agency" / "templates")
+        tm = TemplateManager(
+            "https://github.com/rwese/agency-templates", cache_dir=Path.home() / ".cache" / "agency" / "templates"
+        )
         template_path = tm.get_template(template_name, refresh=refresh)
     elif template_name:
         # Full URL or path
@@ -279,7 +285,7 @@ def init_project(dir, template, template_subdir, force, refresh, no_context):
         template_path = tm.get_template(template_subdir or "", refresh=refresh)
     else:
         template_path = None
-    
+
     if template_path:
         click.echo(f"[INFO] Using template: {template_path}")
         _copy_template_to_agency(template_path, agency_dir)
@@ -374,60 +380,61 @@ def _prompt_context_files(work_dir: Path, project_name: str) -> list[str]:
 
 def _fix_yaml_multiline_blocks(content: str) -> str:
     """Fix YAML multiline block syntax issues.
-    
+
     The issue: In YAML literal blocks (|), blank lines end the block.
     After a blank line, ALL lines must be indented until the next top-level key.
-    
+
     Properly indents markdown headers (## Title) and list items (- item).
     """
     import re
-    
-    lines = content.split('\n')
+
+    lines = content.split("\n")
     fixed_lines = []
     in_block = False
     block_indent = 0
-    
+
     for i, line in enumerate(lines):
         stripped = line.strip()
-        
+
         # Detect start of literal block (key: |)
-        if re.match(r'^\s*\w+: \|$', line):
+        if re.match(r"^\s*\w+: \|$", line):
             in_block = True
             # Content indent = 2 spaces (for continuation of block)
             block_indent = len(line) - len(line.lstrip()) + 2
             fixed_lines.append(line)
             continue
-        
+
         if in_block:
-            if stripped == '':
+            if stripped == "":
                 # Blank line - add indent to continue block
-                fixed_lines.append(' ' * block_indent)
-            elif line.startswith(' ' * 2):
+                fixed_lines.append(" " * block_indent)
+            elif line.startswith(" " * 2):
                 # Already indented - OK
                 fixed_lines.append(line)
-            elif stripped.startswith('## ') or stripped.startswith('- '):
+            elif stripped.startswith("## ") or stripped.startswith("- "):
                 # Markdown header or list item - indent it
-                fixed_lines.append(' ' * block_indent + stripped)
-            elif re.match(r'^\s*\w+:', line):
+                fixed_lines.append(" " * block_indent + stripped)
+            elif re.match(r"^\s*\w+:", line):
                 # Next top-level key - end block
                 in_block = False
                 fixed_lines.append(line)
             else:
                 # Other content - indent it
-                fixed_lines.append(' ' * block_indent + stripped)
+                fixed_lines.append(" " * block_indent + stripped)
         else:
             fixed_lines.append(line)
-    
-    return '\n'.join(fixed_lines)
+
+    return "\n".join(fixed_lines)
 
 
 def _copy_template_to_agency(template_path: Path, agency_dir: Path) -> None:
     """Copy template files to project.
-    
+
     Copies .agency/ to project's .agency/ and other project files to project root.
     Fixes YAML files with multiline block syntax issues.
     """
     import shutil
+
     import yaml
 
     work_dir = agency_dir.parent  # Project root
@@ -455,7 +462,7 @@ def _copy_template_to_agency(template_path: Path, agency_dir: Path) -> None:
                 rel_path = item.relative_to(agency_source)
                 dest = agency_dir / rel_path
                 dest.parent.mkdir(parents=True, exist_ok=True)
-                
+
                 # Fix YAML files
                 if item.suffix in (".yaml", ".yml"):
                     content = item.read_text()
@@ -552,7 +559,6 @@ def start(dir):
         click.echo("[ERROR] Not in a git repository", err=True)
         sys.exit(1)
 
-
     # Use work_dir for agency_dir, not git_root (allows subdirectory projects)
     agency_dir = work_dir / ".agency"
     if not agency_dir.exists():
@@ -571,7 +577,7 @@ def start(dir):
         click.echo(f"[INFO] Creating new session: {session_name}")
         create_project_session(session_name, socket_name, work_dir)
 
-    # Start all members
+    # Start all members (manager will be at window:0)
     _start_all_members(session_name, socket_name, agency_dir, work_dir, sm)
 
 
@@ -624,13 +630,18 @@ def _get_manager_name(agency_dir: Path) -> str | None:
 @click.argument("session", required=False)
 @click.option("--timeout", type=int, help="Grace period in seconds (default: 300)")
 @click.option("--force", is_flag=True, help="Force kill without graceful shutdown")
-@click.option("--idle", type=int, default=10, help="Seconds of inactivity before killing windows (default: 10)")
+@click.option("--idle", type=int, default=15, help="Seconds of inactivity before killing windows (default: 15)")
 def stop(session, timeout, force, idle):
     """Stop a session gracefully.
-    
-    Waits for windows to become idle (no output for --idle seconds) then kills them.
-    Falls back to force kill after --timeout seconds total.
-    
+
+    Stop mechanism:
+    1. Send Escape to all windows (cancel ongoing operations)
+    2. Wait briefly for agents to cancel
+    3. Send wrapup command (cleanup, update tasks, say goodbye)
+    4. Wait for idle windows
+    5. Kill idle windows
+    6. Force kill after --timeout
+
     Auto-detects session from .agency/ if not specified.
     """
     _log_cli_command("stop", session=session, timeout=timeout, force=force, idle=idle)
@@ -660,42 +671,47 @@ def stop(session, timeout, force, idle):
         click.echo("[INFO] Session killed")
         return
 
-    # Broadcast shutdown to all windows
-    sm.broadcast_shutdown()
-
-    # Wait for idle with graceful kill of idle windows
     import time
 
     timeout = timeout or 300  # 5 minutes default
     idle_check_interval = 2  # Check idle status every 2 seconds
     idle_target = idle  # Seconds of inactivity to consider idle
 
+    # Phase 1: Send Escape to cancel ongoing operations
+    click.echo("[INFO] Phase 1: Sending Escape to cancel ongoing operations...")
+    sm.broadcast_escape()
+    time.sleep(2)  # Brief pause for agents to react
+
+    # Phase 2: Send wrapup command
+    click.echo("[INFO] Phase 2: Sending wrapup command...")
+    sm.broadcast_wrapup()
+
+    # Wait for idle with graceful kill of idle windows
     elapsed = 0.0
     last_progress = 0.0
     killed_windows: set[str] = set()
-    
+
     while elapsed < timeout:
         time.sleep(idle_check_interval)
         elapsed += idle_check_interval
-        
+
         if not sm.session_exists():
             click.echo("[INFO] Session stopped gracefully")
             sm.cleanup_socket()
             return
-        
+
         # Check idle status
-        windows = sm.list_windows()
         idle_windows = [w for w in sm.get_idle_windows(idle_target) if w not in killed_windows]
-        
+
         if idle_windows:
             click.echo(f"[INFO] Idle windows: {', '.join(idle_windows)}")
-            
+
             # Kill idle windows that haven't been killed yet
             for window in idle_windows:
                 click.echo(f"[INFO] Killing idle window: {window}")
                 sm.kill_window(window)
                 killed_windows.add(window)
-        
+
         # Progress indicator every 30 seconds
         if elapsed - last_progress >= 30:
             click.echo(f"[INFO] Waiting for graceful shutdown... ({elapsed:.0f}s elapsed)")
@@ -987,7 +1003,7 @@ def tasks_agent():
 
 def _list_tasks(agency_dir, status, assignee, include_blocked=False):
     """List tasks helper function.
-    
+
     Args:
         agency_dir: Path to .agency directory
         status: Filter by status
@@ -1027,16 +1043,25 @@ def _list_tasks(agency_dir, status, assignee, include_blocked=False):
 @tasks.command("list")
 @click.option("--status", help="Filter by status")
 @click.option("--assignee", help="Filter by assignee")
-@click.option("--include-blocked", is_flag=True, help="Include tasks blocked by dependencies (default: excluded for agents, included for managers)")
+@click.option(
+    "--include-blocked",
+    is_flag=True,
+    help="Include tasks blocked by dependencies (default: excluded for agents, included for managers)",
+)
 def tasks_list(status, assignee, include_blocked):
     """List tasks assigned to current agent (when AGENCY_AGENT is set), otherwise all tasks.
-    
-    Agents only see tasks that are not blocked by dependencies.
-    Managers see all tasks by default unless --include-blocked is used.
+
+    Agents only see their own tasks that are pending or in_progress.
+    Managers see all tasks unless filtered.
     """
+    is_agent = bool(os.environ.get("AGENCY_AGENT"))
+
     # Auto-filter to current agent's tasks when running as an agent
-    if not assignee and os.environ.get("AGENCY_AGENT"):
+    if is_agent and not assignee:
         assignee = os.environ["AGENCY_AGENT"]
+        # Agents only see pending or in_progress tasks (not completed/failed)
+        if not status:
+            status = "pending,in_progress"
 
     agency_dir = find_agency_dir()
     if not agency_dir:
@@ -1045,7 +1070,6 @@ def tasks_list(status, assignee, include_blocked):
         sys.exit(1)
 
     # Agents always see only unblocked tasks
-    is_agent = bool(os.environ.get("AGENCY_AGENT"))
     include_blocked = include_blocked and not is_agent
 
     _list_tasks(agency_dir, status, assignee, include_blocked=include_blocked)
@@ -1112,9 +1136,9 @@ def tasks_show(task_id):
             blocking_ids = [f"{t.task_id} ({t.status})" for t in blocking]
             click.echo(f"- **Blocked by**: {', '.join(blocking_ids)} 🚫")
         else:
-            click.echo(f"- **Blocked by**: None ✅")
+            click.echo("- **Blocked by**: None ✅")
     else:
-        click.echo(f"- **Depends on**: None")
+        click.echo("- **Depends on**: None")
 
     click.echo("")
 
@@ -1159,9 +1183,9 @@ def tasks_assign(task_id, agent):
 @click.argument("dependencies", nargs=-1, required=True)
 def tasks_depends(task_id, action, dependencies):
     """Manage task dependencies.
-    
+
     Tasks will only be available to agents once all their dependencies are completed.
-    
+
     Examples:
         agency tasks depends task-1 --add task-2 task-3
         agency tasks depends task-1 --set task-2
@@ -1432,18 +1456,19 @@ def agent_my_work():
     if not agency_dir:
         click.echo("[ERROR] No .agency/ found", err=True)
         sys.exit(1)
-    
+
     import os
+
     agent = os.environ.get("AGENCY_AGENT", "")
     if not agent:
         click.echo("[ERROR] AGENCY_AGENT not set", err=True)
         sys.exit(1)
-    
+
     click.echo(f"📋 YOUR WORK QUEUE ({agent})")
     click.echo("=" * 50)
-    
+
     store = TaskStore(agency_dir)
-    
+
     # 1. First: in_progress tasks (working on now)
     in_progress = store.list_tasks(status="in_progress", assignee=agent)
     if in_progress:
@@ -1452,7 +1477,7 @@ def agent_my_work():
             click.echo(f"  [{task.task_id}]")
             click.echo(f"    {task.description[:60]}...")
             click.echo(f"    Status: {task.status}")
-    
+
     # 2. Second: pending tasks (next to work on)
     pending = store.list_tasks(status="pending", assignee=agent)
     if pending:
@@ -1460,14 +1485,14 @@ def agent_my_work():
         for i, task in enumerate(pending, 1):
             click.echo(f"  {i}. [{task.task_id}]")
             click.echo(f"     {task.description}")
-    
+
     # 3. Third: pending_approval (waiting for manager)
     approval = store.list_tasks(status="pending_approval", assignee=agent)
     if approval:
         click.echo(f"\n👀 PENDING APPROVAL ({len(approval)} task(s)):")
         for task in approval:
             click.echo(f"  [{task.task_id}] - Awaiting review")
-    
+
     if not in_progress and not pending and not approval:
         click.echo("\n✅ No tasks assigned. Check 'agency tasks list' for available work.")
     else:
@@ -1690,6 +1715,274 @@ def tmux_run(ctx, window, command):
     click.echo(f"[OK] Running in {window}: {command}")
 
 
+# === Heartbeat Commands ===
+
+
+@click.group("heartbeat")
+def heartbeat_cmd():
+    """Heartbeat process management.
+
+    Manages heartbeat processes for manager and agents.
+    Heartbeats monitor tasks and notify agents of available work.
+    """
+    pass
+
+
+def _get_heartbeat_pid_file(agency_dir: Path, role: str, name: str = "") -> Path:
+    """Get the PID file path for a heartbeat process."""
+    suffix = f"-{name}" if name else ""
+    return agency_dir / f".heartbeat-{role.lower()}{suffix}.pid"
+
+
+def _read_heartbeat_pid(pid_file: Path) -> int | None:
+    """Read heartbeat PID from file. Returns None if not running."""
+    if not pid_file.exists():
+        return None
+    try:
+        pid = int(pid_file.read_text().strip())
+        import subprocess
+
+        result = subprocess.run(["ps", "-p", str(pid), "-o", "pid="], capture_output=True)
+        if result.returncode == 0:
+            return pid
+        else:
+            pid_file.unlink()
+            return None
+    except (ValueError, OSError):
+        return None
+
+
+def _write_heartbeat_pid(pid_file: Path, pid: int) -> None:
+    """Write heartbeat PID to file."""
+    pid_file.write_text(str(pid))
+
+
+def _kill_heartbeat(pid: int) -> bool:
+    """Kill a heartbeat process."""
+    import subprocess
+
+    try:
+        subprocess.run(["kill", str(pid)], check=True)
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
+@heartbeat_cmd.command("start")
+@click.option("--role", type=click.Choice(["manager", "agent"]), default=None, help="Role: manager or agent")
+@click.option("--agent", "agent_name", default=None, help="Agent name (required for agent role)")
+@click.pass_context
+def heartbeat_start(ctx, role, agent_name):
+    """Start heartbeat for manager or agent.
+
+    Auto-detects role from AGENCY_ROLE env var if not specified.
+    For agent role, --agent is required to specify which agent.
+    """
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        ctx.exit(1)
+
+    env_role = os.environ.get("AGENCY_ROLE", "").upper()
+    if role:
+        role = role.upper()
+    elif env_role in ("MANAGER", "AGENT"):
+        role = env_role
+    else:
+        click.echo("[ERROR] Role not specified and AGENCY_ROLE not set", err=True)
+        click.echo("[ERROR] Use --role manager or --role agent", err=True)
+        ctx.exit(1)
+
+    if role == "AGENT":
+        if not agent_name:
+            agent_name = os.environ.get("AGENCY_AGENT")
+        if not agent_name:
+            click.echo("[ERROR] Agent name required for agent role", err=True)
+            click.echo("[ERROR] Use --agent <name> or set AGENCY_AGENT", err=True)
+            ctx.exit(1)
+        pid_file = _get_heartbeat_pid_file(agency_dir, "AGENT", agent_name)
+        existing_pid = _read_heartbeat_pid(pid_file)
+        if existing_pid:
+            click.echo(f"[WARN] Heartbeat already running for agent '{agent_name}' (PID: {existing_pid})", err=True)
+            ctx.exit(1)
+    else:
+        pid_file = _get_heartbeat_pid_file(agency_dir, "MANAGER")
+        existing_pid = _read_heartbeat_pid(pid_file)
+        if existing_pid:
+            click.echo(f"[WARN] Heartbeat already running for manager (PID: {existing_pid})", err=True)
+            ctx.exit(1)
+
+    config = load_agency_config(agency_dir)
+    project_name = config.project if config else agency_dir.parent.name
+    session_name = f"agency-{project_name}"
+    socket_name = session_name
+
+    manager_config = load_manager_config(agency_dir)
+    poll_interval = 30
+    if manager_config and hasattr(manager_config, "poll_interval"):
+        poll_interval = manager_config.poll_interval
+
+    heartbeat_env = dict(os.environ)
+    heartbeat_env["AGENCY_DIR"] = str(agency_dir)
+    heartbeat_env["AGENCY_SOCKET"] = socket_name
+    heartbeat_env["AGENCY_ROLE"] = role
+    heartbeat_env["AGENCY_POLL_INTERVAL"] = str(poll_interval)
+
+    if role == "MANAGER":
+        manager_name = manager_config.name if manager_config else "coordinator"
+        heartbeat_env["AGENCY_MANAGER"] = manager_name
+        heartbeat_env["PI_INJECTOR_SOCKET"] = str(agency_dir / f"injector-{manager_name}.sock")
+        heartbeat_env["PI_STATUS_SOCKET"] = str(agency_dir / f"status-{manager_name}.sock")
+    else:
+        heartbeat_env["AGENCY_AGENT"] = agent_name
+        heartbeat_env["AGENCY_PING_INTERVAL"] = "120"
+        heartbeat_env["PI_INJECTOR_SOCKET"] = str(agency_dir / f"injector-{agent_name}.sock")
+        heartbeat_env["PI_STATUS_SOCKET"] = str(agency_dir / f"status-{agent_name}.sock")
+
+    heartbeat_module = Path(__file__).parent / "heartbeat.py"
+    log_file = agency_dir / f".heartbeat-{role.lower()}{'-' + agent_name if agent_name else ''}.log"
+
+    with open(log_file, "w") as f:
+        proc = subprocess.Popen(
+            [sys.executable, "-u", str(heartbeat_module)],
+            env=heartbeat_env,
+            stdout=f,
+            stderr=subprocess.STDOUT,
+            cwd=str(agency_dir),
+        )
+
+    _write_heartbeat_pid(pid_file, proc.pid)
+    role_desc = "manager" if role == "MANAGER" else f"agent '{agent_name}'"
+    click.echo(f"[INFO] Started heartbeat for {role_desc} (PID: {proc.pid})")
+
+
+@heartbeat_cmd.command("stop")
+@click.option("--role", type=click.Choice(["manager", "agent"]), default=None, help="Role")
+@click.option("--agent", "agent_name", default=None, help="Agent name (for agent role)")
+@click.pass_context
+def heartbeat_stop(ctx, role, agent_name):
+    """Stop heartbeat process."""
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        ctx.exit(1)
+
+    targets = []
+    if agent_name:
+        targets.append(("AGENT", agent_name))
+    elif role:
+        if role.upper() == "MANAGER":
+            targets.append(("MANAGER", ""))
+        else:
+            agents = load_agents_config(agency_dir)
+            for a in agents:
+                targets.append(("AGENT", a.name))
+    else:
+        targets.append(("MANAGER", ""))
+        agents = load_agents_config(agency_dir)
+        for a in agents:
+            targets.append(("AGENT", a.name))
+
+    stopped = 0
+    for r, name in targets:
+        pid_file = _get_heartbeat_pid_file(agency_dir, r, name)
+        pid = _read_heartbeat_pid(pid_file)
+        if pid:
+            if _kill_heartbeat(pid):
+                click.echo(f"[OK] Stopped {r.lower()}{'-' + name if name else ''} (PID: {pid})")
+                stopped += 1
+            else:
+                click.echo(f"[ERROR] Failed to kill PID {pid}", err=True)
+        else:
+            click.echo(f"[INFO] No heartbeat running for {r.lower()}{'-' + name if name else ''}")
+
+    if stopped == 0:
+        click.echo("[INFO] No heartbeats stopped")
+
+
+@heartbeat_cmd.command("status")
+@click.pass_context
+def heartbeat_status(ctx):
+    """Show heartbeat status.
+
+    For agents: shows own heartbeat only.
+    For managers or no role: shows all heartbeats.
+    """
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        ctx.exit(1)
+
+    role = os.environ.get("AGENCY_ROLE", "").upper()
+    agent_name = os.environ.get("AGENCY_AGENT") if role == "AGENT" else None
+
+    click.echo("# Heartbeat Status")
+    click.echo("")
+
+    if role == "AGENT" and agent_name:
+        # Show only own heartbeat
+        pid_file = _get_heartbeat_pid_file(agency_dir, "AGENT", agent_name)
+        pid = _read_heartbeat_pid(pid_file)
+        if pid:
+            click.echo(f"- **Agent**: 🟢 running (PID: {pid})")
+        else:
+            click.echo("- **Agent**: ⚪ stopped")
+    else:
+        # Show all
+        manager_pid_file = _get_heartbeat_pid_file(agency_dir, "MANAGER")
+        manager_pid = _read_heartbeat_pid(manager_pid_file)
+        if manager_pid:
+            click.echo(f"- **Manager**: 🟢 running (PID: {manager_pid})")
+        else:
+            click.echo("- **Manager**: ⚪ stopped")
+
+        agents = load_agents_config(agency_dir)
+        if agents:
+            click.echo("")
+            click.echo("## Agents")
+            click.echo("")
+            for agent in agents:
+                pid_file = _get_heartbeat_pid_file(agency_dir, "AGENT", agent.name)
+                pid = _read_heartbeat_pid(pid_file)
+                if pid:
+                    click.echo(f"- **{agent.name}**: 🟢 running (PID: {pid})")
+                else:
+                    click.echo(f"- **{agent.name}**: ⚪ stopped")
+    click.echo("")
+
+
+@heartbeat_cmd.command("logs")
+@click.option("--lines", "-n", default=30, help="Number of lines")
+@click.pass_context
+def heartbeat_logs(ctx, lines):
+    """Show own heartbeat logs."""
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        ctx.exit(1)
+
+    role = os.environ.get("AGENCY_ROLE", "").upper()
+    agent_name = os.environ.get("AGENCY_AGENT") if role == "AGENT" else None
+
+    if role == "AGENT" and agent_name:
+        log_file = agency_dir / f".heartbeat-agent-{agent_name}.log"
+    elif role == "MANAGER":
+        log_file = agency_dir / ".heartbeat-manager.log"
+    else:
+        click.echo("[ERROR] AGENCY_ROLE must be set to MANAGER or AGENT", err=True)
+        ctx.exit(1)
+
+    if not log_file.exists():
+        click.echo("[ERROR] Log file not found", err=True)
+        ctx.exit(1)
+
+    content = log_file.read_text()
+    all_lines = content.split("\n")
+    last_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
+    for line in last_lines:
+        click.echo(line)
+
+
 # === Audit Commands ===
 
 
@@ -1752,6 +2045,7 @@ def audit_list(ctx, event_type, action, task, since, until, limit):
 
         if event.details:
             import json
+
             details_str = json.dumps(event.details, indent=None)
             if len(details_str) <= 100:
                 click.echo(f"   details={details_str}")
@@ -1862,11 +2156,13 @@ if _agency_role == "MANAGER":
     cli.add_command(members)
     cli.add_command(tasks)
     cli.add_command(tmux_cmd)
+    cli.add_command(heartbeat_cmd)
     cli.add_command(audit_cmd)
 elif _agency_role == "AGENT":
     # Agent sees: tasks_agent and tasks (limited commands)
     cli.add_command(tasks_agent)
     cli.add_command(tasks)
+    cli.add_command(heartbeat_cmd)
 else:
     # Default: all commands
     cli.add_command(init_project, name="init")
@@ -1881,6 +2177,7 @@ else:
     cli.add_command(tasks)
     cli.add_command(completions)
     cli.add_command(tmux_cmd)
+    cli.add_command(heartbeat_cmd)
     cli.add_command(audit_cmd)
 
 
