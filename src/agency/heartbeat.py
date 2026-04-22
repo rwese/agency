@@ -256,23 +256,21 @@ def manager_heartbeat(
                 f"{len(available_agents)} agents available: {available_agents}"
             )
 
-            if at_parallel_limit:
-                if counts["unassigned"] > 0 and (current_time - last_notification_time) > 60:
-                    msg = (
-                        f"⛔ Parallel limit reached: {active_count}/{parallel_limit} tasks active. "
-                        f"Waiting for completion before assigning more."
-                    )
-                    if send_notification(window_ref, msg):
-                        print(f"[HEARTBEAT] Notified manager: {msg}")
-                        last_notification_time = current_time
-            elif counts["unassigned"] > 0 and available_agents:
+            # Always notify about unassigned tasks, but warn about parallel limit
+            if counts["unassigned"] > 0 and available_agents:
                 should_notify = counts["unassigned"] != last_unassigned and (current_time - last_notification_time) > 30
                 if should_notify:
                     agent_list = ", ".join(available_agents)
+                    
+                    # Add parallel limit warning if at limit
+                    parallel_warning = ""
+                    if at_parallel_limit:
+                        parallel_warning = f" ⚠️ **Note**: Only {parallel_limit} task(s) will be actively worked on in priority order."
+                    
                     msg = (
                         f"📋 {counts['unassigned']} unassigned task(s), "
                         f"{len(available_agents)} agent(s) available ({agent_list}). "
-                        f"Run 'agency tasks list' to review and assign."
+                        f"Run 'agency tasks list' to review and assign.{parallel_warning}"
                     )
                     if send_notification(window_ref, msg):
                         print(f"[HEARTBEAT] Notified manager: {msg}")
@@ -289,6 +287,7 @@ def manager_heartbeat(
                                     "notification": "unassigned_tasks",
                                     "unassigned": counts["unassigned"],
                                     "available_agents": available_agents,
+                                    "at_parallel_limit": at_parallel_limit,
                                 },
                             )
 
