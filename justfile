@@ -77,6 +77,33 @@ list:
 kill-all:
     agency kill-all
 
+# === Heartbeat Management ===
+
+# Start heartbeat for manager
+heartbeat-start-manager:
+    AGENCY_ROLE=manager agency heartbeat start
+
+# Start heartbeat for all agents
+heartbeat-start-agents:
+    @for agent in backend frontend devops architect security qa; do \
+        AGENCY_ROLE=agent AGENCY_AGENT=$$agent agency heartbeat start; \
+    done
+
+# Start all heartbeats
+heartbeat-start: heartbeat-start-manager heartbeat-start-agents
+
+# Stop all heartbeats
+heartbeat-stop:
+    agency heartbeat stop
+
+# Show heartbeat status
+heartbeat-status:
+    agency heartbeat status
+
+# Show own heartbeat logs
+heartbeat-logs:
+    agency heartbeat logs
+
 # === Task Management ===
 
 # Add task
@@ -110,6 +137,30 @@ task-history:
 # Delete task
 task-delete task-id:
     agency tasks delete {{task-id}}
+
+# === pi Extensions ===
+
+# Link pi-status extension to ~/.pi/agent/extensions/
+pi-status-link:
+    ln -sf {{justfile_directory()}}/extras/pi/extensions/pi-status ~/.pi/agent/extensions/pi-status
+
+# Link no-frills extension to ~/.pi/agent/extensions/
+pi-no-frills-link:
+    ln -sf {{justfile_directory()}}/extras/pi/extensions/no-frills ~/.pi/agent/extensions/no-frills
+
+# Link all pi extensions
+pi-extensions-link: pi-status-link pi-no-frills-link
+    @echo "All pi extensions linked"
+
+# Test pi-status CLI
+pi-status-test:
+    npx tsx extras/pi/extensions/pi-status/src/pi-status-cli.ts status
+
+pi-status-ping:
+    npx tsx extras/pi/extensions/pi-status/src/pi-status-cli.ts ping
+
+pi-status-health:
+    npx tsx extras/pi/extensions/pi-status/src/pi-status-cli.ts health
 
 # === Development ===
 
@@ -160,6 +211,14 @@ help:
     @echo "  attach <session>                     Attach to session"
     @echo "  list                                  List sessions"
     @echo ""
+    @echo "=== Heartbeat Management ==="
+    @echo "  heartbeat-start                     Start all heartbeats"
+    @echo "  heartbeat-start-manager             Start manager heartbeat"
+    @echo "  heartbeat-start-agents              Start all agent heartbeats"
+    @echo "  heartbeat-stop                      Stop all heartbeats"
+    @echo "  heartbeat-status                    Show status"
+    @echo "  heartbeat-logs                      Show manager logs"
+    @echo ""
     @echo "=== Task Management ==="
     @echo "  task-add <desc>                       Add task"
     @echo "  task-assign <id> <agent>             Assign task"
@@ -167,6 +226,11 @@ help:
     @echo "  tasks                                 List all tasks"
     @echo "  task-show <id>                        Show task"
     @echo "  task-history                          Show history"
+    @echo ""
+    @echo "=== pi Extensions ==="
+    @echo "  pi-extensions-link                   Link all extensions"
+    @echo "  pi-status-link                       Link pi-status"
+    @echo "  pi-no-frills-link                    Link no-frills"
     @echo ""
     @echo "=== Development ==="
     @echo "  test-mock <name> <dir>               Test with mock agent"
