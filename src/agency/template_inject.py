@@ -16,7 +16,6 @@ import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 
 @dataclass
@@ -47,7 +46,7 @@ class TemplateInjector:
         pattern: str | None = None,
         options: InjectionOptions | None = None,
     ):
-        """Initialize injector.
+        r"""Initialize injector.
 
         Args:
             pattern: Custom regex pattern for placeholders. Must have one capture group
@@ -64,7 +63,7 @@ class TemplateInjector:
         close_delim: str,
         options: InjectionOptions | None = None,
     ) -> "TemplateInjector":
-        """Create injector with custom delimiters.
+        r"""Create injector with custom delimiters.
 
         Example: cls.with_delimiters("{{", "}}") creates pattern: r"\{\{(file|shell):[^\}]+\}\}"
 
@@ -152,7 +151,9 @@ class TemplateInjector:
 
             # Warn if output was truncated
             if len(result.stdout.encode("utf-8")) > self.options.max_shell_output:
-                return output[: self.options.max_shell_output], f"[WARN] Shell output truncated to {self.options.max_shell_output} bytes"
+                return output[
+                    : self.options.max_shell_output
+                ], f"[WARN] Shell output truncated to {self.options.max_shell_output} bytes"
 
             return output, None
 
