@@ -1,0 +1,41 @@
+{
+  "name": "@rwese/pi-status",
+  "version": "0.1.0",
+  "description": "pi extension for exposing agent status via Unix Domain Socket",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./extension": "./extensions/index.js"
+  },
+  "pi": {
+    "extensions": ["./extensions"]
+  },
+  "files": [
+    "dist",
+    "extensions"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "pi",
+    "coding-agent",
+    "status",
+    "monitoring"
+  ],
+  "author": "rwese",
+  "license": "MIT",
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
