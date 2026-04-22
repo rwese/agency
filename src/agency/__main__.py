@@ -1425,6 +1425,57 @@ def agent_tasks_list():
     _list_tasks(agency_dir, status=None, assignee=agent, include_blocked=False)
 
 
+@tasks_agent.command("my-work")
+def agent_my_work():
+    """Show your work queue - tasks to work on right now."""
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        sys.exit(1)
+    
+    import os
+    agent = os.environ.get("AGENCY_AGENT", "")
+    if not agent:
+        click.echo("[ERROR] AGENCY_AGENT not set", err=True)
+        sys.exit(1)
+    
+    click.echo(f"📋 YOUR WORK QUEUE ({agent})")
+    click.echo("=" * 50)
+    
+    store = TaskStore(agency_dir)
+    
+    # 1. First: in_progress tasks (working on now)
+    in_progress = store.list_tasks(status="in_progress", assignee=agent)
+    if in_progress:
+        click.echo("\n🔄 IN PROGRESS:")
+        for task in in_progress:
+            click.echo(f"  [{task.task_id}]")
+            click.echo(f"    {task.description[:60]}...")
+            click.echo(f"    Status: {task.status}")
+    
+    # 2. Second: pending tasks (next to work on)
+    pending = store.list_tasks(status="pending", assignee=agent)
+    if pending:
+        click.echo(f"\n⏳ PENDING ({len(pending)} task(s)):")
+        for i, task in enumerate(pending, 1):
+            click.echo(f"  {i}. [{task.task_id}]")
+            click.echo(f"     {task.description}")
+    
+    # 3. Third: pending_approval (waiting for manager)
+    approval = store.list_tasks(status="pending_approval", assignee=agent)
+    if approval:
+        click.echo(f"\n👀 PENDING APPROVAL ({len(approval)} task(s)):")
+        for task in approval:
+            click.echo(f"  [{task.task_id}] - Awaiting review")
+    
+    if not in_progress and not pending and not approval:
+        click.echo("\n✅ No tasks assigned. Check 'agency tasks list' for available work.")
+    else:
+        click.echo("\n" + "=" * 50)
+        if pending:
+            click.echo("Next: Run 'agency tasks-agent show <id>' then start working!")
+
+
 @tasks_agent.command("show")
 @click.argument("task_id")
 def agent_tasks_show(task_id):
