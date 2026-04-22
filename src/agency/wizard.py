@@ -97,21 +97,15 @@ def _select_option(prompt: str, options: list[str], default: int = 0) -> int:
         marker = " ←" if i - 1 == default else ""
         click.echo(f"  {i}. {opt}{marker}")
 
-    while True:
-        click.echo("\nChoice: ", nl=False)
-        ch = _getch()
-        click.echo(ch)
-
-        if ch == "\r" or ch == "\n":
-            return default
-
-        if ch.isdigit():
-            idx = int(ch) - 1
-            if 0 <= idx < len(options):
-                return idx
-
-        if ch == "\x03":  # Ctrl+C
-            raise KeyboardInterrupt
+    # Use click's built-in prompt with IntRange validation
+    default_str = str(default + 1)  # Convert to 1-indexed
+    choice = click.prompt(
+        "\nChoice",
+        default=default_str,
+        type=click.IntRange(1, len(options)),
+        show_default=True,
+    )
+    return choice - 1  # Convert back to 0-indexed
 
 
 def _prompt_text(prompt: str, default: str = "", validate: Callable[[str], str | None] | None = None) -> str:
