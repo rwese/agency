@@ -43,5 +43,4 @@ sessions/
 !/agency-web/.agency/agents/
 
 # Node dependencies (for subdirectory projects)
-/agency-web/backend/node_modules/
-/agency-web/frontend/node_modules/
+**/node_modules/
