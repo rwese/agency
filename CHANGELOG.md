@@ -5,7 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - Unreleased
+## [2.1.0] - 2026-04-22
+
+### Added
+
+#### Task Dependencies
+- **Dependency field**: Tasks can depend on other tasks via `depends_on`
+- **Dependency management**: `tasks depends <id> [--add|--remove|--set] <deps...>`
+- **Blocking logic**: Tasks blocked until all dependencies are completed
+- **Circular detection**: Prevents circular dependency chains
+- **Agent filtering**: Agents only see unblocked tasks
+- **Manager visibility**: `--include-blocked` flag to see all tasks
+
+## [2.0.0] - 2026-04-21
 
 ### Added
 
@@ -21,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Pending workflow**: Manager approval for task completions
 - **Rejection flow**: Agent revises and resubmits rejected tasks
 - **Priority levels**: `low`, `normal`, `high`
+- **Agent task filtering**: Auto-filters to agent's tasks when `AGENCY_AGENT` is set
 
 #### Template System
 - **GitHub templates**: Download from any GitHub repository
