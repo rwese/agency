@@ -1431,9 +1431,8 @@ def tmux_run(ctx, window, command):
 _agency_role = os.environ.get("AGENCY_ROLE", "").upper()
 
 if _agency_role == "MANAGER":
-    # Manager sees: all commands except completions
+    # Manager sees: all commands except templates and completions
     cli.add_command(init_project, name="init")
-    cli.add_command(list_templates, name="templates")
     cli.add_command(start)
     cli.add_command(stop)
     cli.add_command(kill)

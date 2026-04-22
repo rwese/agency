@@ -42,41 +42,47 @@ agency stop agency-api
 
 ## Commands
 
+> **Role Requirements**: Commands are filtered by `AGENCY_ROLE`:
+> - **No role** (default): Full command set
+> - **MANAGER**: All commands except `templates` and `completions`
+> - **AGENT**: Tasks agent command only
+
 ### Project Management
 
-| Command | Description |
-|---------|-------------|
-| `agency init` | Create project + session + `.agency/` |
-| `agency start` | Start the agency (manager + all agents) |
-| `agency members` | Show all configured members with status |
-| `agency stop <session>` | Stop session gracefully |
-| `agency kill <session>` | Force kill session |
-| `agency resume` | Resume a halted session |
-| `agency attach` | Attach to project session (auto-detected) |
-| `agency list` | List all agency sessions |
+| Command | Role | Description |
+|---------|------|-------------|
+| `agency init` | any | Create project + session + `.agency/` |
+| `agency templates` | none | List available project templates |
+| `agency start` | any | Start the agency (manager + all agents) |
+| `agency members` | any | Show all configured members with status |
+| `agency stop <session>` | any | Stop session gracefully |
+| `agency kill <session>` | any | Force kill session |
+| `agency resume` | any | Resume a halted session |
+| `agency attach` | any | Attach to project session (auto-detected) |
+| `agency list` | any | List all agency sessions |
 
 ### Tmux Operations
 
-| Command | Description |
-|---------|-------------|
-| `agency tmux list` | List windows in current project |
-| `agency tmux send <window> <text>` | Send keys to window |
-| `agency tmux new <name>` | Create new window |
-| `agency tmux attach` | Attach to session (new terminal) |
-| `agency tmux run <window> <cmd>` | Run command in window |
+| Command | Role | Description |
+|---------|------|-------------|
+| `agency tmux list` | any | List windows in current project |
+| `agency tmux send <window> <text>` | any | Send keys to window |
+| `agency tmux new <name>` | any | Create new window |
+| `agency tmux attach` | any | Attach to session (new terminal) |
+| `agency tmux run <window> <cmd>` | any | Run command in window |
 
 ### Task Management
 
-| Command | Description |
-|---------|-------------|
-| `agency tasks list` | List active tasks (Markdown) |
-| `agency tasks add -d <desc>` | Create task |
-| `agency tasks show <id>` | Show task details |
-| `agency tasks assign <id> <agent>` | Assign to agent |
-| `agency tasks complete <id> --result <text>` | Complete task |
-| `agency tasks update <id> [--status] [--priority]` | Update task |
-| `agency tasks delete <id>` | Delete task |
-| `agency tasks history` | List completed tasks |
+| Command | Role | Description |
+|---------|------|-------------|
+| `agency tasks list` | any | List active tasks (Markdown) |
+| `agency tasks add -d <desc>` | any | Create task |
+| `agency tasks show <id>` | any | Show task details |
+| `agency tasks assign <id> <agent>` | any | Assign to agent |
+| `agency tasks complete <id> --result <text>` | any | Complete task |
+| `agency tasks update <id> [--status] [--priority]` | any | Update task |
+| `agency tasks delete <id>` | any | Delete task |
+| `agency tasks history` | any | List completed tasks |
 
 ## File Structure
 
