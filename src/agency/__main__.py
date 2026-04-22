@@ -481,9 +481,11 @@ def start(dir):
         click.echo("[ERROR] Not in a git repository", err=True)
         sys.exit(1)
 
-    agency_dir = git_root / ".agency"
+
+    # Use work_dir for agency_dir, not git_root (allows subdirectory projects)
+    agency_dir = work_dir / ".agency"
     if not agency_dir.exists():
-        click.echo(f"[ERROR] No .agency/ found in {git_root}", err=True)
+        click.echo(f"[ERROR] No .agency/ found in {work_dir}", err=True)
         click.echo("[ERROR] Run 'agency init' first", err=True)
         sys.exit(1)
 
