@@ -15,6 +15,7 @@ from agency.config import load_agents_config
 
 class ReviewContext(NamedTuple):
     """Context passed to a reviewer agent."""
+
     task_id: str
     task_description: str
     agent_result: str
@@ -137,6 +138,21 @@ def get_task_review_context(agency_dir: Path, task_id: str) -> ReviewContext | N
     )
 
 
+def get_pending_approval_tasks(agency_dir: Path) -> list[dict]:
+    """Get all tasks in pending_approval status.
+
+    Args:
+        agency_dir: Path to .agency directory
+
+    Returns:
+        List of task dicts with status pending_approval
+    """
+    from agency.tasks import TaskStore
+
+    store = TaskStore(agency_dir)
+    return [t.to_dict() for t in store.list_tasks(status="pending_approval", include_blocked=True)]
+
+
 def start_reviewer(agency_dir: Path, task_id: str) -> bool:
     """Start a reviewer agent for a task.
 
@@ -159,6 +175,13 @@ def start_reviewer(agency_dir: Path, task_id: str) -> bool:
     # Check if reviewer agent is configured
     agents = load_agents_config(agency_dir)
     reviewer_names = [a.name for a in agents if a.name.startswith("reviewer")]
+    reviewer_name = reviewer_names[0] if reviewer_names else "reviewer"
+
+    # Track reviewer assignment in task
+    from agency.tasks import TaskStore
+
+    store = TaskStore(agency_dir)
+    store.update_task(task_id, reviewer_assigned=reviewer_name)
 
     if not reviewer_names:
         print("[REVIEWER] No reviewer agent configured")
@@ -175,6 +198,7 @@ def start_reviewer(agency_dir: Path, task_id: str) -> bool:
     sm = SessionManager(session_name, socket_name=session_name)
     if not sm.session_exists():
         from agency.session import create_project_session
+
         create_project_session(session_name, session_name, work_dir)
 
     # Check if reviewer already running
@@ -239,6 +263,7 @@ def restart_agent_for_fix(agency_dir: Path, task_id: str, rejection_reason: str)
     # Check if the original agent is still running
     if pid:
         import subprocess
+
         try:
             result = subprocess.run(["ps", "-p", str(pid), "-o", "pid="], capture_output=True)
             if result.returncode == 0:
@@ -347,6 +372,7 @@ def start_fresh_agent(
     sm = SessionManager(session_name, socket_name=session_name)
     if not sm.session_exists():
         from agency.session import create_project_session
+
         create_project_session(session_name, session_name, work_dir)
 
     # Check if agent already running

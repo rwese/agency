@@ -46,6 +46,7 @@ class Task:
     # Review info
     rejection_reason: str | None = None
     review_notes: str | None = None
+    reviewer_assigned: str | None = None  # Track which reviewer is handling this task
 
     def to_dict(self) -> dict:
         return {
@@ -63,6 +64,7 @@ class Task:
             "agent_info": self.agent_info,
             "rejection_reason": self.rejection_reason,
             "review_notes": self.review_notes,
+            "reviewer_assigned": self.reviewer_assigned,
         }
 
     @classmethod
@@ -82,6 +84,7 @@ class Task:
             agent_info=data.get("agent_info"),
             rejection_reason=data.get("rejection_reason"),
             review_notes=data.get("review_notes"),
+            reviewer_assigned=data.get("reviewer_assigned"),
         )
 
 
@@ -390,6 +393,7 @@ class TaskStore:
         task_id: str,
         status: str | None = None,
         priority: str | None = None,
+        reviewer_assigned: str | None = None,
     ) -> bool:
         """Update task fields."""
         with self._lock():
@@ -414,6 +418,9 @@ class TaskStore:
             if priority:
                 tasks[task_id]["priority"] = priority
 
+            if reviewer_assigned is not None:
+                tasks[task_id]["reviewer_assigned"] = reviewer_assigned
+
             self._write_tasks_json(data)
 
             # Update task.json in task directory
@@ -427,7 +434,7 @@ class TaskStore:
                 audit.log_task(
                     action="update",
                     task_id=task_id,
-                    details={"status": status, "priority": priority},
+                    details={"status": status, "priority": priority, "reviewer_assigned": reviewer_assigned},
                 )
 
             return True
@@ -991,11 +998,13 @@ def check_stale_tasks(agency_dir: Path) -> list[dict]:
                 session_id = task.agent_info.get("session_id")
                 store.clear_agent_info(task.task_id)
 
-                stale.append({
-                    "task_id": task.task_id,
-                    "agent": task.assigned_to,
-                    "session_id": session_id,
-                    "reason": "process_not_found",
-                })
+                stale.append(
+                    {
+                        "task_id": task.task_id,
+                        "agent": task.assigned_to,
+                        "session_id": session_id,
+                        "reason": "process_not_found",
+                    }
+                )
 
     return stale

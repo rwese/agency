@@ -190,16 +190,19 @@ def check_stale_tasks(agency_dir: Path) -> list[dict]:
             # Revert the task
             try:
                 from agency.tasks import TaskStore
+
                 store = TaskStore(agency_dir)
                 store.clear_agent_info(task_id)
                 print(f"[CRASH DETECTED] Task {task_id} reverted - agent {agent} process {pid} not found")
-                stale.append({
-                    "task_id": task_id,
-                    "agent": agent,
-                    "session_id": session_id,
-                    "reason": "process_not_found",
-                    "pid": pid,
-                })
+                stale.append(
+                    {
+                        "task_id": task_id,
+                        "agent": agent,
+                        "session_id": session_id,
+                        "reason": "process_not_found",
+                        "pid": pid,
+                    }
+                )
             except Exception as e:
                 print(f"[CRASH DETECTED] Failed to revert task {task_id}: {e}")
 
@@ -681,9 +684,10 @@ def manager_heartbeat_v2(
 
     This is the new task-centric heartbeat that:
     1. Detects crashed agents and reverts their tasks
-    2. Starts agents when work is available
-    3. Assigns tasks to available agents
-    4. Notifies about pending approvals
+    2. Extends crash detection to orphaned pending_approval tasks
+    3. Starts reviewer agents for pending_approval tasks
+    4. Assigns pending tasks to available agents
+    5. Starts agents only when work is assigned to them (lazy spawning)
 
     Args:
         agency_dir: Path to .agency/ directory
@@ -691,7 +695,13 @@ def manager_heartbeat_v2(
         manager_name: Name of the manager window
         poll_interval: Seconds between checks
     """
-    from agency.orchestrator import Orchestrator, assign_tasks_to_agents, start_agents_for_work
+    from agency.orchestrator import (
+        Orchestrator,
+        assign_tasks_to_agents,
+        ensure_agent_running_for_task,
+        get_assigned_not_running_tasks,
+    )
+    from agency.reviewer import get_pending_approval_tasks, start_reviewer
 
     # Prevent duplicate heartbeats
     if _check_pid_file(agency_dir, f"manager-{manager_name}"):
@@ -699,6 +709,9 @@ def manager_heartbeat_v2(
 
     window_ref = f"{socket_name}:[MGR] {manager_name}"
     orchestrator = Orchestrator(agency_dir)
+
+    # Initialize slot tracking on startup
+    orchestrator.init_slots_on_startup()
 
     print(f"[HEARTBEAT-V2] Starting for manager '{manager_name}'")
     print(f"[HEARTBEAT-V2] Agency dir: {agency_dir}")
@@ -709,7 +722,7 @@ def manager_heartbeat_v2(
 
     while True:
         try:
-            # 1. CRASH DETECTION: Check for stale tasks and revert them
+            # 1. CRASH DETECTION: Check for stale in_progress tasks
             stale = check_stale_tasks(agency_dir)
             if stale:
                 print(f"[HEARTBEAT-V2] Reverted {len(stale)} stale tasks")
@@ -726,27 +739,51 @@ def manager_heartbeat_v2(
                             },
                         )
 
-            # 2. ORCHESTRATION: Start agents if there's work
-            started = start_agents_for_work(agency_dir)
-            if started:
-                print(f"[HEARTBEAT-V2] Started agents: {started}")
+            # 2. REVIEW: Spawn reviewer agents for pending_approval tasks
+            pending_approval = get_pending_approval_tasks(agency_dir)
+            for task in pending_approval:
+                task_id = task.get("task_id")
+                reviewer = task.get("reviewer_assigned")
+                if not reviewer:
+                    # Spawn reviewer for this task
+                    if start_reviewer(agency_dir, task_id):
+                        print(f"[HEARTBEAT-V2] Spawned reviewer for {task_id}")
 
-            # 3. ASSIGNMENT: Assign pending tasks to available agents
+            # 3. ASSIGNMENT: Assign pending unblocked tasks to available agents
             assigned = assign_tasks_to_agents(agency_dir)
             if assigned:
                 print(f"[HEARTBEAT-V2] Assigned tasks: {assigned}")
 
-            # 4. NOTIFICATION: Notify about pending approvals
-            status = orchestrator.get_status_summary()
-            pending_approval = len([t for t in get_all_tasks(agency_dir) if t.get("status") == "pending_approval"])
+            # 4. SPAWN: Start agents for tasks assigned but not running
+            # This is the lazy spawning - agents only start when work is assigned
+            unstarted_tasks = get_assigned_not_running_tasks(agency_dir)
+            spawned = []
+            for task in unstarted_tasks:
+                if ensure_agent_running_for_task(agency_dir, task):
+                    spawned.append(task.assigned_to)
+            if spawned:
+                print(f"[HEARTBEAT-V2] Spawned agents for assigned tasks: {spawned}")
 
-            if pending_approval > 0 and pending_approval != last_approval_count:
-                msg = f"👀 {pending_approval} task(s) pending approval. Run 'agency tasks list' to review."
+            # 5. SLOT SIGNALING: Release slots for completed tasks
+            # Signal when in_progress tasks complete (moved to pending_approval)
+            current_approval_count = len(pending_approval)
+            if current_approval_count > last_approval_count:
+                # Tasks moved to pending_approval - signal slots
+                for task in get_all_tasks(agency_dir):
+                    if task.get("status") == "pending_approval":
+                        agent = task.get("assigned_to")
+                        if agent:
+                            orchestrator.signal_task_completed(agent)
+
+            # 6. NOTIFICATION: Notify about pending approvals
+            status = orchestrator.get_status_summary()
+            if current_approval_count > 0 and current_approval_count != last_approval_count:
+                msg = f"👀 {current_approval_count} task(s) pending approval. Reviewers spawned."
                 if send_notification(window_ref, msg):
                     print("[HEARTBEAT-V2] Notified about pending approvals")
-                    last_approval_count = pending_approval
+            last_approval_count = current_approval_count
 
-            # 5. STATUS: Log status summary periodically
+            # 7. STATUS: Log status summary periodically
             _idle_cycles += 1
             if _idle_cycles % 10 == 0:
                 print(
@@ -762,5 +799,6 @@ def manager_heartbeat_v2(
         except Exception as e:
             print(f"[HEARTBEAT-V2] Error: {e}", file=sys.stderr)
             import traceback
+
             traceback.print_exc()
             time.sleep(poll_interval)
