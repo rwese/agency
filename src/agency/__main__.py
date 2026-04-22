@@ -166,7 +166,44 @@ def cli(ctx):
 # === Project Commands ===
 
 
-# === Project Commands ===
+@click.command("templates")
+@click.option("--repo", default="https://github.com/rwese/agency-templates", help="Template repository URL")
+@click.option("--refresh", is_flag=True, help="Bypass cache")
+def list_templates(repo, refresh):
+    """List available project templates."""
+    try:
+        import tempfile
+        import json
+        
+        repo_name = repo.replace("https://github.com/", "")
+        api_url = f"https://api.github.com/repos/{repo_name}/contents"
+        
+        result = subprocess.run(
+            ["curl", "-sL", api_url],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode != 0:
+            click.echo("[ERROR] Failed to fetch templates", err=True)
+            return
+        
+        contents = json.loads(result.stdout)
+        templates = [item["name"] for item in contents if item.get("type") == "dir" and not item["name"].startswith(".")]
+        
+        if not templates:
+            click.echo("No templates found.")
+            return
+        
+        click.echo("Available templates:\n")
+        for template in sorted(templates):
+            click.echo(f"  • {template}")
+        
+        click.echo(f"\nUse: agency init --template https://github.com/rwese/agency-templates/tree/main/<template>")
+        
+    except Exception as e:
+        click.echo(f"[ERROR] {e}", err=True)
 
 
 @click.command()
@@ -1396,6 +1433,7 @@ _agency_role = os.environ.get("AGENCY_ROLE", "").upper()
 if _agency_role == "MANAGER":
     # Manager sees: all commands except completions
     cli.add_command(init_project, name="init")
+    cli.add_command(list_templates, name="templates")
     cli.add_command(start)
     cli.add_command(stop)
     cli.add_command(kill)
@@ -1411,6 +1449,7 @@ elif _agency_role == "AGENT":
 else:
     # Default: all commands
     cli.add_command(init_project, name="init")
+    cli.add_command(list_templates, name="templates")
     cli.add_command(start)
     cli.add_command(stop)
     cli.add_command(kill)
