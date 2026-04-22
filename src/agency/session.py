@@ -807,11 +807,7 @@ def _generate_manager_launch_script(
 
     # No-frills env vars for minimal UI (hide decorations)
     nofrills_env = (
-        "PI_NOFILLS_TOOLS=minimal "
-        "PI_NOFILLS_THINKING=1 "
-        "PI_NOFILLS_WORKING=1 "
-        "PI_NOFILLS_FOOTER=1 "
-        "PI_NOFILLS_HEADER=1 "
+        "PI_NOFILLS_TOOLS=minimal PI_NOFILLS_THINKING=1 PI_NOFILLS_WORKING=1 PI_NOFILLS_FOOTER=1 PI_NOFILLS_HEADER=1 "
     )
 
     cmd = (
@@ -1014,11 +1010,7 @@ def _generate_agent_launch_script(
 
     # No-frills env vars for minimal UI (hide decorations)
     nofrills_env = (
-        "PI_NOFILLS_TOOLS=minimal "
-        "PI_NOFILLS_THINKING=1 "
-        "PI_NOFILLS_WORKING=1 "
-        "PI_NOFILLS_FOOTER=1 "
-        "PI_NOFILLS_HEADER=1 "
+        "PI_NOFILLS_TOOLS=minimal PI_NOFILLS_THINKING=1 PI_NOFILLS_WORKING=1 PI_NOFILLS_FOOTER=1 PI_NOFILLS_HEADER=1 "
     )
 
     # Build pi command with explicit extension and no global extensions/themes
