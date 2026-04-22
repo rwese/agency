@@ -219,10 +219,19 @@ def init_project(dir, template, template_subdir, force, refresh, no_context):
 
     # Download template if specified
     template_url = template or "https://github.com/rwese/agency-templates"
+    
+    # Extract subdir from URL if specified inline (e.g., /tree/main/fullstack-ts)
+    resolved_subdir = template_subdir
+    if not resolved_subdir and "/tree/" in template_url:
+        parts = template_url.split("/tree/")
+        if len(parts) > 1:
+            path_parts = parts[1].split("/")
+            if len(path_parts) >= 2:  # branch/template or branch/path/to/template
+                resolved_subdir = "/".join(path_parts[1:])  # template or path/to/template
 
     if template_url:
         tm = TemplateManager(template_url, cache_dir=Path.home() / ".cache" / "agency" / "templates")
-        template_path = tm.get_template(template_subdir or "basic", refresh=refresh)
+        template_path = tm.get_template(resolved_subdir or "basic", refresh=refresh)
         if template_path:
             click.echo(f"[INFO] Using template from {template_url}")
             _copy_template_to_agency(template_path, agency_dir)
@@ -318,21 +327,51 @@ def _prompt_context_files(work_dir: Path, project_name: str) -> list[str]:
 
 
 def _copy_template_to_agency(template_path: Path, agency_dir: Path) -> None:
-    """Copy template files to .agency/ directory."""
+    """Copy template files to project.
+    
+    Copies .agency/ to project's .agency/ and other project files to project root.
+    """
     import shutil
 
+    work_dir = agency_dir.parent  # Project root
     agency_dir.mkdir(parents=True, exist_ok=True)
 
-    # Check if template has .agency/ inside
+    # Template structure may have .agency/ at root level or inside a subdir
     template_agency = template_path / ".agency"
-    source_dir = template_agency if template_agency.exists() else template_path
+    
+    # Find the actual .agency source
+    if template_agency.exists():
+        # .agency is at template root
+        agency_source = template_agency
+    else:
+        # Look for .agency inside template
+        for item in template_path.rglob(".agency"):
+            agency_source = item
+            break
+        else:
+            agency_source = None
 
-    for item in source_dir.rglob("*"):
+    # Copy .agency contents
+    if agency_source and agency_source.exists():
+        for item in agency_source.rglob("*"):
+            if item.is_file():
+                rel_path = item.relative_to(agency_source)
+                dest = agency_dir / rel_path
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(item, dest)
+    
+    # Copy other project files (backend, frontend, k8s, etc.)
+    for item in template_path.iterdir():
+        if item.name == ".agency":
+            continue  # Already handled
         if item.is_file():
-            rel_path = item.relative_to(source_dir)
-            dest = agency_dir / rel_path
-            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest = work_dir / item.name
             shutil.copy2(item, dest)
+        elif item.is_dir():
+            dest = work_dir / item.name
+            if dest.exists():
+                shutil.rmtree(dest)
+            shutil.copytree(item, dest)
 
 
 def _create_default_agency_structure(agency_dir: Path, additional_context_files: list[str] | None = None) -> None:

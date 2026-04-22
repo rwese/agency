@@ -18,27 +18,35 @@ class TemplateManager:
         self.cache_dir = cache_dir or Path.home() / ".cache" / "agency" / "templates"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    def get_cache_path(self, subdir: str = "") -> Path:
-        """Get the cache path for a template."""
-        # Create a safe cache key from URL
-        url_key = self.repo_url.replace("https://github.com/", "").replace("/", "_")
-        cache_path = self.cache_dir / url_key
+    def _url_to_cache_key(self) -> str:
+        """Convert repo URL to a safe cache key."""
+        # Extract repo from URL first
+        url = self.repo_url
+        if "/tree/" in url:
+            # https://github.com/user/repo/tree/branch/path -> user_repo
+            repo = url.split("/tree/")[0].replace("https://github.com/", "")
+        else:
+            repo = url.replace("https://github.com/", "")
+        return repo.replace("/", "_")
 
+    def get_cache_root(self, subdir: str = "") -> Path:
+        """Get the cache root path for a template (the template directory itself)."""
+        url_key = self._url_to_cache_key()
+        cache_path = self.cache_dir / url_key
         if subdir:
             cache_path = cache_path / subdir
-
-        return cache_path / ".agency"
+        return cache_path
 
     def get_template(self, subdir: str = "", refresh: bool = False) -> Path | None:
-        """Get a template, using cache if available."""
-        cache_path = self.get_cache_path(subdir)
+        """Get a template root path, using cache if available."""
+        cache_root = self.get_cache_root(subdir)
 
-        if not refresh and cache_path.exists():
-            return cache_path
+        if not refresh and cache_root.exists():
+            return cache_root
 
         # Download and extract
         if self._download_template(subdir):
-            return cache_path
+            return cache_root
 
         return None
 
@@ -46,7 +54,6 @@ class TemplateManager:
         """Download template from GitHub."""
         try:
             # Parse the repo URL
-            # Format: https://github.com/user/repo or https://github.com/user/repo/tree/branch/path
             url = self.repo_url
 
             # Handle full URLs with tree
@@ -93,23 +100,18 @@ class TemplateManager:
                     print(f"[WARN] Failed to extract template: {result.stderr}", flush=True)
                     return False
 
-                # Find the extracted directory
+                # Find the extracted directory (repo-branch-xxx)
                 extracted = list(extract_dir.iterdir())[0]
 
                 # Find .agency directory
                 if subdir:
                     # Look for subdir/.agency
-                    agency_path = extracted / path / subdir / ".agency"
+                    agency_path = extracted / path / subdir / ".agency" if path else extracted / subdir / ".agency"
                     if not agency_path.exists():
-                        # Try path/.agency where path might include the subdir
-                        agency_path = extracted / (path.split("/")[0] if path else "") / subdir / ".agency"
-                        if not agency_path.exists():
-                            agency_path = extracted / subdir / ".agency"
+                        agency_path = extracted / subdir / ".agency"
                 else:
-                    # Look for .agency at various levels
                     agency_path = extracted / path / ".agency" if path else extracted / ".agency"
                     if not agency_path.exists():
-                        # Search for any .agency directory
                         for item in extracted.rglob(".agency"):
                             agency_path = item
                             break
@@ -118,14 +120,18 @@ class TemplateManager:
                     print("[WARN] Could not find .agency in template archive", flush=True)
                     return False
 
-                # Copy to cache
-                cache_path = self.get_cache_path(subdir)
-                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                # Determine template root (directory containing .agency)
+                template_root = agency_path.parent
+                
+                # Copy entire template directory to cache
+                cache_root = self.get_cache_root(subdir)
+                cache_root.parent.mkdir(parents=True, exist_ok=True)
 
-                if cache_path.exists():
-                    shutil.rmtree(cache_path)
+                if cache_root.exists():
+                    shutil.rmtree(cache_root)
 
-                shutil.copytree(agency_path.parent, cache_path.parent / ".agency")
+                # Copy the entire template root (includes .agency and all project files)
+                shutil.copytree(template_root, cache_root)
 
                 return True
 
@@ -135,9 +141,9 @@ class TemplateManager:
 
     def clear_cache(self, subdir: str = "") -> None:
         """Clear cached template."""
-        cache_path = self.get_cache_path(subdir).parent
-        if cache_path.exists():
-            shutil.rmtree(cache_path)
+        cache_root = self.get_cache_root(subdir)
+        if cache_root.exists():
+            shutil.rmtree(cache_root.parent)
 
     def clear_all_cache(self) -> None:
         """Clear all cached templates."""
@@ -152,6 +158,6 @@ def download_template(
     subdir: str = "basic",
     refresh: bool = False,
 ) -> Path | None:
-    """Download a template and return the path to its .agency directory."""
+    """Download a template and return the path to its root directory."""
     tm = TemplateManager(url, cache_dir)
     return tm.get_template(subdir, refresh)
