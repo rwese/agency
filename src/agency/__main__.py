@@ -6,11 +6,14 @@ A tmux-based multi-agent orchestration tool.
 """
 
 import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
 
 import click
+from rich.console import Console
+from rich.theme import Theme
 
 from agency import __version__
 from agency.audit import EVENT_AGENT, EVENT_CLI, EVENT_SESSION, EVENT_TASK, AuditStore
@@ -221,6 +224,38 @@ def list_templates(repo, refresh):
         click.echo(f"[ERROR] {e}", err=True)
 
 
+# Custom theme for init prompts
+INIT_THEME = Theme(
+    {
+        "prompt": "cyan",
+        "prompt.choice": "bold cyan",
+        "prompt.default": "dim",
+    }
+)
+_console = Console(theme=INIT_THEME)
+
+# Global flag for signal handling
+_init_aborted = False
+_session_created = False
+_session_name = None
+_socket_name = None
+_sm = None
+
+
+def _init_signal_handler(signum, frame):
+    """Handle SIGINT (Ctrl+C) to abort init gracefully."""
+    global _init_aborted, _session_created, _session_name, _sm
+    _init_aborted = True
+    click.echo("\n[ABORTED] Init cancelled by user", err=True)
+    # Cleanup tmux session if created
+    if _session_created and _session_name and _sm:
+        try:
+            _sm.kill_session()
+        except Exception:
+            pass
+    sys.exit(130)
+
+
 @click.command()
 @click.option("--dir", "dir", type=click.Path(), default=".", help="Project directory (default: current)")
 @click.option("--template", help="Template repository URL")
@@ -228,7 +263,8 @@ def list_templates(repo, refresh):
 @click.option("--force", is_flag=True, help="Overwrite existing")
 @click.option("--refresh", is_flag=True, help="Bypass template cache")
 @click.option("--no-context", is_flag=True, help="Skip context file discovery")
-def init_project(dir, template, template_subdir, force, refresh, no_context):
+@click.option("--context-file", "context_files", multiple=True, help="Path to context file (repeatable)")
+def init_project(dir, template, template_subdir, force, refresh, no_context, context_files):
     """Create a new project with session and .agency/ directory.
 
     Creates .agency/ in the project directory. Use --dir to specify,
@@ -236,11 +272,25 @@ def init_project(dir, template, template_subdir, force, refresh, no_context):
 
     Optionally discovers and includes agent configuration files like AGENTS.md and CLAUDE.md.
     """
+    global _init_aborted, _session_created, _session_name, _socket_name, _sm
+
+    # Register signal handler for proper ctrl-c abort
+    signal.signal(signal.SIGINT, _init_signal_handler)
+
     _log_cli_command("init", dir=dir, template=template, force=force)
     work_dir = Path(dir).expanduser().absolute()
 
     if not work_dir.exists():
         work_dir.mkdir(parents=True, exist_ok=True)
+
+    # Process CLI context files (validate early)
+    cli_context_files: list[str] = []
+    for cf in context_files:
+        expanded = resolve_path(cf)
+        if not expanded.exists():
+            click.echo(f"[ERROR] Context file not found: {expanded}", err=True)
+            sys.exit(1)
+        cli_context_files.append(str(expanded))
 
     # Find git root (optional - for session naming)
     git_root = find_git_root(work_dir)
@@ -250,6 +300,9 @@ def init_project(dir, template, template_subdir, force, refresh, no_context):
         agency_dir = work_dir / ".agency"
     else:
         agency_dir = work_dir / ".agency"
+
+    # Copy pi extensions from agency package to project
+    _copy_pi_extensions(agency_dir)
 
     # Use work_dir name for session
     project_name = work_dir.name
@@ -268,7 +321,9 @@ def init_project(dir, template, template_subdir, force, refresh, no_context):
     # Discover context files if not skipped
     additional_context_files: list[str] = []
     if not no_context:
-        additional_context_files = _prompt_context_files(work_dir, project_name)
+        additional_context_files = _prompt_context_files(work_dir, project_name, cli_context_files)
+        if _init_aborted:
+            return  # Signal handler already called sys.exit
 
     # Determine template to use
     # If template is a simple name (e.g., 'fullstack-ts'), use agency-templates repo
@@ -297,6 +352,7 @@ def init_project(dir, template, template_subdir, force, refresh, no_context):
 
     # Create tmux session with socket
     create_project_session(session_name, socket_name, work_dir)
+    _session_created = True
 
     click.echo(f"[INFO] Created project session: {session_name}")
     click.echo(f"[INFO] .agency/ created at: {agency_dir}")
@@ -305,14 +361,16 @@ def init_project(dir, template, template_subdir, force, refresh, no_context):
     click.echo("[INFO] Run 'agency start' to start agents")
 
 
-def _prompt_context_files(work_dir: Path, project_name: str) -> list[str]:
+def _prompt_context_files(work_dir: Path, project_name: str, cli_files: list[str]) -> list[str]:
     """Prompt user to select agent context files to include.
 
-    Discovers available files and asks user which to include.
+    Discovers available files and provides interactive checkbox selection.
+    Also allows custom filepath input.
 
     Args:
         work_dir: Project working directory
         project_name: Project name for discovery lookups
+        cli_files: Files specified via --context-file (already validated)
 
     Returns:
         List of selected file paths
@@ -332,50 +390,122 @@ def _prompt_context_files(work_dir: Path, project_name: str) -> list[str]:
         if path and path.exists():
             available.append((file_type, description, path))
 
-    if not available:
+    if not available and not cli_files:
         click.echo("[INFO] No agent context files discovered")
         return []
 
-    click.echo("\n[?] Discovered agent context files:")
-    click.echo("")
-    for i, (file_type, description, path) in enumerate(available, 1):
-        click.echo(f"  {i}. {file_type}")
-        click.echo(f"     {description}")
-        click.echo(f"     → {path}")
+    # Start with CLI files
+    selected: set[str] = set(cli_files)
+
+    # If we have available files, do interactive selection
+    if available:
+        click.echo("\n[?] Discovered agent context files:")
+        click.echo("(Toggle selection with number keys, Enter to confirm)")
         click.echo("")
 
-    click.echo("Select files to include (comma-separated or 'none'): ", nl=False)
+        # Interactive checkbox selection
+        selected_indices = _interactive_checkbox(available)
+        for idx in selected_indices:
+            selected.add(str(available[idx][2]))
 
-    try:
-        response = input().strip().lower()
-    except (EOFError, KeyboardInterrupt):
+    # Ask about CLAUDE.local.md in project root if not already selected
+    claude_local = work_dir / "CLAUDE.local.md"
+    if claude_local.exists() and str(claude_local) not in selected:
+        click.echo("\n[?] Include CLAUDE.local.md from project root?")
+        click.echo(f"    ({claude_local})")
+        response = _console.input("    [y/N]: ").strip().lower()
+        if response in ("y", "yes"):
+            selected.add(str(claude_local))
+
+    # Prompt for custom filepath
+    custom_files = _prompt_custom_filepath()
+    selected.update(custom_files)
+
+    return list(selected)
+
+
+def _interactive_checkbox(items: list[tuple[str, str, Path]]) -> set[int]:
+    """Interactive checkbox selection using rich.
+
+    Args:
+        items: List of (name, description, path) tuples
+
+    Returns:
+        Set of selected indices
+    """
+    # Handle non-interactive mode
+    if not sys.stdin.isatty():
+        click.echo("[INFO] Non-interactive mode: use --context-file for file paths")
+        return set()
+
+    selected: set[int] = set()
+    done = False
+
+    while not done:
+        # Clear and redraw
         click.echo("")
+        for i, (name, description, path) in enumerate(items, 1):
+            marker = "[x]" if (i - 1) in selected else "[ ]"
+            _console.print(f"  {marker} {i}. {name}")
+            _console.print(f"      {description}")
+            _console.print(f"      [dim]→ {path}[/dim]")
+            click.echo("")
+
+        click.echo("Toggle: [1-" + str(len(items)) + "]  |  Done: [Enter]  |  None: [0]")
+        response = _console.input("Selection: ").strip().lower()
+
+        if response == "":
+            done = True
+        elif response == "0":
+            selected.clear()
+            done = True
+        elif response.isdigit():
+            idx = int(response) - 1
+            if 0 <= idx < len(items):
+                if idx in selected:
+                    selected.remove(idx)
+                else:
+                    selected.add(idx)
+        elif response.startswith("all"):
+            selected = set(range(len(items)))
+
+    return selected
+
+
+def _prompt_custom_filepath() -> list[str]:
+    """Prompt for custom filepath input.
+
+    Returns:
+        List of valid file paths
+    """
+    # Handle non-interactive mode
+    if not sys.stdin.isatty():
         return []
 
-    if response in ("none", "n", ""):
+    click.echo("\n[?] Add custom filepath(s)?")
+    response = _console.input("    Path(s) or [Enter] to skip: ").strip()
+
+    if not response:
         return []
 
     selected: list[str] = []
-    for part in response.replace(" ", "").split(","):
-        if part.isdigit():
-            idx = int(part) - 1
-            if 0 <= idx < len(available):
-                selected.append(str(available[idx][2]))
-        elif part in ("all", "a"):
-            selected = [str(p) for _, _, p in available]
-            break
+    errors: list[str] = []
 
-    # Also check for CLAUDE.local.md in project root
-    claude_local = work_dir / "CLAUDE.local.md"
-    if claude_local.exists() and str(claude_local) not in selected:
-        click.echo(f"\n[?] Include CLAUDE.local.md from project root? ({claude_local})")
-        click.echo("    (y/N): ", nl=False)
-        try:
-            response = input().strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            response = "n"
-        if response in ("y", "yes"):
-            selected.append(str(claude_local))
+    # Accept comma-separated or space-separated paths
+    paths = [p.strip() for p in response.replace(",", " ").split() if p.strip()]
+
+    for path in paths:
+        resolved = resolve_path(path)
+        if resolved.exists():
+            selected.append(str(resolved))
+        else:
+            errors.append(f"  - {resolved}: not found")
+
+    if errors:
+        click.echo("\n[ERROR] The following paths were not found:", err=True)
+        for err in errors:
+            click.echo(err, err=True)
+        sys.exit(1)
 
     return selected
 
@@ -509,6 +639,10 @@ def _create_default_agency_structure(agency_dir: Path, additional_context_files:
     (agency_dir / "var" / "pending").mkdir(exist_ok=True)
     (agency_dir / "run").mkdir(exist_ok=True)
     (agency_dir / "run" / ".scripts").mkdir(exist_ok=True)
+    # Create .gitignore in .scripts to ignore all scripts
+    scripts_gitignore = agency_dir / "run" / ".scripts" / ".gitignore"
+    scripts_gitignore.write_text("*")
+    (agency_dir / "pi" / "extensions").mkdir(parents=True, exist_ok=True)  # pi extensions (copied during init)
 
     config_path = agency_dir / "config.yaml"
     if not config_path.exists():
@@ -549,6 +683,70 @@ auto_approve: false
     readme_path = agency_dir / "README.md"
     if not readme_path.exists():
         readme_path.write_text("# Agency Project\n\nThis project uses Agency for AI agent orchestration.\n")
+
+
+def _copy_pi_extensions(agency_dir: Path) -> None:
+    """Copy pi extensions from agency package to project .agency/pi/extensions/.
+
+    This ensures agency projects are self-contained with their own pi extensions,
+    rather than relying on the global ~/.pi/agent/extensions/ installation.
+
+    Extensions are copied from the agency's extras/pi/extensions/ directory.
+    The source is resolved in this order:
+    1. Current working directory (for development)
+    2. Agency package directory (for installed version)
+
+    Args:
+        agency_dir: Path to the .agency/ directory
+    """
+    import shutil
+
+    # Find agency extras directory
+    # Try current working directory first (development mode)
+    # Then try package directory (installed mode)
+    agency_package_dir = Path(__file__).parent.parent
+
+    possible_sources = [
+        Path.cwd() / "extras" / "pi" / "extensions",  # Development: repo root
+        agency_package_dir / "extras" / "pi" / "extensions",  # Installed: package dir
+    ]
+
+    source_extensions_dir = None
+    for src in possible_sources:
+        if src.exists():
+            source_extensions_dir = src
+            break
+
+    if not source_extensions_dir:
+        print("[WARN] Agency package extras not found, pi extensions not copied")
+        return
+
+    # Destination: .agency/pi/extensions/
+    dest_extensions_dir = agency_dir / "pi" / "extensions"
+    dest_extensions_dir.mkdir(parents=True, exist_ok=True)
+
+    # Extensions to copy (must be self-contained with their own node_modules)
+    extensions_to_copy = ["pi-inject", "pi-status", "no-frills"]
+
+    for ext_name in extensions_to_copy:
+        source_ext = source_extensions_dir / ext_name
+        dest_ext = dest_extensions_dir / ext_name
+
+        if not source_ext.exists():
+            print(f"[WARN] Extension '{ext_name}' not found in agency package")
+            continue
+
+        # Copy extension (excluding .git, .ruff_cache, etc.)
+        if dest_ext.exists():
+            shutil.rmtree(dest_ext)
+
+        # Use copytree with ignore to exclude unnecessary files
+        def ignore_func(src, names):
+            ignore = {".git", ".ruff_cache", "__pycache__", ".pytest_cache"}
+            return ignore.intersection(names)
+
+        shutil.copytree(source_ext, dest_ext, ignore=ignore_func)
+        print(f"[INFO] Copied pi extension: {ext_name}")
 
 
 # === Task Commands ===

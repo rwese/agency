@@ -27,6 +27,7 @@ Thumbs.db
 sessions/
 .agency/audit.db
 .agency/var/
+.agency/run/.scripts/
 .agency/*.log
 .agency/*.pid
 .agency/.*.halted
