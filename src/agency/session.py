@@ -93,10 +93,10 @@ BASE_PERSONALITY = """You are running in an Agency v2.0 tmux session.
 
 ### Session Info
 ```bash
-agency members                       # List session members with status
-agency list                         # List all agency sessions
-agency tmux list                    # List windows in this session
-agency attach                       # Attach to this session
+agency session members              # List session members with status
+agency session list                # List all agency sessions
+agency session attach              # Attach to this session
+agency session windows list        # List windows in this session
 ```
 
 ## Windows in this session
@@ -104,8 +104,8 @@ agency attach                       # Attach to this session
 - **Agents**: `coder`, `developer`, etc.
 
 ## Communication Protocol
-- Check `agency members` to see who's online
-- Use `agency tmux list` to see current windows and their status
+- Check `agency session members` to see who's online
+- Use `agency session windows list` to see current windows and their status
 """
 
 # Manager-specific base additions
@@ -492,7 +492,7 @@ def start_manager_window(
     # Generate and execute launch script
     script_path = _generate_manager_launch_script(session_name, socket_name, manager_name, agency_dir, work_dir)
 
-    # Send command to window
+    # Execute script in window (use bash to run it)
     subprocess.run(
         [
             "tmux",
@@ -501,7 +501,7 @@ def start_manager_window(
             "send-keys",
             "-t",
             f"{session_name}:{window_name}",
-            str(script_path),
+            f"bash {script_path}",
             "Enter",
         ],
         capture_output=True,
@@ -516,65 +516,6 @@ def start_manager_window(
             "select-window",
             "-t",
             f"{session_name}:{window_name}",
-        ],
-        capture_output=True,
-    )
-
-    # Audit log
-    audit = _get_audit_store(agency_dir)
-    if audit:
-        audit.log_agent(
-            action="start",
-            agency_role="manager",
-            details={
-                "session": session_name,
-                "manager_name": manager_name,
-                "work_dir": str(work_dir),
-            },
-        )
-
-    # Apply badge color to window
-    subprocess.run(
-        [
-            "tmux",
-            "-L",
-            socket_name,
-            "set-window-option",
-            "-t",
-            f"{session_name}:{window_name}",
-            "window-status-style",
-            "fg=black,bg=blue,bold",
-        ],
-        capture_output=True,
-    )
-    subprocess.run(
-        [
-            "tmux",
-            "-L",
-            socket_name,
-            "set-window-option",
-            "-t",
-            f"{session_name}:{window_name}",
-            "window-status-current-style",
-            "fg=black,bg=blue,bold",
-        ],
-        capture_output=True,
-    )
-
-    # Generate and execute launch script
-    script_path = _generate_manager_launch_script(session_name, socket_name, manager_name, agency_dir, work_dir)
-
-    # Send command to window
-    subprocess.run(
-        [
-            "tmux",
-            "-L",
-            socket_name,
-            "send-keys",
-            "-t",
-            f"{session_name}:{window_name}",
-            str(script_path),
-            "Enter",
         ],
         capture_output=True,
     )
@@ -626,7 +567,7 @@ def start_agent_window(
     # Generate and execute launch script
     script_path = _generate_agent_launch_script(session_name, socket_name, agent_name, agency_dir, work_dir)
 
-    # Send command to window
+    # Execute script in window (use bash to run it)
     subprocess.run(
         [
             "tmux",
@@ -635,7 +576,7 @@ def start_agent_window(
             "send-keys",
             "-t",
             f"{session_name}:{agent_name}",
-            str(script_path),
+            f"bash {script_path}",
             "Enter",
         ],
         capture_output=True,
