@@ -1,6 +1,6 @@
 # agency-web PRD
 
-**Version:** 1.1  
+**Version:** 1.2  
 **Date:** 2026-04-22  
 **Status:** Draft  
 
@@ -13,7 +13,7 @@ The agency team needs visibility into ongoing work items without relying on exte
 **Key Constraints:**
 - On-premise deployment only (no cloud dependency)
 - Self-contained stack (no external auth providers)
-- Single binary for easy deployment
+- Single binary for easy deployment (containerized)
 - Mobile-first UI
 - Screen reader optimized (WCAG 2.1 AA)
 
@@ -26,7 +26,7 @@ The agency team needs visibility into ongoing work items without relying on exte
 - Creates, updates, and closes epics and tasks
 - Attaches files, adds comments
 - Manages project state
-- Configures personal dashboard widgets
+- Views dashboard with assigned tasks and team progress
 
 ### P2: External Stakeholder
 - Read-only or limited access
@@ -44,8 +44,10 @@ The agency team needs visibility into ongoing work items without relying on exte
 ### P4: Admin
 - Manages teams and user membership
 - Configures webhooks
-- Views usage metrics
-- Manages system settings
+- Manages blocked file types
+- Views usage metrics and logs
+- Manages GitHub App integration
+- Configures GitHub repo sync list
 
 ---
 
@@ -111,6 +113,7 @@ The agency team needs visibility into ongoing work items without relying on exte
   - `content_type` (string, MIME type)
   - `size_bytes` (integer)
   - `storage_path` (string, internal path)
+  - `checksum` (string, SHA256)
   - `task_id` (Task FK)
   - `uploaded_by` (user FK)
   - `uploaded_at` (timestamp)
@@ -161,6 +164,18 @@ The agency team needs visibility into ongoing work items without relying on exte
   - `payload` (JSON, before/after values)
   - `created_at` (timestamp)
 
+### GitHubAppConfig
+- **Purpose:** GitHub App configuration
+- **Fields:**
+  - `id` (UUID)
+  - `app_id` (string)
+  - `app_name` (string)
+  - `installation_id` (string)
+  - `repositories` (string[], configured repo list)
+  - `webhook_secret` (string)
+  - `private_key` (text, encrypted)
+  - `created_at` (timestamp)
+
 ---
 
 ## 4. User Stories
@@ -174,6 +189,8 @@ The agency team needs visibility into ongoing work items without relying on exte
 | AUTH-03 | As an admin, I want to manage user accounts so I can control access | must |
 | AUTH-04 | As a viewer, I want read-only access so I can monitor progress without making changes | should |
 | AUTH-05 | As a system, I want all auth to be self-contained so we don't depend on external providers | must |
+| AUTH-06 | As an admin, I want to invite users via magic link so they can self-register | must |
+| AUTH-07 | As a system, I want the first admin to be created via environment variables on first run | must |
 
 ### Team Management
 
@@ -209,6 +226,8 @@ The agency team needs visibility into ongoing work items without relying on exte
 | TASK-08 | As an automation, I want to create tasks via API so CI/CD can log work | must |
 | TASK-09 | As an automation, I want to update task status via API so build status reflects work | must |
 | TASK-10 | As a team member, I want to add tags to tasks so I can categorize work | must |
+| TASK-11 | As a team member, I want bulk actions so I can update multiple tasks at once | must |
+| TASK-12 | As a team member, I want inline editing so I can quickly update without modals | must |
 
 ### Comments & Collaboration
 
@@ -228,25 +247,30 @@ The agency team needs visibility into ongoing work items without relying on exte
 | FILE-03 | As an automation, I want to attach build logs so failures are documented | must |
 | FILE-04 | As a viewer, I want to view/download attachments so I can access shared files | should |
 | FILE-05 | As an admin, I want to limit attachment size so storage is controlled | must |
+| FILE-06 | As an admin, I want to configure blocked file types so security is maintained | must |
 
 ### Dashboard & Views
 
 | ID | Story | Priority |
 |----|-------|----------|
-| DASH-01 | As a team member, I want a dashboard showing my tasks so I see my workload | must |
-| DASH-02 | As a team member, I want a Kanban board view so I can visualize workflow | should |
-| DASH-03 | As a team member, I want to see epic progress so I can track milestones | must |
-| DASH-04 | As a team member, I want custom dashboard widgets so I can personalize my view | must |
+| DASH-01 | As a team member, I want a dashboard showing my assigned tasks so I see my workload | must |
+| DASH-02 | As a team member, I want a dashboard showing team epic progress so I track milestones | must |
+| DASH-03 | As a team member, I want a dashboard showing recent activity so I stay informed | must |
+| DASH-04 | As a team member, I want a Kanban board view by status so I can visualize workflow | should |
 | DASH-05 | As a team member, I want full-text search so I can find any item quickly | must |
+| DASH-06 | As a team member, I want keyboard shortcuts (J/K navigation, N for new) so I can work efficiently | must |
 
 ### GitHub Integration
 
 | ID | Story | Priority |
 |----|-------|----------|
-| GH-01 | As a team member, I want to reference commits/PRs in task comments so I can link code changes | must |
-| GH-02 | As a team member, I want to auto-create tasks from GitHub issues so work is synchronized | must |
-| GH-03 | As a team member, I want bidirectional sync so changes in GitHub reflect in agency-web and vice versa | must |
-| GH-04 | As an automation, I want to update task status via GitHub PR events so CI/CD drives progress | must |
+| GH-01 | As an admin, I want to configure GitHub App integration so the system can sync with GitHub | must |
+| GH-02 | As an admin, I want to specify which repos to sync so I control scope | must |
+| GH-03 | As a system, I want to auto-create tasks from GitHub issues so work is synchronized | must |
+| GH-04 | As a system, I want to update task status when GitHub issue is closed so status reflects reality | must |
+| GH-05 | As a system, I want to link PRs to tasks when PRs reference tasks so code is connected to work | must |
+| GH-06 | As a system, I want to move tasks to review/done when PR is merged so progress is tracked | must |
+| GH-07 | As a system, I want to post comments on GitHub issues when task changes so stakeholders are notified | must |
 
 ### Notifications & Webhooks
 
@@ -255,16 +279,8 @@ The agency team needs visibility into ongoing work items without relying on exte
 | WH-01 | As an admin, I want to configure webhooks so external systems receive updates | must |
 | WH-02 | As an external system, I want to receive webhook events for all CRUD operations so I can react to changes | must |
 | WH-03 | As an external system, I want webhook payloads signed so I can verify authenticity | must |
-| WH-04 | As a system, I want to post Slack notifications via webhook so team stays informed | should |
-
-### Slack Notifications (via webhook to external handler)
-
-| ID | Story | Priority |
-|----|-------|----------|
-| SLACK-01 | As a team member, I want notifications when tasks are created so I'm aware of new work | should |
-| SLACK-02 | As a team member, I want notifications when task status changes so I track progress | should |
-| SLACK-03 | As a team member, I want notifications when assigned a task so I don't miss work | should |
-| SLACK-04 | As a team member, I want notifications when comments are added so I follow discussions | should |
+| WH-04 | As an admin, I want to configure one global Slack channel for notifications so the team is informed | should |
+| WH-05 | As a system, I want to trigger Slack notifications for task created, status changes, assignments, and comments | should |
 
 ### Admin & Observability
 
@@ -274,6 +290,12 @@ The agency team needs visibility into ongoing work items without relying on exte
 | ADMIN-02 | As an admin, I want activity logs so I can audit changes | must |
 | ADMIN-03 | As an admin, I want a health endpoint so load balancers can check status | must |
 | ADMIN-04 | As an admin, I want to manage webhooks so integrations work | must |
+| ADMIN-05 | As an admin, I want to view user counts (active/inactive) so I understand usage | must |
+| ADMIN-06 | As an admin, I want to view task stats by status and priority so I understand workload | must |
+| ADMIN-07 | As an admin, I want to view storage usage so I monitor capacity | must |
+| ADMIN-08 | As an admin, I want to view API usage and rate limit metrics so I monitor system health | must |
+| ADMIN-09 | As an admin, I want configurable activity log retention so I manage storage | must |
+| ADMIN-10 | As an admin, I want to export full database backup so I can restore if needed | must |
 
 ---
 
@@ -285,16 +307,18 @@ POST   /api/auth/login          # User login
 POST   /api/auth/logout         # User logout
 GET    /api/auth/me             # Current user info
 POST   /api/auth/apikey         # Generate API key (admin)
+POST   /api/auth/invite         # Send magic link invite (admin)
+POST   /api/auth/register       # Register via magic link
 ```
 
 ### Teams
 ```
 GET    /api/teams               # List teams
 POST   /api/teams               # Create team (admin)
-GET    /api/teams/{id}           # Get team
-PUT    /api/teams/{id}           # Update team (admin)
-DELETE /api/teams/{id}           # Delete team (admin)
-POST   /api/teams/{id}/members   # Add member
+GET    /api/teams/{id}          # Get team
+PUT    /api/teams/{id}         # Update team (admin)
+DELETE /api/teams/{id}         # Delete team (admin)
+POST   /api/teams/{id}/members  # Add member
 DELETE /api/teams/{id}/members/{user_id}  # Remove member
 ```
 
@@ -302,9 +326,9 @@ DELETE /api/teams/{id}/members/{user_id}  # Remove member
 ```
 GET    /api/users               # List users (admin)
 POST   /api/users               # Create user (admin)
-GET    /api/users/{id}          # Get user
-PUT    /api/users/{id}          # Update user (admin)
-DELETE /api/users/{id}          # Delete user (admin)
+GET    /api/users/{id}         # Get user
+PUT    /api/users/{id}         # Update user (admin)
+DELETE /api/users/{id}         # Delete user (admin)
 ```
 
 ### Epics
@@ -324,15 +348,20 @@ POST   /api/tasks               # Create task
 GET    /api/tasks/{id}          # Get task with comments/attachments
 PUT    /api/tasks/{id}          # Update task
 DELETE /api/tasks/{id}          # Delete task
+POST   /api/tasks/bulk-update   # Bulk update status/assignee
 GET    /api/tasks/search?q=     # Full-text search
 ```
 
 ### GitHub
 ```
 GET    /api/tasks/{id}/github-refs    # List GitHub refs
-POST   /api/tasks/{id}/github-refs    # Add GitHub ref
-DELETE /api/github-refs/{id}          # Remove GitHub ref
-POST   /api/github/sync-issue         # Sync GitHub issue (webhook receiver)
+POST   /api/tasks/{id}/github-refs   # Add GitHub ref
+DELETE /api/github-refs/{id}         # Remove GitHub ref
+POST   /api/github/sync               # Sync webhook receiver
+GET    /api/github/config             # Get GitHub App config (admin)
+PUT    /api/github/config             # Update GitHub App config (admin)
+POST   /api/github/repos              # Add repo to sync list (admin)
+DELETE /api/github/repos/{name}      # Remove repo from sync (admin)
 ```
 
 ### Comments
@@ -363,9 +392,17 @@ POST   /api/webhooks/{id}/test    # Send test event
 
 ### Admin
 ```
-GET    /api/admin/metrics          # Usage metrics
-GET    /api/admin/activity         # Activity logs
-GET    /api/health                 # Health check
+GET    /api/admin/metrics         # Usage metrics
+GET    /api/admin/activity        # Activity logs
+GET    /api/admin/activity/export  # Export activity logs
+PUT    /api/admin/activity/retention  # Set retention period
+GET    /api/admin/storage         # Storage usage stats
+GET    /api/admin/settings        # System settings
+PUT    /api/admin/settings        # Update settings
+GET    /api/admin/blocked-types   # Get blocked file types
+PUT    /api/admin/blocked-types   # Update blocked file types
+POST   /api/admin/backup          # Trigger full backup
+GET    /api/health                # Health check
 ```
 
 ---
@@ -398,23 +435,59 @@ GET    /api/health                 # Health check
 }
 ```
 
+### Slack Notification Format (via webhook)
+```
+[#channel] Task "Implement login" was created by alice
+Epic: User Authentication | Status: Open | Priority: High
+→ View in agency-web
+```
+
 ---
 
 ## 7. GitHub Integration
 
+### GitHub App Setup
+1. Admin installs GitHub App on organization
+2. Admin configures app credentials in agency-web
+3. Admin specifies which repositories to sync
+4. Agency-web receives webhook events from GitHub
+
 ### Sync Behavior
-1. **Import Issues**: GitHub webhook → `POST /api/github/sync-issue` → Create/update task with `external_id`
-2. **Reference Commits**: Parse commit messages with `T-{id}` pattern → Link to task via `GitHubRef`
-3. **Bidirectional**:
-   - agency-web status change → GitHub API call → Update linked issue
-   - GitHub issue close → agency-web task status → Done
+
+**Inbound (GitHub → agency-web):**
+| GitHub Event | agency-web Action |
+|--------------|------------------|
+| Issue opened | Create task with `external_id` |
+| Issue closed | Set linked task to `done` |
+| PR opened | Link PR to task (via `T-{id}` in title/body) |
+| PR merged | Move linked task to `review` or `done` |
+| Commit referenced | Create `GitHubRef` for commit |
+
+**Outbound (agency-web → GitHub):**
+| agency-web Action | GitHub Action |
+|-------------------|---------------|
+| Task created | Post comment on linked issue |
+| Task status changed | Post comment on linked issue |
+| Task assigned | Post comment on linked issue |
+| Comment added | Post comment on linked issue |
 
 ### Reference Format
 ```
 # In commit message or PR description:
-T-123: Implement login
-Closes T-456
+Closes owner/repo#123
+Fixes T-456
 Related to T-789
+```
+
+### Configuration
+```yaml
+github:
+  app_id: "123456"
+  installation_id: "987654"
+  repositories:
+    - "org/repo1"
+    - "org/repo2"
+  webhook_secret: "..."
 ```
 
 ---
@@ -423,10 +496,9 @@ Related to T-789
 
 ### Requirements
 - Store files on local filesystem (no S3/cloud dependency)
-- Support images (PNG, JPG, GIF, WebP)
-- Support documents (PDF, MD, TXT)
-- Support build artifacts (LOG, JSON, ZIP, TAR.GZ)
+- Support all common file types
 - Maximum file size: 50MB (configurable)
+- Configurable blocked file types (e.g., executables)
 
 ### Storage Structure
 ```
@@ -442,25 +514,108 @@ Related to T-789
 - MIME type detected/stored
 - SHA256 checksum for integrity
 
+### Blocked Types (Default)
+```
+.exe, .dmg, .sh, .bat, .cmd, .ps1, .vbs, .scr
+```
+
 ---
 
-## 9. Non-Functional Requirements
+## 9. Branding & Theme
+
+### CSS Variables
+Full theme customization via CSS variables:
+
+```css
+:root {
+  /* Brand colors */
+  --color-primary: #3b82f6;
+  --color-primary-hover: #2563eb;
+  --color-secondary: #64748b;
+  
+  /* Background */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  
+  /* Text */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  
+  /* Status colors */
+  --status-open: #64748b;
+  --status-progress: #3b82f6;
+  --status-review: #f59e0b;
+  --status-blocked: #ef4444;
+  --status-done: #22c55e;
+  
+  /* Logo */
+  --logo-url: url('/static/logo.png');
+  --logo-height: 40px;
+}
+```
+
+### Logo Requirements
+- Default: SVG logo placeholder
+- Configurable via CSS variable
+- Support for custom favicon
+
+---
+
+## 10. UI/UX
+
+### Responsive Breakpoints
+| Breakpoint | Layout |
+|------------|--------|
+| < 640px | Mobile: Bottom nav, full-width content |
+| 640-1024px | Tablet: Collapsible sidebar |
+| > 1024px | Desktop: Sidebar + Content |
+
+### Keyboard Shortcuts
+| Key | Action |
+|-----|--------|
+| `n` | New task/epic (context-aware) |
+| `j` | Next item |
+| `k` | Previous item |
+| `Enter` | Open selected item |
+| `e` | Edit selected item |
+| `Escape` | Cancel/close |
+| `/` | Focus search |
+| `?` | Show keyboard shortcuts |
+
+### Markdown Support
+Full markdown in descriptions and comments:
+- Bold, italic, strikethrough
+- Headers (h1-h4)
+- Lists (ordered, unordered, task lists)
+- Code blocks with syntax highlighting
+- Links and images
+- Tables
+- Blockquotes
+
+---
+
+## 11. Non-Functional Requirements
 
 ### Scale
 - ≤10 concurrent users
 - ≤1000 total issues (epics + tasks)
 - ≤10,000 attachments (estimated)
+- Single instance per deployment
 
 ### Performance
 - Page load < 2s for typical views
 - API response < 500ms for CRUD operations
 - File upload < 30s for 50MB
 - Full-text search < 1s
+- Real-time updates via polling or WebSocket
 
 ### Security
 - Password hashing: bcrypt/argon2
-- Session tokens: JWT with expiry
+- Session/auth: Implementation-defined (JWT or sessions)
 - API key auth: Bearer token
+- Rate limits: 100 req/min for API keys
 - Webhook signatures: HMAC-SHA256
 - Input validation and sanitization
 - No external auth dependencies
@@ -472,49 +627,69 @@ Related to T-789
 - Mobile-first responsive design
 - High contrast mode support
 
+### Logging
+- JSON structured logging
+- Request/response logging
+- Error logging with stack traces
+- Configurable log levels
+
 ### Deployment
-- Single binary distribution (Go)
-- Docker containerization ready
-- SQLite database (file-based)
-- Config via environment variables or config file
-- Health endpoint for container orchestration
+
+**Environment Variables:**
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `AGENCY_DB_PATH` | SQLite database path | Yes |
+| `AGENCY_PORT` | Server port | No (default: 8080) |
+| `AGENCY_SECRET_KEY` | JWT signing key / encryption | Yes |
+| `AGENCY_SMTP_HOST` | SMTP server for email | No |
+| `AGENCY_SMTP_PORT` | SMTP port | No |
+| `AGENCY_SMTP_USER` | SMTP username | No |
+| `AGENCY_SMTP_PASSWORD` | SMTP password | No |
+| `AGENCY_ADMIN_EMAIL` | First admin email | On first run |
+| `AGENCY_ADMIN_PASSWORD` | First admin password | On first run (auto-generate if not set) |
+| `AGENCY_AUTO_UPGRADE` | Auto-migrate database | No (default: false) |
+
+**First Run Behavior:**
+1. Check if admin exists
+2. If not, use `AGENCY_ADMIN_EMAIL` + `AGENCY_ADMIN_PASSWORD`
+3. If password not set, auto-generate and log to container stdout
+4. If `AGENCY_AUTO_UPGRADE=false` and migrations needed, throw error
+
+### Database
+- SQLite with auto-migrations
+- Migration required: fail fast unless `AGENCY_AUTO_UPGRADE=true`
+
+### Docker
+- Image published to GHCR (GitHub Container Registry)
+- Single container deployment
+- Health check endpoint for orchestration
 
 ### Data
-- Indefinite retention
-- No automatic deletion
-- Activity logs retained indefinitely
+- Configurable activity log retention
+- Admin can export full database backup
+- Indefinite data retention by default
 
 ---
 
-## 10. Out of Scope (v1)
+## 12. Out of Scope (v1)
 
 - Sub-tasks within tasks
 - Time tracking
-- Email notifications (relay via webhooks to external handler)
 - Custom fields (beyond tags)
-- Multiple workspaces (single team scope per deployment)
+- Multiple isolated workspaces
 - Native mobile app
+- SSO/OAuth integration
+- Built-in email notifications (relay via webhooks)
 
 ---
 
-## 11. Future Considerations
+## 13. Future Considerations
 
 - SSO/OAuth integration
-- Export/import data
-- Markdown rendering in descriptions/comments
-- Bulk operations
-- Keyboard shortcuts
+- Multi-instance support
+- Mobile native app
+- Time tracking
+- Custom fields
 - Dark mode
-- Drag-drop task ordering
-
----
-
-## 12. Open Questions
-
-| # | Question | Status |
-|---|----------|--------|
-| 1 | How many teams expected? | Open |
-| 2 | GitHub webhook secret management? | Open |
-| 3 | Slack channel per team? | Open |
-| 4 | Default attachment size limit? | 50MB |
-| 5 | Session timeout duration? | Open |
+- Drag-drop task ordering within epic
+- Keyboard shortcut customization
