@@ -829,6 +829,17 @@ def _generate_agent_launch_script(
     # Build command with heartbeat in background
     # Use unique socket path per member
     injector_socket = f"{agency_dir}/injector-{agent_name}.sock"
+    
+    # Get poll and ping intervals from manager config
+    poll_interval = 30
+    ping_interval = 120
+    manager_config_path = agency_dir / "manager.yaml"
+    if manager_config_path.exists():
+        import yaml
+        config = yaml.safe_load(manager_config_path.read_text())
+        poll_interval = config.get("poll_interval", 30)
+        ping_interval = config.get("ping_interval", 120)
+    
     cmd = (
         f'cd "{work_dir}" && '
         f"rm -f \"{injector_socket}\" && "
@@ -838,6 +849,8 @@ def _generate_agent_launch_script(
         f"AGENCY_DIR=\"{agency_dir}\" "
         f"AGENCY_AGENT={agent_name} "
         f"AGENCY_SOCKET={socket_name} "
+        f"AGENCY_POLL_INTERVAL={poll_interval} "
+        f"AGENCY_PING_INTERVAL={ping_interval} "
         f"PI_INJECTOR_SOCKET=\"{injector_socket}\" "
         f"python3 {heartbeat_path} > /dev/null 2>&1 & "
         # Give heartbeat a moment to start

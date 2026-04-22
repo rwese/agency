@@ -320,42 +320,55 @@ def manager_heartbeat(
             time.sleep(poll_interval)
 
 
-def agent_heartbeat(agency_dir: Path, socket_name: str, agent_name: str, poll_interval: int):
+def agent_heartbeat(agency_dir: Path, socket_name: str, agent_name: str, poll_interval: int = 30, ping_interval: int = 120):
     """Heartbeat loop for agent.
 
-    Only ONE notification at a time. Waits until agent marks task as in_progress
-    before sending notification for next task.
+    Notifies agents about new tasks and periodically pings idle agents
+    to keep them working.
+
+    Args:
+        agency_dir: Path to .agency/ directory
+        socket_name: Tmux socket name
+        agent_name: Name of the agent
+        poll_interval: Seconds between checks
+        ping_interval: Seconds between idle pings (default: 2 minutes)
     """
     window_ref = f"{socket_name}:{agent_name}"
 
     print(f"[HEARTBEAT] Starting heartbeat for agent '{agent_name}'")
     print(f"[HEARTBEAT] Agency dir: {agency_dir}")
-    print(f"[HEARTBEAT] Poll interval: {poll_interval}s")
+    print(f"[HEARTBEAT] Poll interval: {poll_interval}s, ping interval: {ping_interval}s")
 
-    # Track the task we notified about (and are waiting to be picked up)
-    pending_notification_task_id: str | None = None
+    last_ping_time = 0  # Track when we last sent a ping
 
     while True:
         try:
             tasks = get_agent_tasks(agency_dir, agent_name)
             pending_tasks = [t for t in tasks if t.get("status") == "pending"]
             in_progress_tasks = [t for t in tasks if t.get("status") == "in_progress"]
+            current_time = time.time()
 
-            # If agent picked up the pending task, clear and wait for next
+            # If agent has task in progress, check if it needs attention
             if in_progress_tasks:
-                if pending_notification_task_id:
-                    print(f"[HEARTBEAT] Agent picked up: {pending_notification_task_id}")
-                pending_notification_task_id = None
+                task = in_progress_tasks[0]
+                task_id = task.get("task_id")
+                # Ping every ping_interval to keep agent moving
+                if current_time - last_ping_time >= ping_interval:
+                    msg = f"💡 Still working on {task_id}? Update status or complete the task."
+                    if send_notification(window_ref, msg):
+                        print(f"[HEARTBEAT] Pinged agent about in_progress task: {task_id}")
+                        last_ping_time = current_time
 
-            # If we have a pending task and agent is free, notify
-            elif pending_tasks and not pending_notification_task_id:
+            # If we have pending tasks, notify agent
+            elif pending_tasks:
                 next_task = pending_tasks[0]
                 task_id = next_task.get("task_id")
+                desc = next_task.get("description", "")[:50]
 
-                msg = f"📌 New task: {task_id} - run 'agency tasks show {task_id}' to view"
+                msg = f"📌 Task ready: {task_id} - {desc}... Run 'agency tasks show {task_id}' to start"
                 if send_notification(window_ref, msg):
                     print(f"[HEARTBEAT] Notified agent about: {task_id}")
-                    pending_notification_task_id = task_id
+                    last_ping_time = current_time
 
                     # Audit log
                     audit = _get_audit_store(agency_dir)
@@ -368,6 +381,13 @@ def agent_heartbeat(agency_dir: Path, socket_name: str, agent_name: str, poll_in
                                 "task_id": task_id,
                             },
                         )
+
+            # Periodic ping even with no tasks (keep agent engaged)
+            elif current_time - last_ping_time >= ping_interval * 2:
+                msg = "🏃 No tasks assigned. Check 'agency tasks list' or wait for new assignments."
+                if send_notification(window_ref, msg):
+                    print(f"[HEARTBEAT] Pinged idle agent")
+                    last_ping_time = current_time
 
             time.sleep(poll_interval)
 
@@ -401,7 +421,8 @@ def run_heartbeat():
         if not agent_name:
             print("[HEARTBEAT] Error: AGENCY_AGENT must be set when role is AGENT")
             sys.exit(1)
-        agent_heartbeat(agency_dir, socket_name, agent_name, poll_interval)
+        ping_interval = int(os.environ.get("AGENCY_PING_INTERVAL", "120"))
+        agent_heartbeat(agency_dir, socket_name, agent_name, poll_interval, ping_interval)
     else:
         print(f"[HEARTBEAT] Error: Unknown role '{role}'. Must be MANAGER or AGENT")
         sys.exit(1)
