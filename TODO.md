@@ -86,11 +86,18 @@ Refactor Agency to use tasks as the canonical source of truth, removing session 
 
 ### Phase 8: Cleanup
 
-- [ ] 8.1: Remove session "running" state tracking
-- [ ] 8.2: Remove window state tracking
-- [ ] 8.3: Remove `.halted` marker file logic
-- [ ] 8.4: Update documentation
-- [ ] 8.5: Update CHANGELOG
+- [x] 8.1: Update documentation
+- [x] 8.2: Update CHANGELOG
+- [ ] 8.3: (Optional) Remove deprecated halt/resume logic
+
+### Deferred
+
+The following are optional optimizations not critical for MVP:
+- Remove session "running" state tracking (tmux already knows)
+- Remove window state tracking (use task state instead)
+- Remove `.halted` marker file logic
+
+These can be removed in a future cleanup pass.
 
 ---
 
