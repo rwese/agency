@@ -29,7 +29,9 @@ def _validate_with_schema(data: dict, schema_name: str, agency_dir: Path | None 
         if schema_path.exists():
             schema = json.loads(schema_path.read_text())
             validator = Draft7Validator(schema)
-            for error in validator.iter_errors(data):
+            # Remove $schema key before validation (it's for IDEs, not schema validation)
+            data_to_validate = {k: v for k, v in data.items() if k != "$schema"}
+            for error in validator.iter_errors(data_to_validate):
                 path = ".".join(str(p) for p in error.path) if error.path else "root"
                 errors.append(f"{path}: {error.message}")
 
