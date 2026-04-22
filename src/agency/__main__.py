@@ -469,7 +469,7 @@ def _copy_template_to_agency(template_path: Path, agency_dir: Path) -> None:
                     fixed_content = _fix_yaml_multiline_blocks(content)
                     try:
                         # Verify it parses
-                        data = yaml.safe_load(fixed_content)
+                        yaml.safe_load(fixed_content)  # Verify it parses
                         dest.write_text(fixed_content)
                     except Exception:
                         # Still broken - use raw copy

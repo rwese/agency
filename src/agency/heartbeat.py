@@ -477,10 +477,7 @@ def agent_heartbeat(
             priority_order = {"high": 0, "normal": 1, "low": 2}
             pending_tasks = sorted(
                 [t for t in tasks if t.get("status") == "pending"],
-                key=lambda t: (
-                    priority_order.get(t.get("priority", "normal"), 1),
-                    t.get("created_at", "")
-                )
+                key=lambda t: (priority_order.get(t.get("priority", "normal"), 1), t.get("created_at", "")),
             )
             in_progress_tasks = [t for t in tasks if t.get("status") == "in_progress"]
             current_time = time.time()
@@ -507,10 +504,7 @@ def agent_heartbeat(
                 task_id = next_task.get("task_id")
 
                 # Only notify if new task or been idle since last notify
-                should_notify = (
-                    task_id != last_notified_task_id or
-                    current_time - last_ping_time >= ping_interval
-                )
+                should_notify = task_id != last_notified_task_id or current_time - last_ping_time >= ping_interval
 
                 if should_notify:
                     desc = next_task.get("description", "")[:50]
