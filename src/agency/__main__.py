@@ -9,8 +9,7 @@ import os
 import signal
 import subprocess
 import sys
-import termios
-import tty
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import click
@@ -246,6 +245,31 @@ def _init_signal_handler(signum, frame):
     sys.exit(130)
 
 
+@dataclass
+class AgentEntry:
+    """An agent entry for init."""
+
+    name: str
+    personality: str = ""
+
+
+@dataclass
+class InitConfig:
+    """Configuration for project initialization."""
+
+    project_name: str
+    shell: str = "bash"
+    work_dir: Path | None = None
+    agents: list[AgentEntry] = field(default_factory=list)
+    manager_name: str = "coordinator"
+    manager_personality: str = ""
+    context_files: list[str] = field(default_factory=list)
+    template_name: str | None = None
+    template_url: str | None = None
+    template_subdir: str | None = None
+    force: bool = False
+
+
 @click.command()
 @click.option("--dir", "dir", type=click.Path(), default=".", help="Project directory (default: current)")
 @click.option("--force", is_flag=True, help="Overwrite existing session")
@@ -257,10 +281,8 @@ def _init_signal_handler(signum, frame):
 def init_project(dir, force, non_interactive, refresh, template_name, template_subdir, context_files):
     """Create a new project with session and .agency/ directory.
 
-    Runs an interactive wizard. Use --yes for non-interactive mode with defaults.
+    Uses sensible defaults. Use --yes for non-interactive mode.
     """
-    from agency.wizard import WizardState, run_wizard
-
     global _init_aborted, _session_created, _session_name, _socket_name, _sm
 
     # Register signal handler for proper ctrl-c abort
@@ -282,36 +304,48 @@ def init_project(dir, force, non_interactive, refresh, template_name, template_s
             sys.exit(1)
         cli_context_files.append(str(expanded))
 
-    # Build initial wizard state from CLI flags
-    state = WizardState(
+    # Build init config with defaults
+    config = InitConfig(
         work_dir=work_dir,
         project_name=work_dir.name,
         force=force,
-        non_interactive=non_interactive,
         context_files=cli_context_files,
         template_name=template_name,
         template_url="https://github.com/rwese/agency-templates" if template_name else None,
+        template_subdir=template_subdir,
+        agents=[AgentEntry(name="coder")],
     )
 
-    # Store template subdir for later resolution
-    state._template_subdir = template_subdir
+    # In interactive mode, offer context file discovery
+    if not non_interactive and sys.stdin.isatty():
+        discovered = discover_agent_files(config.project_name)
+        available = []
+        for name, path in discovered.items():
+            if path and path.exists() and str(path) not in cli_context_files:
+                available.append((name, path))
 
-    # Run wizard to collect all settings
-    state = run_wizard(state)
+        if available:
+            click.echo("\n[?] Discovered agent context files:")
+            for name, path in available:
+                click.echo(f"  - {name}: {path}")
+            response = click.prompt("    Include these files? [y/N]", default="n", type=str, show_default=False).strip().lower()
+            if response in ("y", "yes"):
+                for name, path in available:
+                    if str(path) not in config.context_files:
+                        config.context_files.append(str(path))
 
-    # Create the project based on wizard state
-    _create_project(state, refresh=refresh)
+    # Create the project
+    _create_project(config, refresh=refresh)
 
 
-def _create_project(state, refresh: bool = False) -> None:
-    """Create the project based on wizard state.
+def _create_project(config: InitConfig, refresh: bool = False) -> None:
+    """Create the project based on init config.
 
-    This is called after the wizard completes successfully.
     Creates .agency/ directory, configs, and tmux session.
     """
     global _session_created, _session_name, _socket_name, _sm
 
-    work_dir = state.work_dir
+    work_dir = config.work_dir
     if not work_dir:
         work_dir = Path.cwd()
 
@@ -322,12 +356,12 @@ def _create_project(state, refresh: bool = False) -> None:
     _copy_pi_extensions(agency_dir)
 
     # Check/create tmux session
-    session_name = f"agency-{state.project_name}"
+    session_name = f"agency-{config.project_name}"
     socket_name = session_name
     sm = SessionManager(session_name, socket_name=socket_name)
 
     if sm.session_exists():
-        if state.force:
+        if config.force:
             click.echo("[WARN] Killing existing session...")
             sm.kill_session()
         else:
@@ -337,23 +371,22 @@ def _create_project(state, refresh: bool = False) -> None:
 
     # Handle template or default structure
     click.echo("[2/4] Creating configuration...")
-    if state.template_name:
+    if config.template_name:
         # Resolve template
         tm = TemplateManager(
-            state.template_url or "https://github.com/rwese/agency-templates",
+            config.template_url or "https://github.com/rwese/agency-templates",
             cache_dir=Path.home() / ".cache" / "agency" / "templates",
         )
-        # Handle template_subdir (from CLI or wizard)
-        template_subdir = getattr(state, "_template_subdir", None) or state.template_subdir
-        template_path = tm.get_template(subdir=template_subdir or state.template_name, refresh=refresh)
+        template_subdir = config.template_subdir or config.template_name
+        template_path = tm.get_template(subdir=template_subdir, refresh=refresh)
         if template_path:
             click.echo(f"[INFO] Using template: {template_path}")
             _copy_template_to_agency(template_path, agency_dir)
         else:
             click.echo("[WARN] Template not found, using default structure")
-            _create_agency_structure_from_state(agency_dir, state)
+            _create_agency_structure_from_config(agency_dir, config)
     else:
-        _create_agency_structure_from_state(agency_dir, state)
+        _create_agency_structure_from_config(agency_dir, config)
 
     # Create tmux session
     click.echo("[3/4] Creating tmux session...")
@@ -367,19 +400,19 @@ def _create_project(state, refresh: bool = False) -> None:
     click.echo("[4/4] Done!")
     click.echo("")
     click.echo(f"  Session:     {session_name}")
-    click.echo(f"  Project:     {state.project_name}")
+    click.echo(f"  Project:     {config.project_name}")
     click.echo(f"  Directory:   {agency_dir}")
-    click.echo(f"  Agents:      {len(state.agents)}")
+    click.echo(f"  Agents:      {len(config.agents)}")
     click.echo("")
     click.echo("Next steps:")
     click.echo("  agency session start   # Start all agents")
     click.echo("  agency session attach  # Attach to session")
 
 
-def _create_agency_structure_from_state(agency_dir: Path, state) -> None:
-    """Create .agency/ directory structure from wizard state.
+def _create_agency_structure_from_config(agency_dir: Path, config: InitConfig) -> None:
+    """Create .agency/ directory structure from init config.
 
-    Creates config.yaml, agents.yaml, manager.yaml based on wizard settings.
+    Creates config.yaml, agents.yaml, manager.yaml based on init settings.
     """
     from agency.config import DEFAULT_PARALLEL_LIMIT
 
@@ -397,21 +430,21 @@ def _create_agency_structure_from_state(agency_dir: Path, state) -> None:
 
     # config.yaml
     context_section = ""
-    if state.context_files:
-        files_yaml = "\n".join(f"  - {f}" for f in state.context_files)
+    if config.context_files:
+        files_yaml = "\n".join(f"  - {f}" for f in config.context_files)
         context_section = f"\nadditional_context_files:\n{files_yaml}"
 
     config_content = f"""$schema: https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/config.json
-project: {state.project_name}
-shell: {state.shell}
+project: {config.project_name}
+shell: {config.shell}
 parallel_limit: {DEFAULT_PARALLEL_LIMIT}{context_section}
 """
     (agency_dir / "config.yaml").write_text(config_content)
 
     # manager.yaml
-    personality = state.manager_personality or "You are the project coordinator."
+    personality = config.manager_personality or "You are the project coordinator."
     manager_content = f"""$schema: https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/manager.json
-name: {state.manager_name}
+name: {config.manager_name}
 personality: |
   {personality}
 
@@ -422,7 +455,7 @@ auto_approve: false
 
     # agents.yaml and individual agent configs
     agents_list = []
-    for agent in state.agents:
+    for agent in config.agents:
         agents_list.append({"name": agent.name, "config": f"agents/{agent.name}.yaml"})
 
         agent_config = f"""$schema: https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/agent.json
@@ -446,185 +479,6 @@ agents:
 
     # README.md
     (agency_dir / "README.md").write_text("# Agency Project\n\nThis project uses Agency for AI agent orchestration.\n")
-
-
-def _prompt_context_files(work_dir: Path, project_name: str, cli_files: list[str]) -> list[str]:
-    """Prompt user to select agent context files to include.
-
-    Discovers available files and provides interactive checkbox selection.
-    Also allows custom filepath input.
-
-    Args:
-        work_dir: Project working directory
-        project_name: Project name for discovery lookups
-        cli_files: Files specified via --context-file (already validated)
-
-    Returns:
-        List of selected file paths
-    """
-    discovered = discover_agent_files(project_name)
-
-    # Build list of available files with descriptions
-    available: list[tuple[str, str, Path]] = []
-    file_types = [
-        ("AGENTS.md", "Universal agent config (Claude, Cursor, Copilot)"),
-        ("CLAUDE.md", "Claude Code memory file"),
-        ("CLAUDE.local.md", "Personal project preferences (git-ignored)"),
-    ]
-
-    for file_type, description in file_types:
-        path = discovered.get(file_type)
-        if path and path.exists():
-            available.append((file_type, description, path))
-
-    if not available and not cli_files:
-        click.echo("[INFO] No agent context files discovered")
-        return []
-
-    # Start with CLI files
-    selected: set[str] = set(cli_files)
-
-    # If we have available files, do interactive selection
-    if available:
-        click.echo("\n[?] Discovered agent context files:")
-        click.echo("(Toggle selection with number keys, Enter to confirm)")
-        click.echo("")
-
-        # Interactive checkbox selection
-        selected_indices = _interactive_checkbox(available)
-        for idx in selected_indices:
-            selected.add(str(available[idx][2]))
-
-    # Ask about CLAUDE.local.md in project root if not already selected
-    claude_local = work_dir / "CLAUDE.local.md"
-    if claude_local.exists() and str(claude_local) not in selected:
-        click.echo("\n[?] Include CLAUDE.local.md from project root?")
-        click.echo(f"    ({claude_local})")
-        response = click.prompt("    [y/N]", default="n", type=str, show_default=False).strip().lower()
-        if response in ("y", "yes"):
-            selected.add(str(claude_local))
-
-    # Prompt for custom filepath
-    custom_files = _prompt_custom_filepath()
-    selected.update(custom_files)
-
-    return list(selected)
-
-
-def _getch() -> str:
-    """Get a single character from stdin without requiring Enter."""
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    try:
-        tty.setraw(fd)
-        ch = sys.stdin.read(1)
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-    return ch
-
-
-def _interactive_checkbox(items: list[tuple[str, str, Path]]) -> set[int]:
-    """Interactive checkbox selection with immediate key handling.
-
-    Args:
-        items: List of (name, description, path) tuples
-
-    Returns:
-        Set of selected indices
-    """
-    # Handle non-interactive mode
-    if not sys.stdin.isatty():
-        click.echo("[INFO] Non-interactive mode: use --context-file for file paths")
-        return set()
-
-    selected: set[int] = set()
-
-    def redraw():
-        """Clear screen and redraw the menu."""
-        click.echo("\033[2J\033[H", nl=False)  # Clear screen
-        click.echo("\n[?] Discovered agent context files:")
-        click.echo("(Toggle with 1-9, a=all, Enter=done, 0=none)\n")
-        for i, (name, description, path) in enumerate(items, 1):
-            marker = "[x]" if (i - 1) in selected else "[ ]"
-            click.echo(f"  {marker} {i}. {name}")
-            click.echo(f"      {description}")
-            click.echo(f"      → {path}")
-            click.echo("")
-        if selected:
-            click.echo(f"Selected: {', '.join(items[i - 1][0] for i in selected)}")
-        click.echo("")
-
-    redraw()
-
-    while True:
-        click.echo("Choice: ", nl=False)
-        ch = _getch()
-        click.echo(ch)  # Echo the character
-
-        if ch == "\r" or ch == "\n":  # Enter - confirm
-            break
-        elif ch == "0":  # None - clear selection
-            selected.clear()
-            redraw()
-        elif ch.isdigit() and ch != "0":  # 1-9 - toggle
-            idx = int(ch) - 1
-            if 0 <= idx < len(items):
-                if idx in selected:
-                    selected.remove(idx)
-                else:
-                    selected.add(idx)
-                redraw()
-            else:
-                click.echo(f"\n[ERROR] Invalid: 1-{len(items)}")
-        elif ch.lower() == "a":  # All
-            selected = set(range(len(items)))
-            redraw()
-        elif ch == "\x03":  # Ctrl+C
-            click.echo("\n[ABORTED]")
-            raise KeyboardInterrupt
-        elif ch == "q" or ch == "Q":  # Quit without selecting
-            selected.clear()
-            break
-
-    return selected
-
-
-def _prompt_custom_filepath() -> list[str]:
-    """Prompt for custom filepath input.
-
-    Returns:
-        List of valid file paths
-    """
-    # Handle non-interactive mode
-    if not sys.stdin.isatty():
-        return []
-
-    click.echo("\n[?] Add custom filepath(s)?")
-    response = click.prompt("    Path(s) or [Enter] to skip", default="", type=str, show_default=False).strip()
-
-    if not response:
-        return []
-
-    selected: list[str] = []
-    errors: list[str] = []
-
-    # Accept comma-separated or space-separated paths
-    paths = [p.strip() for p in response.replace(",", " ").split() if p.strip()]
-
-    for path in paths:
-        resolved = resolve_path(path)
-        if resolved.exists():
-            selected.append(str(resolved))
-        else:
-            errors.append(f"  - {resolved}: not found")
-
-    if errors:
-        click.echo("\n[ERROR] The following paths were not found:", err=True)
-        for err in errors:
-            click.echo(err, err=True)
-        sys.exit(1)
-
-    return selected
 
 
 def _fix_yaml_multiline_blocks(content: str) -> str:
