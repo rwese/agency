@@ -80,9 +80,9 @@ Refactor Agency to use tasks as the canonical source of truth, removing session 
 
 ### Phase 7: Stop Modes
 
-- [ ] 7.1: Graceful stop (finish current, wrap-up, exit)
-- [ ] 7.2: Immediate stop (interrupt, wrap-up, exit)
-- [ ] 7.3: Force stop (kill immediately)
+- [x] 7.1: Graceful stop (finish current, wrap-up, exit) - already implemented
+- [x] 7.2: Immediate stop (interrupt, wrap-up, exit) - already implemented
+- [x] 7.3: Force stop (kill immediately) - already implemented
 
 ### Phase 8: Cleanup
 

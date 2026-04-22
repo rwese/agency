@@ -17,6 +17,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Agent filtering**: Agents only see unblocked tasks
 - **Manager visibility**: `--include-blocked` flag to see all tasks
 
+#### Task-Centric Architecture
+- **Agent info field**: Tasks track agent session_id and PID
+- **Crash detection**: Heartbeat checks if agent PID exists, reverts stale tasks
+- **Agent pickup**: `pickup_task()` stores session and PID when agent starts work
+- **Clear agent info**: `clear_agent_info()` reverts crashed tasks to pending
+- **Rejection tracking**: `rejection_reason` and `review_notes` fields
+
+#### pi-status Integration
+- **Session info**: Health response includes session_id, currentTask, currentTaskId
+- **Task commands**: `set_task` and `clear_task` for agency integration
+
+#### Manager Orchestration
+- **Orchestrator class**: Agent lifecycle management based on task state
+- **On-demand agents**: Agents start only when work is available
+- **Task assignment**: `assign_tasks_to_agents()` distributes pending tasks
+- **Parallelism**: `parallel_limit` controls per-agent concurrent work
+- **Manager heartbeat v2**: Integrated crash detection + orchestration
+
 ## [2.0.0] - 2026-04-21
 
 ### Added
