@@ -985,10 +985,17 @@ def tasks_agent():
     pass
 
 
-def _list_tasks(agency_dir, status, assignee):
-    """List tasks helper function."""
+def _list_tasks(agency_dir, status, assignee, include_blocked=False):
+    """List tasks helper function.
+    
+    Args:
+        agency_dir: Path to .agency directory
+        status: Filter by status
+        assignee: Filter by assignee
+        include_blocked: If True, include tasks blocked by dependencies
+    """
     store = TaskStore(agency_dir)
-    task_list = store.list_tasks(status=status, assignee=assignee)
+    task_list = store.list_tasks(status=status, assignee=assignee, include_blocked=include_blocked)
 
     if not task_list:
         click.echo("No tasks found")
@@ -1020,18 +1027,28 @@ def _list_tasks(agency_dir, status, assignee):
 @tasks.command("list")
 @click.option("--status", help="Filter by status")
 @click.option("--assignee", help="Filter by assignee")
-def tasks_list(status, assignee):
-    """List tasks assigned to current agent (when AGENCY_AGENT is set), otherwise all tasks."""
+@click.option("--include-blocked", is_flag=True, help="Include tasks blocked by dependencies (default: excluded for agents, included for managers)")
+def tasks_list(status, assignee, include_blocked):
+    """List tasks assigned to current agent (when AGENCY_AGENT is set), otherwise all tasks.
+    
+    Agents only see tasks that are not blocked by dependencies.
+    Managers see all tasks by default unless --include-blocked is used.
+    """
     # Auto-filter to current agent's tasks when running as an agent
     if not assignee and os.environ.get("AGENCY_AGENT"):
         assignee = os.environ["AGENCY_AGENT"]
+
     agency_dir = find_agency_dir()
     if not agency_dir:
         click.echo("[ERROR] No .agency/ found", err=True)
         click.echo("[ERROR] Run 'agency init-project --dir <path>' first", err=True)
         sys.exit(1)
 
-    _list_tasks(agency_dir, status, assignee)
+    # Agents always see only unblocked tasks
+    is_agent = bool(os.environ.get("AGENCY_AGENT"))
+    include_blocked = include_blocked and not is_agent
+
+    _list_tasks(agency_dir, status, assignee, include_blocked=include_blocked)
 
 
 @tasks.command("add")
@@ -1085,6 +1102,20 @@ def tasks_show(task_id):
     click.echo(f"- **Created**: {task.created_at or 'Unknown'}")
     click.echo(f"- **Started**: {task.started_at or 'Not started'}")
     click.echo(f"- **Completed**: {task.completed_at or 'In progress'}")
+
+    # Show dependencies
+    if task.depends_on:
+        click.echo(f"- **Depends on**: {', '.join(task.depends_on)}")
+        # Show blocking status
+        blocking = store.get_blocked_by(task_id)
+        if blocking:
+            blocking_ids = [f"{t.task_id} ({t.status})" for t in blocking]
+            click.echo(f"- **Blocked by**: {', '.join(blocking_ids)} 🚫")
+        else:
+            click.echo(f"- **Blocked by**: None ✅")
+    else:
+        click.echo(f"- **Depends on**: None")
+
     click.echo("")
 
     if task.result:
@@ -1109,10 +1140,62 @@ def tasks_assign(task_id, agent):
     if not store.is_agent_free(agent):
         click.echo(f"[WARN] Agent '{agent}' may not be free (has pending/in_progress tasks)", err=True)
 
-    if store.assign_task(task_id, agent):
-        click.echo(f"[INFO] Assigned {task_id} to {agent}")
-    else:
-        click.echo("[ERROR] Failed to assign task", err=True)
+    try:
+        if store.assign_task(task_id, agent):
+            click.echo(f"[INFO] Assigned {task_id} to {agent}")
+        else:
+            click.echo("[ERROR] Failed to assign task", err=True)
+            sys.exit(1)
+    except ValueError as e:
+        click.echo(f"[ERROR] {e}", err=True)
+        sys.exit(1)
+
+
+@tasks.command("depends")
+@click.argument("task_id")
+@click.option("--add", "action", flag_value="add", default=True, help="Add dependencies")
+@click.option("--remove", "action", flag_value="remove", help="Remove a dependency")
+@click.option("--set", "action", flag_value="set", help="Set all dependencies (replaces existing)")
+@click.argument("dependencies", nargs=-1, required=True)
+def tasks_depends(task_id, action, dependencies):
+    """Manage task dependencies.
+    
+    Tasks will only be available to agents once all their dependencies are completed.
+    
+    Examples:
+        agency tasks depends task-1 --add task-2 task-3
+        agency tasks depends task-1 --set task-2
+        agency tasks depends task-1 --remove task-2
+    """
+    agency_dir = find_agency_dir()
+    if not agency_dir:
+        click.echo("[ERROR] No .agency/ found", err=True)
+        sys.exit(1)
+
+    store = TaskStore(agency_dir)
+
+    # Validate task exists
+    task = store.get_task(task_id)
+    if not task:
+        click.echo(f"[ERROR] Task not found: {task_id}", err=True)
+        sys.exit(1)
+
+    try:
+        if action == "set":
+            store.set_dependencies(task_id, list(dependencies))
+            click.echo(f"[INFO] Set dependencies for {task_id}: {', '.join(dependencies) or '(none)'}")
+        elif action == "add":
+            for dep in dependencies:
+                store.add_dependency(task_id, dep)
+            task = store.get_task(task_id)
+            click.echo(f"[INFO] Added dependencies to {task_id}: {', '.join(task.depends_on or [])}")
+        elif action == "remove":
+            for dep in dependencies:
+                store.remove_dependency(task_id, dep)
+            task = store.get_task(task_id)
+            click.echo(f"[INFO] Removed dependency from {task_id}: {', '.join(task.depends_on or [])}")
+    except ValueError as e:
+        click.echo(f"[ERROR] {e}", err=True)
         sys.exit(1)
 
 
