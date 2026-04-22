@@ -18,6 +18,10 @@ import { existsSync, unlinkSync } from "node:fs";
 const getSocketPath = (): string =>
 	process.env.PI_STATUS_SOCKET || join(homedir(), ".pi", `pi-status-${process.pid}.sock`);
 
+// Current task being worked on (set by manager or agent)
+let currentTask: string | undefined;
+let currentTaskId: string | undefined;
+
 // Response types
 interface StatusResponse {
 	type: "ok" | "error" | "pong";
@@ -35,6 +39,10 @@ interface AgentStatus {
 	sessionName?: string;
 	sessionFile?: string;
 	cwd: string;
+
+	// Current task (for agency integration)
+	currentTask?: string;
+	currentTaskId?: string;
 
 	// Turn info
 	currentTurn?: {
@@ -176,6 +184,8 @@ export default function (pi: ExtensionAPI) {
 			sessionName: pi.getSessionName() ?? undefined,
 			sessionFile,
 			cwd: process.cwd(),
+			currentTask,
+			currentTaskId,
 			currentTurn: currentTurnIndex > 0 ? {
 				index: currentTurnIndex,
 				startTime: turnStartTime,
@@ -273,9 +283,30 @@ export default function (pi: ExtensionAPI) {
 						data: {
 							running: sessionActive,
 							idle: isIdle,
+							sessionFile,
+							currentTask,
+							currentTaskId,
 							lastActivityAt,
 						} as AgentStatus,
 					};
+
+				case "set_task": {
+					// Set the current task (used by agency)
+					const taskId = msg.taskId as string | undefined;
+					const taskDescription = msg.task as string | undefined;
+					if (taskId !== undefined) {
+						currentTaskId = taskId;
+						currentTask = taskDescription;
+						return { type: "ok", message: `Task set to ${taskId}` };
+					}
+					return { type: "error", message: "taskId required" };
+				}
+
+				case "clear_task": {
+					currentTask = undefined;
+					currentTaskId = undefined;
+					return { type: "ok", message: "Task cleared" };
+				}
 
 				default:
 					return { type: "error", message: `Unknown action: ${action}` };

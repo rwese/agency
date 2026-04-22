@@ -138,6 +138,74 @@ def get_agent_tasks(agency_dir: Path, agent_name: str) -> list[dict]:
     return [t for t in get_all_tasks(agency_dir) if t.get("assigned_to") == agent_name]
 
 
+def process_exists(pid: int) -> bool:
+    """Check if a process with the given PID exists.
+
+    Args:
+        pid: Process ID to check
+
+    Returns:
+        True if process exists, False otherwise
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "pid="],
+            capture_output=True,
+            text=True,
+        )
+        return result.returncode == 0
+    except (ValueError, OSError):
+        return False
+
+
+def check_stale_tasks(agency_dir: Path) -> list[dict]:
+    """Check for crashed agent tasks and revert them to pending.
+
+    Args:
+        agency_dir: Path to .agency directory
+
+    Returns:
+        List of stale task info dicts with task_id, agent, and reason
+    """
+    stale = []
+
+    for task in get_all_tasks(agency_dir):
+        status = task.get("status", "")
+        if status != "in_progress":
+            continue
+
+        agent_info = task.get("agent_info")
+        if not agent_info:
+            continue
+
+        pid = agent_info.get("pid")
+        if pid and not process_exists(pid):
+            # Process is gone, revert task to pending
+            task_id = task.get("task_id")
+            session_id = agent_info.get("session_id")
+            agent = task.get("assigned_to")
+
+            # Revert the task
+            try:
+                from agency.tasks import TaskStore
+                store = TaskStore(agency_dir)
+                store.clear_agent_info(task_id)
+                print(f"[CRASH DETECTED] Task {task_id} reverted - agent {agent} process {pid} not found")
+                stale.append({
+                    "task_id": task_id,
+                    "agent": agent,
+                    "session_id": session_id,
+                    "reason": "process_not_found",
+                    "pid": pid,
+                })
+            except Exception as e:
+                print(f"[CRASH DETECTED] Failed to revert task {task_id}: {e}")
+
+    return stale
+
+
 def is_agent_idle() -> bool:
     """Check if agent is idle via pi-status socket.
 
@@ -350,6 +418,24 @@ def manager_heartbeat(
 
     while True:
         try:
+            # CRASH DETECTION: Check for stale tasks and revert them
+            stale = check_stale_tasks(agency_dir)
+            if stale:
+                print(f"[HEARTBEAT] Reverted {len(stale)} stale tasks due to crashed agents")
+                # Audit crash events
+                audit = _get_audit_store(agency_dir)
+                if audit:
+                    for event in stale:
+                        audit.log_agent(
+                            action="crash_detected",
+                            agency_role="agent",
+                            details={
+                                "task_id": event["task_id"],
+                                "agent": event["agent"],
+                                "pid": event["pid"],
+                            },
+                        )
+
             counts = get_task_count(agency_dir)
             active_count = counts["pending"] + counts["in_progress"]
             available_agents = get_available_agents(agency_dir, chunk_size)
