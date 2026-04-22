@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/rwese/agency/main/schemas/manager.json",
+  "title": "Agency Manager Configuration",
+  "description": "Configuration for the Agency manager/coordinator",
+  "type": "object",
+  "required": ["name", "personality"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "default": "coordinator",
+      "description": "Manager name (used in window title)"
+    },
+    "personality": {
+      "type": "string",
+      "description": "Manager personality/prompt (supports template injection)"
+    },
+    "poll_interval": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 30,
+      "description": "Seconds between task polling"
+    },
+    "auto_approve": {
+      "type": "boolean",
+      "default": false,
+      "description": "Auto-approve completed tasks"
+    },
+    "max_retries": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "description": "Max retries for failed tasks"
+    }
+  },
+  "additionalProperties": false
+}

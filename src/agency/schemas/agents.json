@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/rwese/agency/main/schemas/agents.json",
+  "title": "Agency Agents Registry",
+  "description": "Registry of agents in an Agency project",
+  "type": "object",
+  "required": ["agents"],
+  "properties": {
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "config"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Agent name"
+          },
+          "config": {
+            "type": "string",
+            "pattern": "^agents/",
+            "description": "Path to agent config relative to .agency/"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

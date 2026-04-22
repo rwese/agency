@@ -4,6 +4,7 @@ Agency v2.0 - Configuration Management
 Handles loading and validation of agency configuration files.
 """
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,6 +12,32 @@ import yaml
 
 # Global defaults
 DEFAULT_PARALLEL_LIMIT = 2  # Default max parallel tasks across all agents
+
+# Schema base URL
+SCHEMA_BASE_URL = "https://raw.githubusercontent.com/rwese/agency/main/schemas"
+
+
+def _validate_with_schema(data: dict, schema_name: str, agency_dir: Path | None = None) -> list[str]:
+    """Validate data against a JSON schema. Returns list of error messages."""
+    try:
+        from jsonschema import Draft7Validator
+
+        # Load schema from package directory
+        schema_path = Path(__file__).parent / "schemas" / f"{schema_name}.json"
+
+        errors = []
+        if schema_path.exists():
+            schema = json.loads(schema_path.read_text())
+            validator = Draft7Validator(schema)
+            for error in validator.iter_errors(data):
+                path = ".".join(str(p) for p in error.path) if error.path else "root"
+                errors.append(f"{path}: {error.message}")
+
+        return errors
+    except ImportError:
+        return []  # jsonschema not installed
+    except Exception as e:
+        return [f"Schema validation error: {e}"]
 
 
 @dataclass
@@ -24,6 +51,7 @@ class AgencyConfig:
     additional_context_files: list[str] | None = None  # Files to add as context (env vars expanded on load)
     template_delimiter: str | None = None  # Custom template delimiter, e.g. "{{...}}"
     parallel_limit: int = DEFAULT_PARALLEL_LIMIT  # Max parallel tasks (default: 2)
+    audit_enabled: bool = True  # Enable audit logging
 
 
 @dataclass
@@ -50,6 +78,8 @@ def load_agency_config(agency_dir: Path) -> AgencyConfig:
 
     additional_context_files are stored as-is - paths are resolved
     relative to work_dir at session start.
+
+    Logs warnings for schema validation errors.
     """
     import os
 
@@ -61,6 +91,15 @@ def load_agency_config(agency_dir: Path) -> AgencyConfig:
 
     with open(config_path) as f:
         data = yaml.safe_load(f) or {}
+
+    # Validate against schema
+    errors = _validate_with_schema(data, "config", agency_dir)
+    if errors:
+        import sys
+
+        print("[WARN] Config validation errors:", file=sys.stderr)
+        for err in errors:
+            print(f"  - {err}", file=sys.stderr)
 
     # Expand ~ in paths (env vars like ${AGENCY_*} resolved at session start)
     context_files_raw = data.get("additional_context_files")
@@ -80,6 +119,7 @@ def load_agency_config(agency_dir: Path) -> AgencyConfig:
         additional_context_files=context_files_expanded if context_files_expanded else None,
         template_delimiter=data.get("template_delimiter"),
         parallel_limit=data.get("parallel_limit"),
+        audit_enabled=data.get("audit_enabled", True),
     )
 
 
@@ -157,10 +197,12 @@ def save_agency_config(agency_dir: Path, config: AgencyConfig) -> None:
     config_path = agency_dir / "config.yaml"
 
     data = {
+        "$schema": "https://raw.githubusercontent.com/rwese/agency/main/schemas/config.json",
         "project": config.project,
         "shell": config.shell,
         "template_url": config.template_url,
         "stop_timeout": config.stop_timeout,
+        "audit_enabled": config.audit_enabled,
     }
 
     if config.additional_context_files:
@@ -177,6 +219,7 @@ def save_manager_config(agency_dir: Path, config: ManagerConfig) -> None:
     with open(config_path, "w") as f:
         yaml.dump(
             {
+                "$schema": "https://raw.githubusercontent.com/rwese/agency/main/schemas/manager.json",
                 "name": config.name,
                 "personality": config.personality,
                 "poll_interval": config.poll_interval,
@@ -193,7 +236,7 @@ def save_agents_config(agency_dir: Path, agents: list[AgentConfig]) -> None:
     agents_path = agency_dir / "agents.yaml"
     agents_dir = agency_dir / "agents"
 
-    # Save agents list
+    # Save agents list with schema directive
     agents_list = []
     for agent in agents:
         agents_list.append(
@@ -203,13 +246,14 @@ def save_agents_config(agency_dir: Path, agents: list[AgentConfig]) -> None:
             }
         )
 
-        # Save individual agent config
+        # Save individual agent config with schema directive
         agents_dir.mkdir(exist_ok=True)
         agent_config_path = agents_dir / f"{agent.name}.yaml"
 
         with open(agent_config_path, "w") as f:
             yaml.dump(
                 {
+                    "$schema": "https://raw.githubusercontent.com/rwese/agency/main/schemas/agent.json",
                     "name": agent.name,
                     "personality": agent.personality,
                 },
@@ -218,4 +262,11 @@ def save_agents_config(agency_dir: Path, agents: list[AgentConfig]) -> None:
             )
 
     with open(agents_path, "w") as f:
-        yaml.dump({"agents": agents_list}, f, default_flow_style=False)
+        yaml.dump(
+            {
+                "$schema": "https://raw.githubusercontent.com/rwese/agency/main/schemas/agents.json",
+                "agents": agents_list,
+            },
+            f,
+            default_flow_style=False,
+        )

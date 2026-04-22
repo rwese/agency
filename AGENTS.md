@@ -25,19 +25,20 @@ cd ~/projects/api
 agency init
 
 # Start manager + agents
-agency start
+agency session start
 
 # Manage tasks (run from project dir)
 cd ~/projects/api
 agency tasks add -d "Implement auth API"
 agency tasks assign swift-bear-a3f2 coder
 
-# Tmux operations
-agency tmux list
-agency tmux attach
+# Session operations
+agency session list
+agency session windows list
+agency session attach
 
 # When done
-agency stop agency-api
+agency session stop
 ```
 
 ## Commands
@@ -53,23 +54,29 @@ agency stop agency-api
 |---------|------|-------------|
 | `agency init` | any | Create project + session + `.agency/` |
 | `agency templates` | none | List available project templates |
-| `agency start` | any | Start the agency (manager + all agents) |
-| `agency members` | any | Show all configured members with status |
-| `agency stop <session>` | any | Stop session gracefully |
-| `agency kill <session>` | any | Force kill session |
-| `agency resume` | any | Resume a halted session |
-| `agency attach` | any | Attach to project session (auto-detected) |
-| `agency list` | any | List all agency sessions |
 
-### Tmux Operations
+### Session Management
 
 | Command | Role | Description |
 |---------|------|-------------|
-| `agency tmux list` | any | List windows in current project |
-| `agency tmux send <window> <text>` | any | Send keys to window |
-| `agency tmux new <name>` | any | Create new window |
-| `agency tmux attach` | any | Attach to session (new terminal) |
-| `agency tmux run <window> <cmd>` | any | Run command in window |
+| `agency session start` | any | Start the session (manager + all agents) |
+| `agency session stop [session]` | any | Stop session gracefully |
+| `agency session kill [session]` | any | Force kill session |
+| `agency session resume` | any | Resume a halted session |
+| `agency session attach` | any | Attach to project session |
+| `agency session list` | any | List all agency sessions |
+| `agency session members` | any | Show all configured members with status |
+
+### Session Windows
+
+| Command | Role | Description |
+|---------|------|-------------|
+| `agency session windows list` | any | List windows in current session |
+| `agency session windows send <window> <text>` | any | Send keys to window |
+| `agency session windows new <name>` | any | Create new window |
+| `agency session windows run <window> <cmd>` | any | Run command in window |
+
+
 
 ### Task Management
 
@@ -154,17 +161,23 @@ SQLite-based audit logging for all agency operations.
 
 ## Configuration
 
+All config files include `$schema` directives for IDE validation and autocompletion.
+
 ### config.yaml
 
 ```yaml
+$schema: https://raw.githubusercontent.com/rwese/agency/main/schemas/config.json
 project: api
 shell: bash
 template_url: https://github.com/rwese/agency-templates
+audit_enabled: true  # Set to false to disable audit logging
 ```
 
 ### manager.yaml
 
 ```yaml
+$schema: https://raw.githubusercontent.com/rwese/agency/main/schemas/manager.json
+name: coordinator
 personality: |
   You are the project coordinator.
 
@@ -180,6 +193,7 @@ auto_approve: false
 ### agents.yaml
 
 ```yaml
+$schema: https://raw.githubusercontent.com/rwese/agency/main/schemas/agents.json
 agents:
   - name: coder
     config: agents/coder.yaml
@@ -190,9 +204,34 @@ agents:
 ### agents/<name>.yaml
 
 ```yaml
+$schema: https://raw.githubusercontent.com/rwese/agency/main/schemas/agent.json
 name: coder
-personality: personality.md
+personality: |
+  You are the coder agent.
 ```
+
+## YAML Schemas
+
+Agency config files use JSON Schema for validation and autocompletion.
+
+### IDE Setup
+
+**VS Code:** Install the "YAML Language Support" by Red Hat extension. The `$schema` directive in each file enables validation automatically.
+
+**JetBrains IDEs:** Native YAML support with schema detection from `$schema` directive.
+
+### Available Schemas
+
+| Schema | File | URL |
+|--------|------|-----|
+| config | `.agency/config.yaml` | `schemas/config.json` |
+| manager | `.agency/manager.yaml` | `schemas/manager.json` |
+| agents | `.agency/agents.yaml` | `schemas/agents.json` |
+| agent | `.agency/agents/<name>.yaml` | `schemas/agent.json` |
+
+### Validation
+
+Config files are validated on load. Invalid configs log warnings but continue with defaults.
 
 ## Template Injection
 
