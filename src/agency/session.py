@@ -774,9 +774,22 @@ def _generate_manager_launch_script(
     # Get parallel limit from agency config
     parallel_limit = agency_config.parallel_limit
 
+    # Get pi session directory (default: .agency/pi/sessions/)
+    pi_session_dir = os.environ.get("AGENCY_PI_SESSION_DIR", str(agency_dir / "pi" / "sessions"))
+
     # Get pi-inject extension path
     inject_extension = os.environ.get(
         "AGENCY_PI_INJECT_EXT", str(Path.home() / ".pi" / "agent" / "extensions" / "pi-inject" / "extensions")
+    )
+
+    # Get pi-status extension path
+    status_extension = os.environ.get(
+        "AGENCY_PI_STATUS_EXT", str(Path.home() / ".pi" / "agent" / "extensions" / "pi-status" / "extensions")
+    )
+
+    # Get no-frills extension path
+    nofrills_extension = os.environ.get(
+        "AGENCY_PI_NOFILLS_EXT", str(Path.home() / ".pi" / "agent" / "extensions" / "no-frills")
     )
 
     # Import heartbeat module for path
@@ -787,9 +800,19 @@ def _generate_manager_launch_script(
     # Build command with heartbeat in background
     # Use unique socket path per member
     injector_socket = f"{agency_dir}/injector-{manager_name}.sock"
+    status_socket = f"{agency_dir}/status-{manager_name}.sock"
 
     # Build parallel limit env var
     parallel_limit_env = f"AGENCY_PARALLEL_LIMIT={parallel_limit} " if parallel_limit else ""
+
+    # No-frills env vars for minimal UI (hide decorations)
+    nofrills_env = (
+        "PI_NOFILLS_TOOLS=minimal "
+        "PI_NOFILLS_THINKING=1 "
+        "PI_NOFILLS_WORKING=1 "
+        "PI_NOFILLS_FOOTER=1 "
+        "PI_NOFILLS_HEADER=1 "
+    )
 
     cmd = (
         f'cd "{work_dir}" && '
@@ -804,6 +827,7 @@ def _generate_manager_launch_script(
         f"AGENCY_CHUNK_SIZE={chunk_size} "
         f"{parallel_limit_env}"
         f'PI_INJECTOR_SOCKET="{injector_socket}" '
+        f'PI_STATUS_SOCKET="{status_socket}" '
         f"python3 {heartbeat_path} > /dev/null 2>&1 & "
         # Give heartbeat a moment to start
         f"sleep 1 && "
@@ -819,12 +843,16 @@ def _generate_manager_launch_script(
         f"AGENCY_CHUNK_SIZE={chunk_size} "
         f"{parallel_limit_env}"
         f'PI_INJECTOR_SOCKET="{injector_socket}" '
+        f'PI_STATUS_SOCKET="{status_socket}" '
+        f"{nofrills_env}"
         f"{agent_cmd} "
         f'-e "{inject_extension}" '
+        f'-e "{status_extension}" '
+        f'-e "{nofrills_extension}" '
         f"--no-extensions "
         f"--no-themes "
         f"--offline "
-        f'--session-dir "{agency_dir}" '
+        f'--session-dir "{pi_session_dir}" '
         f"--no-context-files "
         f"{context_args}"
         f"{personality_args} "
@@ -950,6 +978,16 @@ def _generate_agent_launch_script(
         "AGENCY_PI_INJECT_EXT", str(Path.home() / ".pi" / "agent" / "extensions" / "pi-inject" / "extensions")
     )
 
+    # Get pi-status extension path
+    status_extension = os.environ.get(
+        "AGENCY_PI_STATUS_EXT", str(Path.home() / ".pi" / "agent" / "extensions" / "pi-status" / "extensions")
+    )
+
+    # Get no-frills extension path
+    nofrills_extension = os.environ.get(
+        "AGENCY_PI_NOFILLS_EXT", str(Path.home() / ".pi" / "agent" / "extensions" / "no-frills")
+    )
+
     # Import heartbeat module for path
     from agency import heartbeat as heartbeat_module
 
@@ -958,6 +996,7 @@ def _generate_agent_launch_script(
     # Build command with heartbeat in background
     # Use unique socket path per member
     injector_socket = f"{agency_dir}/injector-{agent_name}.sock"
+    status_socket = f"{agency_dir}/status-{agent_name}.sock"
 
     # Get poll and ping intervals from manager config
     poll_interval = 30
@@ -970,14 +1009,28 @@ def _generate_agent_launch_script(
         poll_interval = config.get("poll_interval", 30)
         ping_interval = config.get("ping_interval", 120)
 
+    # Get pi session directory (default: .agency/pi/sessions/)
+    pi_session_dir = os.environ.get("AGENCY_PI_SESSION_DIR", str(agency_dir / "pi" / "sessions"))
+
+    # No-frills env vars for minimal UI (hide decorations)
+    nofrills_env = (
+        "PI_NOFILLS_TOOLS=minimal "
+        "PI_NOFILLS_THINKING=1 "
+        "PI_NOFILLS_WORKING=1 "
+        "PI_NOFILLS_FOOTER=1 "
+        "PI_NOFILLS_HEADER=1 "
+    )
+
     # Build pi command with explicit extension and no global extensions/themes
     pi_cmd = (
         f"{agent_cmd} "
         f'-e "{inject_extension}" '
+        f'-e "{status_extension}" '
+        f'-e "{nofrills_extension}" '
         f"--no-extensions "
         f"--no-themes "
         f"--offline "
-        f'--session-dir "{agency_dir}" '
+        f'--session-dir "{pi_session_dir}" '
         f"--no-context-files "
         f"{personality_args} "
         f"{context_args}"
@@ -995,6 +1048,7 @@ def _generate_agent_launch_script(
         f"AGENCY_POLL_INTERVAL={poll_interval} "
         f"AGENCY_PING_INTERVAL={ping_interval} "
         f'PI_INJECTOR_SOCKET="{injector_socket}" '
+        f'PI_STATUS_SOCKET="{status_socket}" '
         f"python3 {heartbeat_path} > /dev/null 2>&1 & "
         # Give heartbeat a moment to start
         f"sleep 1 && "
@@ -1007,6 +1061,8 @@ def _generate_agent_launch_script(
         f"AGENCY_AGENT={agent_name} "
         f"AGENCY_SOCKET={socket_name} "
         f'PI_INJECTOR_SOCKET="{injector_socket}" '
+        f'PI_STATUS_SOCKET="{status_socket}" '
+        f"{nofrills_env}"
         f"{pi_cmd}"
     )
 
