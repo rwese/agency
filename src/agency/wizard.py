@@ -291,9 +291,17 @@ def step_agents(state: WizardState) -> WizardState:
         click.echo("  1. Add agent")
         if state.agents:
             click.echo("  2. Remove agent")
-        click.echo("  3. Done adding agents")
+        click.echo(f"  {2 if state.agents else 1}. Done adding agents")
 
-        choice = _select_option("", ["Add agent", "Remove agent" if state.agents else "Skip", "Done"], default=2 if not state.agents else 2)
+        # Build options dynamically
+        options = ["Add agent"]
+        if state.agents:
+            options.append("Remove agent")
+        options.append("Done")
+
+        # Default to last option (Done)
+        default_idx = len(options) - 1
+        choice = _select_option("", options, default=default_idx)
 
         if choice == 0:  # Add
             name = _prompt_text("Agent name", validate=_validate_agent_name)
@@ -474,7 +482,7 @@ def step_review(state: WizardState) -> WizardState:
         # Options
         click.echo("\n### Options")
         click.echo(f"  Force:   {'Yes' if state.force else 'No'}")
-        click.echo(f"  Audit:   Yes")
+        click.echo("  Audit:   Yes")
 
         # Choice
         click.echo("\n" + "-" * 40)
