@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      String   @default("member")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  teams     TeamMember[]
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  members    TeamMember[]
+}
+
+model TeamMember {
+  id      String @id @default(cuid())
+  teamId  String
+  userId  String
+  role    String @default("member")
+  team    Team   @relation(fields: [teamId], references: [id])
+  user    User   @relation(fields: [userId], references: [id])
+  @@unique([teamId, userId])
+}
+
+model Epic {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  status      String   @default("active")
+  priority    String   @default("medium")
+  teamId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tasks       Task[]
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  status      String   @default("todo")
+  priority    String   @default("medium")
+  epicId      String?
+  assigneeId  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  completedAt DateTime?
+  epic        Epic?    @relation(fields: [epicId], references: [id])
+  comments    Comment[]
+}

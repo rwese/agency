@@ -1,37 +1,23 @@
 {
-  "name": "fullstack-backend",
+  "name": "agency-web-backend",
   "version": "1.0.0",
-  "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc && tsc-alias",
-    "start": "node dist/index.js",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "lint": "eslint src --ext .ts",
-    "typecheck": "tsc --noEmit",
+    "dev": "wrangler dev src/index.ts",
+    "build": "tsc",
+    "start": "wrangler deploy src/index.ts",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:push": "prisma db push"
   },
   "dependencies": {
-    "@arcjet/hono": "^0.18.0",
-    "@hono/node-server": "^1.13.0",
-    "@prisma/client": "^5.22.0",
-    "hono": "^4.6.0",
-    "zod": "^3.23.0"
+    "@prisma/client": "^5.10.0",
+    "hono": "^4.0.0",
+    "@hono/node-server": "^1.8.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "eslint": "^9.0.0",
-    "prisma": "^5.22.0",
-    "tsc-alias": "^1.8.0",
-    "tsx": "^4.0.0",
-    "typescript": "^5.6.0",
-    "vitest": "^2.0.0"
+    "@cloudflare/workers-types": "^4.20240117.0",
+    "prisma": "^5.10.0",
+    "typescript": "^5.3.0",
+    "wrangler": "^3.0.0"
   }
 }

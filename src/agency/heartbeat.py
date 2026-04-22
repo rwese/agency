@@ -18,7 +18,6 @@ from pathlib import Path
 
 import yaml
 
-
 # Lazy audit store
 _audit_store = None
 
@@ -29,6 +28,7 @@ def _get_audit_store(agency_dir: Path):
     if _audit_store is None:
         try:
             from agency.audit import AuditStore
+
             _audit_store = AuditStore(agency_dir)
         except Exception:
             _audit_store = False
@@ -81,6 +81,7 @@ def get_task_count(agency_dir: Path) -> dict:
             counts["pending_approval"] += 1
 
     return counts
+
 
 def get_active_task_count(agency_dir: Path) -> int:
     """Get count of active tasks (pending + in_progress)."""
@@ -166,17 +167,36 @@ def write_notification(agency_dir: Path, role: str, agent_name: str, message: st
 
 
 def send_notification(window_ref: str, message: str) -> bool:
-    """Send a notification via pi-inject Unix socket."""
+    """Send a notification via pi-inject Unix socket.
+
+    IMPORTANT: Only sends to pi-inject sockets that belong to this agency.
+    Sockets outside the agency directory are ignored to prevent cross-talk.
+    """
     agency_dir = os.environ.get("AGENCY_DIR", "")
     role = os.environ.get("AGENCY_ROLE", "")
     agent_name = os.environ.get("AGENCY_AGENT", os.environ.get("AGENCY_MANAGER", ""))
+    project_name = os.environ.get("AGENCY_PROJECT", "")
 
     # Write to notifications file for debugging
     if agency_dir:
         write_notification(Path(agency_dir), role, agent_name, message)
 
-    # Get socket path from env (defaults to PI_INJECTOR_SOCKET or ~/.pi/injector.sock)
-    socket_path = os.environ.get("PI_INJECTOR_SOCKET")
+    # Get socket path from env
+    socket_path = os.environ.get("PI_INJECTOR_SOCKET", "")
+
+    # CRITICAL: Validate socket path belongs to this agency
+    # If socket is not set, empty, or points outside agency_dir, skip injection
+    # This prevents accidental cross-talk with other pi instances
+    if not socket_path:
+        print("[HEARTBEAT] No PI_INJECTOR_SOCKET set, skipping injection")
+        return False
+
+    # Security check: socket path must be within agency directory
+    # This ensures we only talk to our own pi-inject instance
+    socket_path_obj = Path(socket_path)
+    if agency_dir and not str(socket_path_obj).startswith(str(Path(agency_dir).absolute())):
+        print(f"[HEARTBEAT] Socket {socket_path} outside agency dir, skipping injection")
+        return False
 
     # Import here to avoid circular imports and use module directly
     import sys
@@ -201,12 +221,18 @@ def send_notification(window_ref: str, message: str) -> bool:
         resp = client.steer(cmd)
 
         if resp.is_ok:
-            print(f"[HEARTBEAT] Injected: {cmd}")
+            print(f"[HEARTBEAT] Injected to {project_name}: {cmd}")
             return True
         else:
             print(f"[HEARTBEAT] Inject error: {resp.message}")
             return False
 
+    except FileNotFoundError:
+        print(f"[HEARTBEAT] pi-inject socket not found: {socket_path}")
+        return False
+    except ConnectionRefusedError:
+        print(f"[HEARTBEAT] pi-inject not ready: {socket_path}")
+        return False
     except Exception as e:
         print(f"[HEARTBEAT] pi-inject error: {e}")
         return False
@@ -221,7 +247,7 @@ def manager_heartbeat(
     parallel_limit: int | None = None,
 ):
     """Heartbeat loop for manager.
-    
+
     Args:
         agency_dir: Path to .agency/ directory
         socket_name: Tmux socket name
@@ -261,12 +287,14 @@ def manager_heartbeat(
                 should_notify = counts["unassigned"] != last_unassigned and (current_time - last_notification_time) > 30
                 if should_notify:
                     agent_list = ", ".join(available_agents)
-                    
+
                     # Add parallel limit warning if at limit
                     parallel_warning = ""
                     if at_parallel_limit:
-                        parallel_warning = f" ⚠️ **Note**: Only {parallel_limit} task(s) will be actively worked on in priority order."
-                    
+                        parallel_warning = (
+                            f" ⚠️ **Note**: Only {parallel_limit} task(s) will be actively worked on in priority order."
+                        )
+
                     msg = (
                         f"📋 {counts['unassigned']} unassigned task(s), "
                         f"{len(available_agents)} agent(s) available ({agent_list}). "
@@ -320,7 +348,9 @@ def manager_heartbeat(
             time.sleep(poll_interval)
 
 
-def agent_heartbeat(agency_dir: Path, socket_name: str, agent_name: str, poll_interval: int = 30, ping_interval: int = 120):
+def agent_heartbeat(
+    agency_dir: Path, socket_name: str, agent_name: str, poll_interval: int = 30, ping_interval: int = 120
+):
     """Heartbeat loop for agent.
 
     Notifies agents about new tasks and periodically pings idle agents
@@ -342,7 +372,8 @@ def agent_heartbeat(agency_dir: Path, socket_name: str, agent_name: str, poll_in
     print(f"[HEARTBEAT] Poll interval: {poll_interval}s, ping interval: {ping_interval}s")
 
     last_ping_time = 0  # Track when we last sent a ping
-    sm = SessionManager(session_name, socket_name, socket_name=socket_name)
+    # SessionManager(session_name, socket_name) - in agency, session and socket names match
+    sm = SessionManager(socket_name, socket_name)
 
     while True:
         try:
@@ -392,7 +423,7 @@ def agent_heartbeat(agency_dir: Path, socket_name: str, agent_name: str, poll_in
             elif pane_is_idle and current_time - last_ping_time >= ping_interval * 2:
                 msg = "🏃 No tasks assigned. Check 'agency tasks list' or wait for new assignments."
                 if send_notification(window_ref, msg):
-                    print(f"[HEARTBEAT] Pinged idle agent")
+                    print("[HEARTBEAT] Pinged idle agent")
                     last_ping_time = current_time
 
             time.sleep(poll_interval)

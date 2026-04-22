@@ -1021,7 +1021,10 @@ def _list_tasks(agency_dir, status, assignee):
 @click.option("--status", help="Filter by status")
 @click.option("--assignee", help="Filter by assignee")
 def tasks_list(status, assignee):
-    """List tasks."""
+    """List tasks assigned to current agent (when AGENCY_AGENT is set), otherwise all tasks."""
+    # Auto-filter to current agent's tasks when running as an agent
+    if not assignee and os.environ.get("AGENCY_AGENT"):
+        assignee = os.environ["AGENCY_AGENT"]
     agency_dir = find_agency_dir()
     if not agency_dir:
         click.echo("[ERROR] No .agency/ found", err=True)
