@@ -65,17 +65,18 @@ Refactor Agency to use tasks as the canonical source of truth, removing session 
 
 ### Phase 5: Review Flow
 
-- [ ] 5.1: Create reviewer agent config template
-- [ ] 5.2: Implement `start_reviewer(task)` in manager
-- [ ] 5.3: Reviewer receives fresh context + task info
-- [ ] 5.4: Approve/reject commands for reviewer
+- [x] 5.1: Create reviewer.py module
+- [x] 5.2: Implement `start_reviewer(task)` function
+- [x] 5.3: Reviewer prompt with fresh context + task info
+- [x] 5.4: `handle_rejection()` for rejection flow
 
 ### Phase 6: Restart on Rejection
 
-- [ ] 6.1: Add `restart_agent(agent, task, reason)` function
-- [ ] 6.2: Store session_id in task when picked up
-- [ ] 6.3: Implement rejection → restart flow
-- [ ] 6.4: Test rejection → fix → resubmit cycle
+- [x] 6.1: Add `restart_agent_for_fix()` function
+- [x] 6.2: Store session_id in task when picked up
+- [x] 6.3: Implement rejection → restart flow
+- [x] 6.4: `inject_fix_to_running_agent()` for live agents
+- [x] 6.5: `start_fresh_agent()` for crashed agents
 
 ### Phase 7: Stop Modes
 
