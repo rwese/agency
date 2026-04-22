@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://raw.githubusercontent.com/rwese/agency/main/schemas/config.json",
+  "$id": "https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/config.json",
   "title": "Agency Project Configuration",
   "description": "Configuration for an Agency project",
   "type": "object",

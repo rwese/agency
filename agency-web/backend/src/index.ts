@@ -1,36 +1,61 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
+import { authMiddleware } from './middleware/auth'
+import authRoutes from './routes/auth'
+import usersRoutes from './routes/users'
+import teamsRoutes from './routes/teams'
+import epicsRoutes from './routes/epics'
+import tasksRoutes from './routes/tasks'
+import commentsRoutes from './routes/comments'
+import attachmentsRoutes from './routes/attachments'
+import webhooksRoutes from './routes/webhooks'
+import githubRoutes from './routes/github'
+import searchRoutes from './routes/search'
+import adminRoutes from './routes/admin'
 
 const app = new Hono()
 
+// Global middleware
 app.use('*', cors())
 app.use('*', logger())
+app.use('*', authMiddleware())
 
-app.get('/', (c) => c.json({ message: 'agency-web API', version: '1.0.0' }))
-
+// Health check
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }))
 
-// Auth routes placeholder
-app.post('/api/auth/login', async (c) => {
-  const { email, password } = await c.req.json()
-  // TODO: Implement auth
-  return c.json({ token: 'demo-token', user: { id: '1', email } })
-})
+// Mount auth routes
+app.route('/api/auth', authRoutes)
 
-// Epic routes placeholder
-app.get('/api/epics', (c) => c.json([]))
-app.post('/api/epics', async (c) => {
-  const body = await c.req.json()
-  return c.json({ id: '1', ...body }, 201)
-})
+// Mount users routes (CRUD implemented)
+app.route('/api/users', usersRoutes)
 
-// Task routes placeholder
-app.get('/api/tasks', (c) => c.json([]))
-app.post('/api/tasks', async (c) => {
-  const body = await c.req.json()
-  return c.json({ id: '1', ...body }, 201)
-})
+// Mount teams routes (CRUD implemented)
+app.route('/api/teams', teamsRoutes)
+
+// Mount epics routes (CRUD implemented)
+app.route('/api/epics', epicsRoutes)
+
+// Mount tasks routes (CRUD implemented)
+app.route('/api/tasks', tasksRoutes)
+
+// Mount comments routes
+app.route('/api', commentsRoutes)
+
+// Mount attachments routes
+app.route('/api', attachmentsRoutes)
+
+// Mount webhooks routes
+app.route('/api/webhooks', webhooksRoutes)
+
+// Mount GitHub integration routes
+app.route('/api/github', githubRoutes)
+
+// Mount search routes
+app.route('/api', searchRoutes)
+
+// Mount admin routes
+app.route('/api/admin', adminRoutes)
 
 const PORT = parseInt(process.env.PORT || '3000')
 console.log(`Starting server on port ${PORT}`)

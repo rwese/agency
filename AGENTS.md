@@ -166,7 +166,7 @@ All config files include `$schema` directives for IDE validation and autocomplet
 ### config.yaml
 
 ```yaml
-$schema: https://raw.githubusercontent.com/rwese/agency/main/schemas/config.json
+$schema: https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/config.json
 project: api
 shell: bash
 template_url: https://github.com/rwese/agency-templates
@@ -176,7 +176,7 @@ audit_enabled: true  # Set to false to disable audit logging
 ### manager.yaml
 
 ```yaml
-$schema: https://raw.githubusercontent.com/rwese/agency/main/schemas/manager.json
+$schema: https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/manager.json
 name: coordinator
 personality: |
   You are the project coordinator.
@@ -193,7 +193,7 @@ auto_approve: false
 ### agents.yaml
 
 ```yaml
-$schema: https://raw.githubusercontent.com/rwese/agency/main/schemas/agents.json
+$schema: https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/agents.json
 agents:
   - name: coder
     config: agents/coder.yaml
@@ -204,7 +204,7 @@ agents:
 ### agents/<name>.yaml
 
 ```yaml
-$schema: https://raw.githubusercontent.com/rwese/agency/main/schemas/agent.json
+$schema: https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/agent.json
 name: coder
 personality: |
   You are the coder agent.

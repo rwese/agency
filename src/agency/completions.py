@@ -7,27 +7,42 @@ _agency_completions()
     _init_completion || return
 
     case "${words[1]}" in
-        init-project)
+        init)
             _filedir
             ;;
-        start)
-            COMPREPLY=($(compgen -W "coder tester developer backend frontend devops" -- "${cur}"))
-            _filedir
-            ;;
-        stop|resume|attach)
-            COMPREPLY=($(compgen -W "$(agency list 2>/dev/null | grep "^agency-" | sed 's/agency-//')" -- "${cur}"))
+        session)
+            case "${words[2]}" in
+                start)
+                    _filedir
+                    ;;
+                stop|kill)
+                    COMPREPLY=($(compgen -W "$(agency session list 2>/dev/null | grep "^agency-" | sed 's/agency-//')" -- "${cur}"))
+                    ;;
+                windows)
+                    case "${words[3]}" in
+                        send|run)
+                            ;;
+                        *)
+                            COMPREPLY=($(compgen -W "list send new run" -- "${cur}"))
+                            ;;
+                    esac
+                    ;;
+                *)
+                    COMPREPLY=($(compgen -W "start stop kill resume attach list members windows" -- "${cur}"))
+                    ;;
+            esac
             ;;
         tasks)
             case "${words[2]}" in
-                add|assign|complete|approve|reject|reopen|update|show|delete)
+                add|assign|complete|approve|reject|reopen|update|show|delete|depends)
                     ;;
                 *)
-                    COMPREPLY=($(compgen -W "list add show assign complete approve reject reopen update delete history" -- "${cur}"))
+                    COMPREPLY=($(compgen -W "list add show assign depends complete approve reject reopen update delete history" -- "${cur}"))
                     ;;
             esac
             ;;
         *)
-            COMPREPLY=($(compgen -W "init-project start stop resume attach list tasks completions" -- "${cur}"))
+            COMPREPLY=($(compgen -W "init session tasks heartbeat audit templates completions" -- "${cur}"))
             ;;
     esac
 }
@@ -39,14 +54,33 @@ ZSH_COMPLETION = """# zsh completion for agency
 _agency() {
     local -a commands
     commands=(
-        "init-project:Create a new project"
-        "start:Start an agent or manager"
-        "stop:Stop a session"
-        "resume:Resume a halted session"
-        "attach:Attach to a session"
-        "list:List sessions"
+        "init:Create a new project"
+        "session:Session management"
         "tasks:Task management"
+        "heartbeat:Heartbeat process management"
+        "audit:Audit trail management"
+        "templates:List available templates"
         "completions:Print shell completion"
+    )
+
+    local -a session_commands
+    session_commands=(
+        "start:Start the session"
+        "stop:Stop session gracefully"
+        "kill:Force kill session"
+        "resume:Resume halted session"
+        "attach:Attach to session"
+        "list:List sessions"
+        "members:Show session members"
+        "windows:Window operations"
+    )
+
+    local -a session_windows_commands
+    session_windows_commands=(
+        "list:List windows"
+        "send:Send keys to window"
+        "new:Create new window"
+        "run:Run command in window"
     )
 
     _arguments -C \\
@@ -59,14 +93,24 @@ _agency() {
             ;;
         args)
             case "$words[1]" in
-                init-project)
+                init)
                     _arguments '*:directory:_files -/'
                     ;;
-                start)
-                    _arguments '1:agent:((coder tester developer backend frontend))' '*:directory:_files -/'
-                    ;;
-                stop|resume|attach)
-                    _arguments '1:session:->session'
+                session)
+                    case "$words[2]" in
+                        windows)
+                            case "$words[3]" in
+                                send|run)
+                                    ;;
+                                *)
+                                    _describe 'window-command' session_windows_commands
+                                    ;;
+                            esac
+                            ;;
+                        *)
+                            _describe 'session-command' session_commands
+                            ;;
+                    esac
                     ;;
                 tasks)
                     local -a task_commands
@@ -75,6 +119,7 @@ _agency() {
                         "add:Add task"
                         "show:Show task"
                         "assign:Assign task"
+                        "depends:Manage dependencies"
                         "complete:Complete task"
                         "approve:Approve task"
                         "reject:Reject task"
@@ -94,20 +139,37 @@ compdef _agency agency
 """
 
 FISH_COMPLETION = """# fish completion for agency
-complete -c agency -n '__fish_use_subcommand' -a 'init-project' -d 'Create a new project'
-complete -c agency -n '__fish_use_subcommand' -a 'start' -d 'Start an agent or manager'
-complete -c agency -n '__fish_use_subcommand' -a 'stop' -d 'Stop a session'
-complete -c agency -n '__fish_use_subcommand' -a 'resume' -d 'Resume a halted session'
-complete -c agency -n '__fish_use_subcommand' -a 'attach' -d 'Attach to a session'
-complete -c agency -n '__fish_use_subcommand' -a 'list' -d 'List sessions'
+# Main commands
+complete -c agency -n '__fish_use_subcommand' -a 'init' -d 'Create a new project'
+complete -c agency -n '__fish_use_subcommand' -a 'session' -d 'Session management'
 complete -c agency -n '__fish_use_subcommand' -a 'tasks' -d 'Task management'
+complete -c agency -n '__fish_use_subcommand' -a 'heartbeat' -d 'Heartbeat process'
+complete -c agency -n '__fish_use_subcommand' -a 'audit' -d 'Audit trail'
+complete -c agency -n '__fish_use_subcommand' -a 'templates' -d 'List templates'
 complete -c agency -n '__fish_use_subcommand' -a 'completions' -d 'Print completion'
+
+# Session subcommands
+complete -c agency -n '__fish_seen_subcommand_from session' -a 'start' -d 'Start session'
+complete -c agency -n '__fish_seen_subcommand_from session' -a 'stop' -d 'Stop session'
+complete -c agency -n '__fish_seen_subcommand_from session' -a 'kill' -d 'Kill session'
+complete -c agency -n '__fish_seen_subcommand_from session' -a 'resume' -d 'Resume session'
+complete -c agency -n '__fish_seen_subcommand_from session' -a 'attach' -d 'Attach to session'
+complete -c agency -n '__fish_seen_subcommand_from session' -a 'list' -d 'List sessions'
+complete -c agency -n '__fish_seen_subcommand_from session' -a 'members' -d 'Show members'
+complete -c agency -n '__fish_seen_subcommand_from session' -a 'windows' -d 'Window operations'
+
+# Session windows subcommands
+complete -c agency -n '__fish_seen_subcommand_from session; and __fish_seen_subcommand_from windows' -a 'list' -d 'List windows'
+complete -c agency -n '__fish_seen_subcommand_from session; and __fish_seen_subcommand_from windows' -a 'send' -d 'Send keys'
+complete -c agency -n '__fish_seen_subcommand_from session; and __fish_seen_subcommand_from windows' -a 'new' -d 'New window'
+complete -c agency -n '__fish_seen_subcommand_from session; and __fish_seen_subcommand_from windows' -a 'run' -d 'Run command'
 
 # Tasks subcommands
 complete -c agency -n '__fish_seen_subcommand_from tasks' -a 'list' -d 'List tasks'
 complete -c agency -n '__fish_seen_subcommand_from tasks' -a 'add' -d 'Add task'
 complete -c agency -n '__fish_seen_subcommand_from tasks' -a 'show' -d 'Show task'
 complete -c agency -n '__fish_seen_subcommand_from tasks' -a 'assign' -d 'Assign task'
+complete -c agency -n '__fish_seen_subcommand_from tasks' -a 'depends' -d 'Manage dependencies'
 complete -c agency -n '__fish_seen_subcommand_from tasks' -a 'complete' -d 'Complete task'
 complete -c agency -n '__fish_seen_subcommand_from tasks' -a 'approve' -d 'Approve task'
 complete -c agency -n '__fish_seen_subcommand_from tasks' -a 'reject' -d 'Reject task'

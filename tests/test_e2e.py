@@ -28,7 +28,8 @@ class TestCompletions:
         result = run_agency(["completions", "bash"], check=False)
         assert result.returncode == 0
         assert "_agency_completions" in result.stdout
-        assert "init-project" in result.stdout
+        assert "init)" in result.stdout
+        assert "session" in result.stdout
         assert "tasks" in result.stdout
 
     def test_zsh_completion(self):
@@ -36,7 +37,8 @@ class TestCompletions:
         result = run_agency(["completions", "zsh"], check=False)
         assert result.returncode == 0
         assert "_agency" in result.stdout
-        assert "init-project" in result.stdout
+        assert '"init:Create' in result.stdout
+        assert '"session:Session' in result.stdout
 
     def test_fish_completion(self):
         """Test fish completion script."""

@@ -84,12 +84,17 @@ class TaskStore:
         (agency_dir / PENDING_DIR).mkdir(exist_ok=True)
 
     def _get_audit_store(self):
-        """Get audit store lazily."""
+        """Get audit store lazily if audit is enabled in config."""
         if self._audit_store is None:
             try:
                 from agency.audit import AuditStore
+                from agency.config import load_agency_config
 
-                self._audit_store = AuditStore(self.agency_dir)
+                config = load_agency_config(self.agency_dir)
+                if config.audit_enabled:
+                    self._audit_store = AuditStore(self.agency_dir)
+                else:
+                    self._audit_store = False
             except Exception:
                 self._audit_store = False  # Mark as unavailable
         return self._audit_store if self._audit_store else None

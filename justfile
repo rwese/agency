@@ -2,13 +2,16 @@
 
 default: help
 
-# Install
+# Install tool (updates global `agency` command)
 install:
-    uv pip install -e .
+    uv tool uninstall agency 2>/dev/null; uv tool install -e .
 
 # Install with dev dependencies
 install-dev:
-    uv pip install -e ".[dev]"
+    uv tool uninstall agency 2>/dev/null; uv tool install -e ".[dev]"
+
+# Install tool + dev + completions
+install-all: install-dev completions
 
 # Test
 test:
@@ -43,39 +46,43 @@ reset:
 
 # Create new project
 init-project dir:
-    agency init-project --dir {{dir}}
+    agency init --dir {{dir}}
 
-# Create project with manager
-init-project-with-manager dir manager:
-    agency init-project --dir {{dir}} --start-manager {{manager}}
-
-# Start agent
-start name dir:
-    agency start {{name}} --dir {{dir}}
-
-# Start manager
-start-manager name dir:
-    agency start {{name}} --dir {{dir}}
+# Start session
+session-start:
+    agency session start
 
 # Stop session
-stop session:
-    agency stop {{session}}
+session-stop session:
+    agency session stop {{session}}
 
 # Resume session
-resume session:
-    agency resume {{session}}
+session-resume:
+    agency session resume
 
 # Attach to session
-attach session:
-    agency attach {{session}}
+session-attach:
+    agency session attach
 
 # List sessions
-list:
-    agency list
+session-list:
+    agency session list
 
-# Kill all sessions
-kill-all:
-    agency kill-all
+# Show session members
+session-members:
+    agency session members
+
+# Kill session
+session-kill session:
+    agency session kill {{session}}
+
+# List windows
+windows-list:
+    agency session windows list
+
+# Create window
+windows-new name:
+    agency session windows new {{name}}
 
 # === Heartbeat Management ===
 
@@ -165,14 +172,9 @@ pi-status-health:
 # === Development ===
 
 # Test with mock agent
-test-mock name dir:
+test-mock dir:
     AGENCY_AGENT_CMD="python3 src/agency/mock_agent.py" \
-    uv run agency start {{name}} --dir {{dir}}
-
-# Test mock manager
-test-mock-manager name dir:
-    AGENCY_AGENT_CMD="python3 src/agency/mock_agent.py" \
-    uv run agency start {{name}} --dir {{dir}}
+    agency session start --dir {{dir}}
 
 # === Shell Completions ===
 
@@ -197,24 +199,25 @@ help:
     @echo "Agency v2.0 - Just recipes"
     @echo ""
     @echo "=== Installation ==="
-    @echo "  install          Install package"
+    @echo "  install          Install tool (updates global agency)"
     @echo "  install-dev      Install with dev dependencies"
     @echo "  check            Lint + format + test"
     @echo ""
     @echo "=== Session Management ==="
-    @echo "  init-project <dir>                    Create project"
-    @echo "  init-project-with-manager <dir> <mgr> Create with manager"
-    @echo "  start <name> <dir>                   Start agent"
-    @echo "  start-manager <name> <dir>           Start manager"
-    @echo "  stop <session>                       Stop session"
-    @echo "  resume <session>                     Resume halted session"
-    @echo "  attach <session>                     Attach to session"
-    @echo "  list                                  List sessions"
+    @echo "  init-project <dir>     Create project"
+    @echo "  session-start         Start session"
+    @echo "  session-stop <sess>    Stop session"
+    @echo "  session-resume        Resume halted session"
+    @echo "  session-attach       Attach to session"
+    @echo "  session-list          List sessions"
+    @echo "  session-members       Show session members"
+    @echo "  session-kill <sess>   Kill session"
+    @echo "  windows-list          List windows"
+    @echo "  windows-new <name>    Create window"
     @echo ""
     @echo "=== Heartbeat Management ==="
-    @echo "  heartbeat-start                     Start all heartbeats"
     @echo "  heartbeat-start-manager             Start manager heartbeat"
-    @echo "  heartbeat-start-agents              Start all agent heartbeats"
+    @echo "  heartbeat-start                     Start all heartbeats"
     @echo "  heartbeat-stop                      Stop all heartbeats"
     @echo "  heartbeat-status                    Show status"
     @echo "  heartbeat-logs                      Show manager logs"
@@ -233,11 +236,9 @@ help:
     @echo "  pi-no-frills-link                    Link no-frills"
     @echo ""
     @echo "=== Development ==="
-    @echo "  test-mock <name> <dir>               Test with mock agent"
-    @echo "  test-mock-manager <name> <dir>        Test with mock manager"
+    @echo "  test-mock <dir>                      Test with mock agent"
     @echo "  completions                           Install shell completions"
     @echo ""
     @echo "=== Utilities ==="
     @echo "  clean                                 Clean artifacts"
     @echo "  reset                                Reset config + cache"
-    @echo "  kill-all                             Kill all sessions"

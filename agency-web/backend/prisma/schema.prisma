@@ -7,59 +7,239 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String
-  password  String
-  role      String   @default("member")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  teams     TeamMember[]
+// Enums
+enum UserRole {
+  admin
+  member
+  viewer
+  automation
 }
 
+enum EntityStatus {
+  open
+  in_progress
+  review
+  blocked
+  done
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+  critical
+}
+
+enum GitHubRefType {
+  commit
+  pull_request
+  issue
+}
+
+// Users table
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String?  @map("password_hash")
+  role         UserRole @default(member)
+  apiKeyHash   String?  @map("api_key_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  teams           UserTeam[]
+  createdEpics    Epic[]        @relation("EpicCreator")
+  assignedTasks   Task[]        @relation("TaskAssignee")
+  createdTasks    Task[]        @relation("TaskCreator")
+  comments        Comment[]
+  uploadedAttachments Attachment[] @relation("AttachmentUploader")
+  createdWebhooks Webhook[]
+  activityLogs    ActivityLog[]
+
+  @@index([username])
+  @@index([apiKeyHash], name: "idx_users_api_key_hash")
+  @@map("users")
+}
+
+// Teams table
 model Team {
   id          String   @id @default(cuid())
-  name        String
+  name        String   @unique
   description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  members    TeamMember[]
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  members UserTeam[]
+  epics   Epic[]
+
+  @@index([name])
+  @@map("teams")
 }
 
-model TeamMember {
-  id      String @id @default(cuid())
-  teamId  String
-  userId  String
-  role    String @default("member")
-  team    Team   @relation(fields: [teamId], references: [id])
-  user    User   @relation(fields: [userId], references: [id])
-  @@unique([teamId, userId])
+// User-Team membership junction table
+model UserTeam {
+  userId    String   @map("user_id")
+  teamId    String   @map("team_id")
+  joinedAt  DateTime @default(now()) @map("joined_at")
+  role      String   @default("member")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@id([userId, teamId])
+  @@map("user_teams")
 }
 
+// Epics table
 model Epic {
-  id          String   @id @default(cuid())
+  id          String       @id @default(cuid())
   title       String
   description String?
-  status      String   @default("active")
-  priority    String   @default("medium")
-  teamId      String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  tasks       Task[]
+  status      EntityStatus @default(open)
+  tags        String?      // JSON array stored as text
+  teamId      String       @map("team_id")
+  createdById String       @map("created_by")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  team     Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy User @relation("EpicCreator", fields: [createdById], references: [id])
+  tasks    Task[]
+
+  @@index([status])
+  @@index([teamId])
+  @@index([createdById])
+  @@map("epics")
 }
 
+// Tasks table
 model Task {
-  id          String   @id @default(cuid())
+  id          String       @id @default(cuid())
   title       String
   description String?
-  status      String   @default("todo")
-  priority    String   @default("medium")
-  epicId      String?
-  assigneeId  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  completedAt DateTime?
-  epic        Epic?    @relation(fields: [epicId], references: [id])
+  status      EntityStatus @default(open)
+  priority    TaskPriority @default(medium)
+  tags        String?      // JSON array stored as text
+  externalId  String?      @map("external_id") // e.g., "github:owner/repo#123"
+  epicId      String       @map("epic_id")
+  assigneeId  String?      @map("assignee_id")
+  createdById String       @map("created_by")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  completedAt DateTime?    @map("completed_at")
+
+  // Relations
+  epic        Epic         @relation(fields: [epicId], references: [id], onDelete: Cascade)
+  assignee    User?        @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdBy   User         @relation("TaskCreator", fields: [createdById], references: [id])
   comments    Comment[]
+  attachments Attachment[]
+  githubRefs  GitHubRef[]
+
+  @@index([status])
+  @@index([priority])
+  @@index([epicId])
+  @@index([assigneeId])
+  @@index([createdById])
+  @@index([externalId])
+  @@map("tasks")
+}
+
+// Comments table
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  taskId    String   @map("task_id")
+  authorId  String?  @map("author_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  task   Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([taskId])
+  @@index([authorId])
+  @@map("comments")
+}
+
+// Attachments table
+model Attachment {
+  id           String   @id @default(cuid())
+  filename     String
+  contentType  String   @map("content_type")
+  sizeBytes    Int      @map("size_bytes")
+  storagePath  String   @unique @map("storage_path")
+  checksum     String?
+  taskId       String   @map("task_id")
+  uploadedById String?  @map("uploaded_by")
+  uploadedAt   DateTime @default(now()) @map("uploaded_at")
+
+  // Relations
+  task      Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploadedBy User? @relation("AttachmentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([taskId])
+  @@index([storagePath])
+  @@map("attachments")
+}
+
+// GitHub References table
+model GitHubRef {
+  id        String        @id @default(cuid())
+  refType   GitHubRefType @map("ref_type")
+  refId     String        @map("ref_id")
+  url       String
+  taskId    String        @map("task_id")
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, refType, refId])
+  @@index([taskId])
+  @@index([refId])
+  @@map("github_refs")
+}
+
+// Webhooks table
+model Webhook {
+  id        String   @id @default(cuid())
+  name      String
+  url       String
+  events    String   // JSON array of event types
+  secret    String
+  active    Boolean  @default(true)
+  createdById String @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  createdBy User @relation(fields: [createdById], references: [id])
+
+  @@index([active])
+  @@map("webhooks")
+}
+
+// Activity Logs table
+model ActivityLog {
+  id         String   @id @default(cuid())
+  action     String
+  entityType String   @map("entity_type") // epic, task, comment, attachment
+  entityId   String   @map("entity_id")
+  actorId    String?  @map("actor_id")
+  payload    String?  // JSON with before/after values
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("activity_logs")
 }

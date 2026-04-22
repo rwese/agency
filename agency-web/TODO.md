@@ -1,34 +1,34 @@
 # agency-web Implementation
 
-## Status: In Progress
+## Status: Phase 3 Complete, Phase 4 In Progress
 
 ## Tasks
 
-### Phase 1: Infrastructure
+### Phase 1: Infrastructure ✅
 - [x] 1.1 Backend project scaffolding (Hono, Prisma, TypeScript)
 - [x] 1.2 Frontend project scaffolding (React, Vite, Tailwind)
 - [x] 1.3 Docker Compose setup (backend, frontend, postgres)
 - [x] 1.4 CI/CD pipeline (GitHub Actions)
 
-### Phase 2: Backend Core
-- [ ] 2.1 Prisma schema from DATA_MODEL.md
-- [ ] 2.2 Database migrations
-- [ ] 2.3 Auth endpoints (login, logout, API keys)
-- [ ] 2.4 User management endpoints
-- [ ] 2.5 Team management endpoints
+### Phase 2: Backend Core ✅
+- [x] 2.1 Prisma schema from DATA_MODEL.md
+- [x] 2.2 Database migrations
+- [x] 2.3 Auth endpoints (login, logout, register)
+- [x] 2.4 User management endpoints
+- [x] 2.5 Team management endpoints
 
-### Phase 3: Backend Features
-- [ ] 3.1 Epic CRUD endpoints
-- [ ] 3.2 Task CRUD endpoints
-- [ ] 3.3 Comment endpoints
-- [ ] 3.4 Attachment upload/download
-- [ ] 3.5 Webhook system
-- [ ] 3.6 GitHub webhook receiver
-- [ ] 3.7 Full-text search
-- [ ] 3.8 Admin metrics & activity logs
+### Phase 3: Backend Features ✅
+- [x] 3.1 Epic CRUD endpoints
+- [x] 3.2 Task CRUD endpoints
+- [x] 3.3 Comment endpoints
+- [x] 3.4 Attachment upload/download
+- [x] 3.5 Webhook system
+- [x] 3.6 GitHub webhook receiver
+- [x] 3.7 Full-text search
+- [x] 3.8 Admin metrics & activity logs
 
-### Phase 4: Frontend Core
-- [ ] 4.1 Layout shell (sidebar, navigation)
+### Phase 4: Frontend Core ✅ (partial)
+- [x] 4.1 Layout shell (sidebar, navigation)
 - [ ] 4.2 Auth pages (login, register)
 - [ ] 4.3 Dashboard with widgets
 - [ ] 4.4 Epics list & detail pages

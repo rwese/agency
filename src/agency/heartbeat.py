@@ -24,13 +24,18 @@ _audit_store = None
 
 
 def _get_audit_store(agency_dir: Path):
-    """Get audit store lazily."""
+    """Get audit store lazily if audit is enabled in config."""
     global _audit_store
     if _audit_store is None:
         try:
             from agency.audit import AuditStore
+            from agency.config import load_agency_config
 
-            _audit_store = AuditStore(agency_dir)
+            config = load_agency_config(agency_dir)
+            if config.audit_enabled:
+                _audit_store = AuditStore(agency_dir)
+            else:
+                _audit_store = False
         except Exception:
             _audit_store = False
     return _audit_store if _audit_store else None

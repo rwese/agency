@@ -197,7 +197,7 @@ def save_agency_config(agency_dir: Path, config: AgencyConfig) -> None:
     config_path = agency_dir / "config.yaml"
 
     data = {
-        "$schema": "https://raw.githubusercontent.com/rwese/agency/main/schemas/config.json",
+        "$schema": "https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/config.json",
         "project": config.project,
         "shell": config.shell,
         "template_url": config.template_url,
@@ -219,7 +219,7 @@ def save_manager_config(agency_dir: Path, config: ManagerConfig) -> None:
     with open(config_path, "w") as f:
         yaml.dump(
             {
-                "$schema": "https://raw.githubusercontent.com/rwese/agency/main/schemas/manager.json",
+                "$schema": "https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/manager.json",
                 "name": config.name,
                 "personality": config.personality,
                 "poll_interval": config.poll_interval,
@@ -253,7 +253,7 @@ def save_agents_config(agency_dir: Path, agents: list[AgentConfig]) -> None:
         with open(agent_config_path, "w") as f:
             yaml.dump(
                 {
-                    "$schema": "https://raw.githubusercontent.com/rwese/agency/main/schemas/agent.json",
+                    "$schema": "https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/agent.json",
                     "name": agent.name,
                     "personality": agent.personality,
                 },
@@ -264,7 +264,7 @@ def save_agents_config(agency_dir: Path, agents: list[AgentConfig]) -> None:
     with open(agents_path, "w") as f:
         yaml.dump(
             {
-                "$schema": "https://raw.githubusercontent.com/rwese/agency/main/schemas/agents.json",
+                "$schema": "https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/agents.json",
                 "agents": agents_list,
             },
             f,

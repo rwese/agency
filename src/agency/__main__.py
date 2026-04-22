@@ -517,7 +517,7 @@ def _create_default_agency_structure(agency_dir: Path, additional_context_files:
             files_yaml = "\n".join(f"  - {f}" for f in additional_context_files)
             context_section = f"\nadditional_context_files:\n{files_yaml}"
         config_path.write_text(
-            f"""$schema: https://raw.githubusercontent.com/rwese/agency/main/schemas/config.json
+            f"""$schema: https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/config.json
 project: default
 shell: bash
 parallel_limit: {DEFAULT_PARALLEL_LIMIT}  # Max parallel tasks across all agents
@@ -528,7 +528,7 @@ parallel_limit: {DEFAULT_PARALLEL_LIMIT}  # Max parallel tasks across all agents
     agents_path = agency_dir / "agents.yaml"
     if not agents_path.exists():
         agents_path.write_text(
-            """$schema: https://raw.githubusercontent.com/rwese/agency/main/schemas/agents.json
+            """$schema: https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/agents.json
 agents: []
 """
         )
@@ -536,7 +536,7 @@ agents: []
     manager_path = agency_dir / "manager.yaml"
     if not manager_path.exists():
         manager_path.write_text(
-            """$schema: https://raw.githubusercontent.com/rwese/agency/main/schemas/manager.json
+            """$schema: https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/manager.json
 name: coordinator
 personality: |
   You are the project coordinator.
