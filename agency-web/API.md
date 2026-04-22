@@ -1,6 +1,6 @@
 # agency-web API Specification
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Date:** 2026-04-22  
 **Status:** Draft  
 
@@ -63,7 +63,7 @@ Login with credentials.
 {
   "data": {
     "user": { "id": "uuid", "username": "alice", "role": "member" },
-    "token": "session_token_here"
+    "token": "jwt_token_here"
   }
 }
 ```
@@ -91,6 +91,7 @@ Get current authenticated user.
     "username": "alice",
     "email": "alice@example.com",
     "role": "member",
+    "teams": [{ "id": "uuid", "name": "Backend" }],
     "created_at": "2026-01-15T10:30:00Z"
   }
 }
@@ -105,7 +106,8 @@ Generate API key for automation user. (Admin only)
 ```json
 {
   "username": "ci-bot",
-  "name": "GitHub Actions Bot"
+  "name": "GitHub Actions Bot",
+  "team_ids": ["uuid"]
 }
 ```
 
@@ -124,6 +126,110 @@ Generate API key for automation user. (Admin only)
 
 ---
 
+### Teams
+
+#### GET /teams
+List teams current user belongs to.
+
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "name": "Backend",
+      "description": "Backend team",
+      "member_count": 4
+    }
+  ],
+  "meta": { "page": 1, "per_page": 20, "total": 2 }
+}
+```
+
+---
+
+#### POST /teams
+Create new team. (Admin only)
+
+**Request:**
+```json
+{
+  "name": "Frontend",
+  "description": "Frontend development team"
+}
+```
+
+**Response (201):** Created team object.
+
+---
+
+#### GET /teams/{id}
+Get team details with members.
+
+**Response (200):**
+```json
+{
+  "data": {
+    "id": "uuid",
+    "name": "Backend",
+    "description": "...",
+    "members": [
+      { "id": "uuid", "username": "alice", "role": "member" },
+      { "id": "uuid", "username": "bob", "role": "member" }
+    ],
+    "created_at": "2026-04-01T10:00:00Z"
+  }
+}
+```
+
+---
+
+#### PUT /teams/{id}
+Update team.
+
+**Request:**
+```json
+{
+  "name": "Backend Team",
+  "description": "Updated description"
+}
+```
+
+**Response (200):** Updated team object.
+
+---
+
+#### DELETE /teams/{id}
+Delete team. (Admin only)
+
+**Response (204):** No content.
+
+---
+
+#### POST /teams/{id}/members
+Add member to team.
+
+**Request:**
+```json
+{
+  "user_id": "uuid"
+}
+```
+
+**Response (201):**
+```json
+{ "data": { "success": true } }
+```
+
+---
+
+#### DELETE /teams/{id}/members/{user_id}
+Remove member from team.
+
+**Response (204):** No content.
+
+---
+
 ### Users
 
 #### GET /users
@@ -135,13 +241,14 @@ List all users. (Admin only)
 | page | int | 1 | Page number |
 | per_page | int | 20 | Items per page |
 | role | string | - | Filter by role |
+| team_id | uuid | - | Filter by team |
 
 **Response (200):**
 ```json
 {
   "data": [
-    { "id": "uuid", "username": "alice", "email": "...", "role": "member" },
-    { "id": "uuid", "username": "bob", "email": "...", "role": "viewer" }
+    { "id": "uuid", "username": "alice", "email": "...", "role": "member", "teams": ["Backend"] },
+    { "id": "uuid", "username": "bob", "email": "...", "role": "viewer", "teams": ["Frontend"] }
   ],
   "meta": { "page": 1, "per_page": 20, "total": 2 }
 }
@@ -158,7 +265,8 @@ Create new user. (Admin only)
   "username": "carol",
   "email": "carol@example.com",
   "password": "secure_password",
-  "role": "member"
+  "role": "member",
+  "team_ids": ["uuid"]
 }
 ```
 
@@ -170,6 +278,7 @@ Create new user. (Admin only)
     "username": "carol",
     "email": "carol@example.com",
     "role": "member",
+    "teams": ["Backend"],
     "created_at": "2026-04-22T12:00:00Z"
   }
 }
@@ -188,6 +297,7 @@ Get user by ID.
     "username": "alice",
     "email": "alice@example.com",
     "role": "member",
+    "teams": [{ "id": "uuid", "name": "Backend" }],
     "created_at": "2026-01-15T10:30:00Z"
   }
 }
@@ -202,7 +312,8 @@ Update user. (Admin only, or self for limited fields)
 ```json
 {
   "email": "newemail@example.com",
-  "role": "admin"
+  "role": "admin",
+  "team_ids": ["uuid1", "uuid2"]
 }
 ```
 
@@ -220,7 +331,7 @@ Delete user. (Admin only)
 ### Epics
 
 #### GET /epics
-List all epics.
+List all epics (team-scoped for current user).
 
 **Query Parameters:**
 | Param | Type | Default | Description |
@@ -228,6 +339,8 @@ List all epics.
 | page | int | 1 | Page number |
 | per_page | int | 20 | Items per page |
 | status | string | - | Filter: open, in_progress, review, blocked, done |
+| team_id | uuid | - | Filter by team |
+| tag | string | - | Filter by tag |
 | created_by | uuid | - | Filter by creator |
 
 **Response (200):**
@@ -239,6 +352,8 @@ List all epics.
       "title": "User Authentication",
       "description": "Implement login system",
       "status": "in_progress",
+      "tags": ["security", "auth"],
+      "team": { "id": "uuid", "name": "Backend" },
       "task_count": 5,
       "completed_task_count": 2,
       "created_at": "2026-01-20T09:00:00Z",
@@ -260,11 +375,27 @@ Create new epic.
 {
   "title": "User Authentication",
   "description": "Implement login and session management",
-  "status": "open"
+  "status": "open",
+  "tags": ["security"],
+  "team_id": "uuid"
 }
 ```
 
 **Response (201):** Created epic object.
+
+---
+
+#### GET /epics/search?q=
+Full-text search across epics.
+
+**Query Parameters:**
+| Param | Type | Description |
+|-------|------|-------------|
+| q | string | Search query |
+| page | int | Page number |
+| per_page | int | Items per page |
+
+**Response (200):** List of matching epics with relevance score.
 
 ---
 
@@ -279,6 +410,8 @@ Get epic with tasks.
     "title": "User Authentication",
     "description": "...",
     "status": "in_progress",
+    "tags": ["security"],
+    "team": { "id": "uuid", "name": "Backend" },
     "created_at": "...",
     "updated_at": "...",
     "created_by": { "id": "uuid", "username": "alice" },
@@ -288,6 +421,7 @@ Get epic with tasks.
         "title": "Design login form",
         "status": "done",
         "priority": "high",
+        "tags": ["ui"],
         "assignee": { "id": "uuid", "username": "bob" }
       }
     ]
@@ -304,7 +438,8 @@ Update epic.
 ```json
 {
   "title": "Updated Title",
-  "status": "done"
+  "status": "done",
+  "tags": ["security", "done"]
 }
 ```
 
@@ -322,7 +457,7 @@ Delete epic. Also deletes all child tasks. (Admin only)
 ### Tasks
 
 #### GET /tasks
-List all tasks.
+List all tasks (with filters).
 
 **Query Parameters:**
 | Param | Type | Default | Description |
@@ -332,7 +467,10 @@ List all tasks.
 | status | string | - | Filter by status |
 | priority | string | - | Filter: low, medium, high, critical |
 | epic_id | uuid | - | Filter by epic |
+| team_id | uuid | - | Filter by team |
 | assignee_id | uuid | - | Filter by assignee |
+| tag | string | - | Filter by tag |
+| external_id | string | - | Filter by GitHub reference |
 | created_by | uuid | - | Filter by creator |
 
 **Response (200):**
@@ -345,13 +483,17 @@ List all tasks.
       "description": "...",
       "status": "in_progress",
       "priority": "high",
+      "tags": ["ui", "auth"],
+      "external_id": "github:owner/repo#123",
       "created_at": "...",
       "updated_at": "...",
       "epic": { "id": "uuid", "title": "User Authentication" },
+      "team": { "id": "uuid", "name": "Backend" },
       "assignee": { "id": "uuid", "username": "bob" },
       "created_by": { "id": "uuid", "username": "alice" },
       "attachment_count": 2,
-      "comment_count": 5
+      "comment_count": 5,
+      "github_ref_count": 1
     }
   ],
   "meta": { "page": 1, "per_page": 20, "total": 50 }
@@ -370,6 +512,8 @@ Create new task.
   "description": "Create HTML form with email/password fields",
   "status": "open",
   "priority": "high",
+  "tags": ["ui"],
+  "external_id": "github:owner/repo#123",
   "epic_id": "uuid",
   "assignee_id": "uuid"
 }
@@ -379,8 +523,22 @@ Create new task.
 
 ---
 
+#### GET /tasks/search?q=
+Full-text search across tasks.
+
+**Query Parameters:**
+| Param | Type | Description |
+|-------|------|-------------|
+| q | string | Search query |
+| page | int | Page number |
+| per_page | int | Items per page |
+
+**Response (200):** List of matching tasks with relevance score.
+
+---
+
 #### GET /tasks/{id}
-Get task with comments and attachments.
+Get task with comments, attachments, and GitHub refs.
 
 **Response (200):**
 ```json
@@ -391,26 +549,23 @@ Get task with comments and attachments.
     "description": "...",
     "status": "in_progress",
     "priority": "high",
+    "tags": ["ui"],
+    "external_id": "github:owner/repo#123",
     "created_at": "...",
     "updated_at": "...",
     "epic": { "id": "uuid", "title": "User Authentication" },
+    "team": { "id": "uuid", "name": "Backend" },
     "assignee": { "id": "uuid", "username": "bob" },
     "created_by": { "id": "uuid", "username": "alice" },
-    "comments": [
+    "comments": [...],
+    "attachments": [...],
+    "github_refs": [
       {
         "id": "uuid",
-        "content": "Started working on this",
-        "created_at": "...",
-        "author": { "id": "uuid", "username": "bob" }
-      }
-    ],
-    "attachments": [
-      {
-        "id": "uuid",
-        "filename": "mockup.png",
-        "content_type": "image/png",
-        "size_bytes": 45000,
-        "uploaded_at": "..."
+        "ref_type": "pull_request",
+        "ref_id": "PR #456",
+        "url": "https://github.com/owner/repo/pull/456",
+        "created_at": "..."
       }
     ]
   }
@@ -426,7 +581,8 @@ Update task.
 ```json
 {
   "status": "done",
-  "assignee_id": "uuid"
+  "assignee_id": "uuid",
+  "tags": ["ui", "done"]
 }
 ```
 
@@ -436,6 +592,91 @@ Update task.
 
 #### DELETE /tasks/{id}
 Delete task and its comments/attachments. (Admin or creator)
+
+**Response (204):** No content.
+
+---
+
+### GitHub Integration
+
+#### GET /tasks/{id}/github-refs
+List GitHub references for a task.
+
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "ref_type": "commit",
+      "ref_id": "abc123def",
+      "url": "https://github.com/owner/repo/commit/abc123def",
+      "created_at": "2026-04-22T12:00:00Z"
+    },
+    {
+      "id": "uuid",
+      "ref_type": "pull_request",
+      "ref_id": "PR #456",
+      "url": "https://github.com/owner/repo/pull/456",
+      "created_at": "2026-04-22T12:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+#### POST /tasks/{id}/github-refs
+Add GitHub reference to task.
+
+**Request:**
+```json
+{
+  "ref_type": "pull_request",
+  "ref_id": "PR #456",
+  "url": "https://github.com/owner/repo/pull/456"
+}
+```
+
+**Response (201):** Created GitHub ref object.
+
+---
+
+#### POST /github/sync-issue
+Sync a GitHub issue (webhook receiver from GitHub).
+
+**Request:**
+```json
+{
+  "action": "opened",
+  "issue": {
+    "number": 123,
+    "title": "Bug: Login broken",
+    "body": "...",
+    "state": "open",
+    "html_url": "https://github.com/owner/repo/issues/123"
+  },
+  "repository": {
+    "full_name": "owner/repo"
+  }
+}
+```
+
+**Response (200):**
+```json
+{
+  "data": {
+    "task_id": "uuid",
+    "synced": true,
+    "action": "created"
+  }
+}
+```
+
+---
+
+#### DELETE /github-refs/{id}
+Remove GitHub reference.
 
 **Response (204):** No content.
 
@@ -460,6 +701,7 @@ List comments for a task.
       "id": "uuid",
       "content": "This looks good!",
       "created_at": "2026-04-22T10:00:00Z",
+      "updated_at": "2026-04-22T10:00:00Z",
       "author": { "id": "uuid", "username": "alice" }
     }
   ],
@@ -480,6 +722,20 @@ Add comment to task.
 ```
 
 **Response (201):** Created comment object.
+
+---
+
+#### PUT /comments/{id}
+Update comment. (Author only)
+
+**Request:**
+```json
+{
+  "content": "Updated content"
+}
+```
+
+**Response (200):** Updated comment object.
 
 ---
 
@@ -552,6 +808,165 @@ Delete attachment. (Admin, uploader, or task creator)
 
 ---
 
+### Webhooks
+
+#### GET /webhooks
+List webhooks. (Admin only)
+
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "name": "Slack Notifications",
+      "url": "https://hooks.slack.com/...",
+      "events": ["task.created", "task.status_changed", "comment.created"],
+      "active": true,
+      "created_at": "2026-04-01T10:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+#### POST /webhooks
+Create webhook.
+
+**Request:**
+```json
+{
+  "name": "Slack Notifications",
+  "url": "https://hooks.slack.com/...",
+  "events": ["task.created", "task.status_changed", "task.assigned", "comment.created"],
+  "secret": "webhook_secret_for_signing"
+}
+```
+
+**Response (201):** Created webhook object.
+
+---
+
+#### GET /webhooks/{id}
+Get webhook details.
+
+**Response (200):** Webhook object with stats.
+
+---
+
+#### PUT /webhooks/{id}
+Update webhook.
+
+**Request:**
+```json
+{
+  "url": "https://new-url.com/webhook",
+  "events": ["task.created", "epic.status_changed"],
+  "active": false
+}
+```
+
+**Response (200):** Updated webhook object.
+
+---
+
+#### DELETE /webhooks/{id}
+Delete webhook.
+
+**Response (204):** No content.
+
+---
+
+#### POST /webhooks/{id}/test
+Send test event.
+
+**Response (200):**
+```json
+{
+  "data": {
+    "success": true,
+    "status_code": 200,
+    "response_time_ms": 150
+  }
+}
+```
+
+---
+
+### Admin
+
+#### GET /admin/metrics
+Get usage metrics. (Admin only)
+
+**Response (200):**
+```json
+{
+  "data": {
+    "total_users": 10,
+    "total_teams": 3,
+    "total_epics": 25,
+    "total_tasks": 150,
+    "total_attachments": 500,
+    "active_users_7d": 8,
+    "tasks_created_7d": 12,
+    "tasks_completed_7d": 8
+  }
+}
+```
+
+---
+
+#### GET /admin/activity
+Get activity logs.
+
+**Query Parameters:**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| page | int | 1 | Page number |
+| per_page | int | 50 | Items per page |
+| entity_type | string | - | Filter: epic, task, comment, attachment |
+| actor_id | uuid | - | Filter by user |
+| action | string | - | Filter by action type |
+
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "action": "task.status_changed",
+      "entity_type": "task",
+      "entity_id": "uuid",
+      "actor": { "id": "uuid", "username": "alice" },
+      "payload": {
+        "before": { "status": "in_progress" },
+        "after": { "status": "done" }
+      },
+      "created_at": "2026-04-22T14:30:00Z"
+    }
+  ],
+  "meta": { "page": 1, "per_page": 50, "total": 1000 }
+}
+```
+
+---
+
+#### GET /health
+Health check endpoint.
+
+**Response (200):**
+```json
+{
+  "status": "healthy",
+  "version": "1.0.0",
+  "uptime_seconds": 86400,
+  "database": "connected"
+}
+```
+
+---
+
 ## Status Values
 
 ### Epic/Task Status
@@ -575,9 +990,16 @@ Delete attachment. (Admin, uploader, or task creator)
 | Value | Description |
 |-------|-------------|
 | `admin` | Full access |
-| `member` | Create/edit own items, view all |
+| `member` | Create/edit within team, view all accessible |
 | `viewer` | Read-only access |
 | `automation` | API-only, limited permissions |
+
+### GitHub Ref Types
+| Value | Description |
+|-------|-------------|
+| `commit` | Git commit reference |
+| `pull_request` | GitHub PR reference |
+| `issue` | GitHub issue reference |
 
 ---
 
@@ -592,3 +1014,22 @@ Delete attachment. (Admin, uploader, or task creator)
 | `CONFLICT` | 409 | Resource conflict (e.g., duplicate username) |
 | `PAYLOAD_TOO_LARGE` | 413 | Attachment too large |
 | `INTERNAL_ERROR` | 500 | Server error |
+
+---
+
+## Webhook Payload Format
+
+All webhook deliveries:
+```json
+{
+  "event": "task.created",
+  "timestamp": "2026-04-22T12:00:00Z",
+  "data": { ... },
+  "signature": "sha256=abc123..."
+}
+```
+
+Signature verification:
+```
+HMAC-SHA256(secret, payload) = signature
+```
