@@ -27,6 +27,28 @@ pending → in_progress → pending_approval → completed
                   failed (on reject)
 ```
 
+## Hire an Agency
+
+Use `agency hire` to generate project-specific agency configurations:
+
+```bash
+# Interactive interview
+agency hire --dir . --type api --language python
+
+# Preview configuration
+agency hire --preview
+
+# Non-interactive with options
+agency hire --type api --language go --team solo --non-interactive
+```
+
+This creates:
+- `.agency/config.yaml`
+- `.agency/manager.yaml` (with project-specific personality)
+- `.agency/agents.yaml`
+- `.agency/agents/coder.yaml`
+- `.agency/agents/tester.yaml` (if selected)
+
 ## File Structure
 
 ```

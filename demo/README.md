@@ -11,6 +11,18 @@ These projects serve as **evaluation benchmarks** to:
 3. **Measure agency effectiveness** - Track completion rates, review cycles, rejection rates
 4. **Benchmark different scenarios** - CLI tools, libraries, web services, data processing
 
+## Quick Start
+
+```bash
+# Hire an agency for a demo project
+cd demo/projects/01-markdown-to-html
+agency hire --dir . --type cli --language python --team solo
+
+# Start working
+agency session start
+agency session attach
+```
+
 ## Project Structure
 
 ```

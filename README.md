@@ -8,11 +8,11 @@ A tmux-based multi-agent orchestration tool for AI-driven development workflows.
 # Install
 uv pip install -e .
 
-# Create a project with a manager
-agency init-project --dir ~/projects/api --start-manager coordinator
+# Create a project (interactive or pre-configured)
+agency hire --dir ~/projects/api --type api --language python --team solo
 
-# Start agents
-agency start developer --dir ~/projects/api
+# Start the agency
+agency session start
 
 # Manage tasks
 agency tasks add -s "Implement auth" -d "Add user authentication with JWT tokens"
@@ -20,7 +20,7 @@ agency tasks assign swift-bear-a3f2 developer
 agency tasks list
 
 # Attach and work
-agency attach api
+agency session attach
 ```
 
 ## Architecture
@@ -54,6 +54,7 @@ uv run agency <command>
 
 | Command | Description |
 |---------|-------------|
+| `agency hire --dir <path>` | Hire agency (interactive interview) |
 | `agency init-project --dir <path>` | Create project + session + `.agency/` |
 | `agency start <name> --dir <path>` | Start agent or manager |
 | `agency stop <session>` | Shutdown gracefully |
@@ -99,6 +100,29 @@ pending → in_progress → pending_approval → completed
                      ↓
                   failed (on reject)
 ```
+
+## Hire an Agency
+
+Use `agency hire` to generate project-specific agency configurations through an interactive interview:
+
+```bash
+# Interactive interview
+agency hire --dir ~/projects/api
+
+# Pre-configured (non-interactive)
+agency hire --dir ~/projects/api --type api --language python --team solo
+
+# Preview before writing files
+agency hire --preview
+```
+
+The interview asks about:
+- Project type (API, CLI, Library, Web, Fullstack)
+- Language and framework
+- Team size (Solo, Pair, Team)
+- Agents needed (Coder, Tester, DevOps, Reviewer)
+- Testing approach (TDD, After, Optional)
+- CI/CD requirements
 
 ## Templates
 
