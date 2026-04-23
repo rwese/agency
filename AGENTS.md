@@ -154,3 +154,22 @@ See `docs/design/` for complete specification:
 - Commit with untested changes
 - Leave running tmux sessions
 - Store secrets in `.agency/`
+
+## Debugging
+
+### Heartbeat not starting
+
+If `agency session start` doesn't start heartbeat, check:
+1. Is `manager_heartbeat_v2` defined **before** `if __name__ == "__main__":`?
+2. Run heartbeat manually to see errors: `python3 heartbeat.py`
+3. Check for zombie heartbeats: `ps aux | grep heartbeat`
+
+### Test fixtures
+
+Test fixtures must use correct directory structure:
+- Tasks dir: `agency_dir / "var" / "tasks"`
+- Pending dir: `agency_dir / "var" / "pending"`
+- Tasks file: `agency_dir / "var" / "tasks.json"`
+- Audit file: `agency_dir / "var" / "audit.db"`
+
+Use `mkdir(parents=True)` to ensure parent directories exist.
