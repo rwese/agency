@@ -142,6 +142,7 @@ uv run ruff format src/
 See `docs/design/` for complete specification:
 - `v2.0-cli.md` - CLI reference
 - `v2.0-workflows.md` - Workflows
+- **`v2.0-requirements.md`** - **Operational rules (heartbeat, notifications, dos/don'ts, edge cases)**
 
 ## Boundaries
 
