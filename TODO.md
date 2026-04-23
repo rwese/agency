@@ -2,11 +2,10 @@
 
 ### In Progress
 
-- [ ] Fix generator `from_dict` return type
+- [ ] Replace config.py dataclasses with Pydantic
 
 ### Ready
 
-- [ ] Replace config.py dataclasses with Pydantic
 - [ ] Wire AuditEvent to Pydantic
 - [ ] Wire pi_inject dataclasses to Pydantic
 - [ ] Wire template_inject dataclasses to Pydantic
@@ -17,6 +16,7 @@
 ### Done
 
 - [x] Task model: Schema → Pydantic with validators
+- [x] Fix generator `from_dict` return type
 
 ### Blocked
 
