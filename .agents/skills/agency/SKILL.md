@@ -15,6 +15,7 @@ cd ~/Repos/github.com/rwese/agency && uv pip install -e .
 
 # 2. Install this skill for AI agents
 agency skill install ~/.pi/agent/skills/
+# Result: ~/.pi/agent/skills/agency/SKILL.md
 
 # 3. Verify
 agency --version

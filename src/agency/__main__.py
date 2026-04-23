@@ -2361,9 +2361,9 @@ def _get_skill_source_path(skill_name: str) -> Path | None:
 @click.argument("path", type=click.Path())
 @click.option("--force", is_flag=True, help="Overwrite if skill already exists")
 def skill_install(path, force):
-    """Install an agency skill to the specified path.
+    """Install the agency skill to the specified path.
 
-    Copies the skill to <path>/.agents/skills/<skill-name>/
+    Copies the skill to <path>/agency/
 
     Examples:
 
@@ -2375,17 +2375,16 @@ def skill_install(path, force):
     # Resolve the path
     target_path = resolve_path(path)
 
-    # Find the skill to install (agency by default)
-    skill_name = "agency"
-    skill_source = _get_skill_source_path(skill_name)
+    # Find the skill source
+    skill_source = _get_skill_source_path("agency")
 
     if not skill_source:
         click.echo("[ERROR] Agency skill not found in package", err=True)
         click.echo("[ERROR] Make sure you're running from the agency repository", err=True)
         sys.exit(1)
 
-    # Target: <path>/.agents/skills/<skill-name>/
-    target_skill_dir = target_path / ".agents" / "skills" / skill_name
+    # Target: <path>/agency/
+    target_skill_dir = target_path / "agency"
 
     if target_skill_dir.exists() and not force:
         click.echo(f"[ERROR] Skill already exists at {target_skill_dir}", err=True)
@@ -2405,7 +2404,7 @@ def skill_install(path, force):
                 shutil.rmtree(dest)
             shutil.copytree(item, dest)
 
-    click.echo(f"[INFO] Skill '{skill_name}' installed to {target_skill_dir}")
+    click.echo(f"[INFO] Skill installed to {target_skill_dir}")
 
 
 # Register commands based on AGENCY_ROLE
