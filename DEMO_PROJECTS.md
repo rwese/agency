@@ -32,7 +32,7 @@ Report format: Markdown file `TEST_REPORT.md` in project root.
 | 1 | Log Parser | CLI | Low | ✅ Complete |
 | 2 | URL Shortener | API | Medium | ✅ Complete |
 | 3 | Bookmarks Vault | Web | Medium | ✅ Complete |
-| 4 | Secret Scanner | CLI | Medium | ⬜ Not started |
+| 4 | Secret Scanner | CLI | Medium | ✅ Complete |
 
 ---
 
