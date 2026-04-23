@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 SCHEMA_DIR = Path(__file__).parent.parent / "src" / "agency" / "schemas"
-OUTPUT_DIR = Path(__file__).parent.parent / "src" / "agency" / "models"
+DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent / "src" / "agency" / "models"
 
 
 def load_schema(name: str) -> dict:
@@ -22,8 +22,41 @@ def load_schema(name: str) -> dict:
     return json.loads(path.read_text())
 
 
-def schema_to_pydantic(schema: dict, class_name: str) -> tuple[str, list[str]]:
+def resolve_ref(ref: str, schemas: dict[str, dict]) -> dict | None:
+    """Resolve a $ref to another schema.
+
+    Args:
+        ref: JSON reference string like "task.json" or "#/definitions/Task"
+        schemas: Dict of schema name to schema dict
+
+    Returns:
+        Resolved schema dict or None if not found
+    """
+    # Handle local file references like "task.json"
+    if ref.endswith(".json"):
+        schema_name = ref[:-5]  # Remove .json extension
+        return schemas.get(schema_name)
+
+    if ref.startswith("#/definitions/"):
+        def_name = ref[len("#/definitions/") :]
+        return schemas.get(def_name)
+    return None
+
+
+def _to_pascal_case(name: str) -> str:
+    """Convert snake_case to PascalCase."""
+    return "".join(word.capitalize() for word in name.split("_"))
+
+
+def schema_to_pydantic(
+    schema: dict, name: str, schemas: dict[str, dict] | None = None
+) -> tuple[str, list[str]]:
     """Convert a JSON schema to Pydantic model code.
+
+    Args:
+        schema: JSON schema dict
+        name: Name for the generated class (will be PascalCase'd)
+        schemas: Dict of all schemas for reference resolution (for allOf handling)
 
     Returns: (code, imports)
     """
@@ -39,12 +72,12 @@ def schema_to_pydantic(schema: dict, class_name: str) -> tuple[str, list[str]]:
     # Handle definitions in index schema
     if "definitions" in schema:
         for def_name, def_schema in schema["definitions"].items():
-            model_code, model_imports = _schema_to_model(def_name, def_schema)
+            model_code, model_imports = _schema_to_model(def_name, def_schema, schemas)
             lines.append(model_code)
             lines.append("")
             imports.update(model_imports)
     else:
-        model_code, model_imports = _schema_to_model(class_name, schema)
+        model_code, model_imports = _schema_to_model(name, schema, schemas)
         lines.append(model_code)
         imports.update(model_imports)
 
@@ -55,8 +88,16 @@ def schema_to_pydantic(schema: dict, class_name: str) -> tuple[str, list[str]]:
     return "\n".join(result), list(imports)
 
 
-def _schema_to_model(name: str, schema: dict) -> tuple[str, list[str]]:
-    """Convert a single schema to Pydantic model."""
+def _schema_to_model(
+    name: str, schema: dict, schemas: dict[str, dict] | None = None
+) -> tuple[str, list[str]]:
+    """Convert a single schema to Pydantic model.
+
+    Args:
+        name: Schema/file name or pre-computed class name
+        schema: JSON schema dict
+        schemas: Dict of all schemas for reference resolution
+    """
     lines = []
     imports = []
 
@@ -66,14 +107,38 @@ def _schema_to_model(name: str, schema: dict) -> tuple[str, list[str]]:
     if name.startswith("_") or name == "index":
         return "", imports
 
-    # Build class
+    # Build class - name is already in PascalCase if passed from main()
+    # but we still need to handle names from definitions
     class_name = _to_pascal_case(name)
     if description:
         lines.append(f'"""{description}"""')
     lines.append(f"class {class_name}(BaseModel):")
 
-    required = schema.get("required", [])
-    properties = schema.get("properties", {})
+    # Handle allOf composition - merge properties from all references
+    required_fields = set()
+    properties: dict = {}
+
+    if "allOf" in schema and schemas:
+        for sub_schema in schema["allOf"]:
+            if "$ref" in sub_schema:
+                # Resolve the reference
+                resolved = resolve_ref(sub_schema["$ref"], schemas)
+                if resolved:
+                    # Merge properties
+                    if "properties" in resolved:
+                        properties.update(resolved["properties"])
+                    # Merge required
+                    if "required" in resolved:
+                        required_fields.update(resolved["required"])
+            elif "properties" in sub_schema:
+                properties.update(sub_schema["properties"])
+                if "required" in sub_schema:
+                    required_fields.update(sub_schema["required"])
+    elif "properties" in schema:
+        properties = schema["properties"]
+        required_fields = set(schema.get("required", []))
+
+    required = list(required_fields)
 
     if not properties:
         # No properties
@@ -95,101 +160,42 @@ def _schema_to_field(name: str, schema: dict, required: bool = False) -> tuple[s
     prop_type, type_imports = _schema_to_type(schema)
     imports.extend(type_imports)
 
-    # Build default value
-    has_default = False
-    default = None
-
-    if "default" in schema:
-        default = schema["default"]
-        has_default = True
-    elif not required:
-        has_default = True  # Optional fields get None
-
-    # Clean up prop_type - remove duplicate | None
-    prop_type = prop_type.replace(" | None | None", " | None")
-
-    # Build field signature
-    comment = ""
-    if schema.get("description"):
-        comment = f"  # {schema['description']}"
-
-    if has_default:
-        if default is not None:
-            return f"{name}: {prop_type} = {repr(default)}{comment}", imports
-        else:
-            # Ensure we have | None for optional fields
-            if " | None" not in prop_type and prop_type != "None":
-                prop_type = f"{prop_type} | None"
-            return f"{name}: {prop_type} = None{comment}", imports
+    # Build field line
+    if required:
+        field_line = f"{name}: {prop_type}"
     else:
-        return f"{name}: {prop_type}{comment}", imports
+        field_line = f"{name}: {prop_type} | None = None"
+
+    return field_line, imports
+
+
+def _get_schema_type(schema: dict) -> str | list | None:
+    """Get the type from a schema, handling nullable types."""
+    schema_type = schema.get("type")
+    # Handle nullable types like ["string", "null"]
+    if isinstance(schema_type, list):
+        # Filter out 'null' and return remaining type
+        non_null = [t for t in schema_type if t != "null"]
+        if non_null:
+            return non_null[0]
+        return "None"
+    return schema_type
 
 
 def _schema_to_type(schema: dict) -> tuple[str, list[str]]:
-    """Convert a schema to a Python type annotation.
-
-    Returns: (type_string, imports_needed)
-    """
+    """Convert a schema type to Python type annotation."""
     imports = []
-    schema_type = schema.get("type")
 
-    # Handle type arrays (JSON Schema union types like ["string", "null"])
-    if isinstance(schema_type, list):
-        type_parts = []
-        for t in schema_type:
-            if isinstance(t, str):
-                part, part_imports = _schema_to_type({"type": t})
-                type_parts.append(part)
-                imports.extend(part_imports)
-            else:
-                type_parts.append(str(t))
-        # Filter out 'None' and convert to Pydantic Optional
-        non_null = [p for p in type_parts if p != "None"]
-        if "None" in type_parts:
-            if len(non_null) == 0:
-                return "None", imports
-            if len(non_null) == 1:
-                return f"{non_null[0]} | None", imports
-            return " | ".join(non_null) + " | None", imports
-        return " | ".join(type_parts), imports
-
-    # Handle enum first
+    # Handle enum
     if "enum" in schema:
-        enum_values = schema["enum"]
-        return f"Literal[{', '.join(repr(v) for v in enum_values)}]", ["from typing import Literal"]
-
-    # Handle refs
-    if "$ref" in schema:
-        ref = schema["$ref"]
-        ref_name = ref.replace(".json", "").split("/")[-1]
-        return _to_pascal_case(ref_name), imports
-
-    # Handle oneOf/anyOf
-    if "oneOf" in schema:
-        types = []
-        for s in schema["oneOf"]:
-            t, t_imports = _schema_to_type(s)
-            types.append(t)
-            imports.extend(t_imports)
-        return " | ".join(types), imports
-    if "anyOf" in schema:
-        types = []
-        for s in schema["anyOf"]:
-            t, t_imports = _schema_to_type(s)
-            types.append(t)
-            imports.extend(t_imports)
-        return " | ".join(types), imports
+        enum_values = ", ".join(repr(v) for v in schema["enum"])
+        return f"Literal[{enum_values}]", ["from typing import Literal"]
 
     # Handle array
+    schema_type = _get_schema_type(schema)
     if schema_type == "array":
-        items = schema.get("items", {})
-        if "$ref" in items:
-            item_type, item_imports = _schema_to_type(items)
-        elif items.get("type"):
-            item_type, item_imports = _schema_to_type(items)
-        else:
-            item_type = "Any"
-            item_imports = ["from typing import Any"]
+        items_schema = schema.get("items", {})
+        item_type, item_imports = _schema_to_type(items_schema)
         imports.extend(item_imports)
         return f"list[{item_type}]", imports
 
@@ -216,18 +222,25 @@ def _schema_to_type(schema: dict) -> tuple[str, list[str]]:
     return "Any", ["from typing import Any"]
 
 
-def _to_pascal_case(name: str) -> str:
-    """Convert snake_case to PascalCase."""
-    return "".join(word.capitalize() for word in name.split("_"))
-
-
 def main():
     parser = argparse.ArgumentParser(description="Generate Pydantic models from JSON schemas")
     parser.add_argument("--check", action="store_true", help="Check if models are up to date (exit 1 if not)")
-    parser.add_argument("--output-dir", default=str(OUTPUT_DIR), help="Output directory for models")
-    _ = parser.parse_args()
+    parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR), help="Output directory for models")
+    args = parser.parse_args()
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Load all schemas first (for reference resolution)
+    all_schemas: dict[str, dict] = {}
+    for schema_file in SCHEMA_DIR.glob("*.json"):
+        if not schema_file.stem.startswith("_"):
+            all_schemas[schema_file.stem] = json.loads(schema_file.read_text())
+
+    # Load index schema for definitions
+    index_path = SCHEMA_DIR / "_index.json"
+    if index_path.exists():
+        all_schemas["index"] = json.loads(index_path.read_text())
 
     # Generate models from all schemas
     schema_files = sorted(SCHEMA_DIR.glob("*.json"))
@@ -240,7 +253,7 @@ def main():
 
     for schema_file in schema_files:
         schema = json.loads(schema_file.read_text())
-        class_name = _to_pascal_case(schema_file.stem)
+        schema_name = schema_file.stem  # Original name (snake_case)
 
         # Skip index file
         if schema_file.stem == "index":
@@ -250,43 +263,70 @@ def main():
         if "definitions" in schema:
             for def_name, def_schema in schema["definitions"].items():
                 class_name = _to_pascal_case(def_name)
-                code, imports = schema_to_pydantic({"definitions": {def_name: def_schema}}, class_name)
-                output_file = OUTPUT_DIR / f"{def_name}.py"
-                generated.append((output_file, code))
+                code, imports = schema_to_pydantic(
+                    {"definitions": {def_name: def_schema}}, def_name, all_schemas
+                )
+                output_file = output_dir / f"{def_name}.py"
+                generated.append((output_file, code, class_name))
                 all_imports.update(imports)
         else:
-            code, imports = schema_to_pydantic(schema, class_name)
-            output_file = OUTPUT_DIR / f"{schema_file.stem}.py"
-            generated.append((output_file, code))
+            code, imports = schema_to_pydantic(schema, schema_name, all_schemas)
+            output_file = output_dir / f"{schema_file.stem}.py"
+            class_name = _to_pascal_case(schema_name)
+            generated.append((output_file, code, class_name))
             all_imports.update(imports)
 
+    # Check mode - compare generated content with existing files
+    if args.check:
+        changes_needed = False
+        for output_file, code, class_name in generated:
+            if output_file.exists():
+                existing = output_file.read_text().strip()
+                new = code.strip()
+                if existing != new:
+                    changes_needed = True
+                    print(f"  CHANGED: {output_file.name}")
+                else:
+                    print(f"  OK: {output_file.name}")
+            else:
+                changes_needed = True
+                print(f"  NEW: {output_file.name}")
+
+        if changes_needed:
+            print("\nModels are out of date. Run without --check to regenerate.")
+            return 1
+        else:
+            print("\nAll models are up to date.")
+            return 0
+
     # Write models
-    for output_file, code in generated:
+    for output_file, code, class_name in generated:
         if code.strip():
             output_file.write_text(code + "\n")
-            print(f"  Generated: {output_file.relative_to(OUTPUT_DIR.parent.parent)}")
+            print(f"  Generated: {output_file.relative_to(output_dir.parent.parent)}")
 
-    # Write __init__.py with explicit imports (ruff-safe)
+    # Write __init__.py with explicit imports (using _to_pascal_case for consistency)
     init_lines = [
         '"""Generated Pydantic models from JSON schemas."""',
         "",
     ]
-    for output_file, _ in generated:
+    for output_file, _, class_name in generated:
         module = output_file.stem
-        init_lines.append(f"from .{module} import {module.capitalize()}")
+        # Use _to_pascal_case to match actual class names
+        init_lines.append(f"from .{module} import {class_name}")
 
     # Add re-exports for convenience
     init_lines.append("")
     init_lines.append("__all__ = [")
-    for output_file, _ in generated:
-        module = output_file.stem
-        init_lines.append(f'    "{module.capitalize()}",')
+    for _, _, class_name in generated:
+        init_lines.append(f'    "{class_name}",')
     init_lines.append("]")
 
-    (OUTPUT_DIR / "__init__.py").write_text("\n".join(init_lines) + "\n")
+    (output_dir / "__init__.py").write_text("\n".join(init_lines) + "\n")
 
-    print(f"\nGenerated {len(generated)} model files in {OUTPUT_DIR}")
+    print(f"\nGenerated {len(generated)} model files in {output_dir}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    exit(main())

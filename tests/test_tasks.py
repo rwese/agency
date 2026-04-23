@@ -55,8 +55,8 @@ class TestTaskStore:
         with tempfile.TemporaryDirectory() as tmpdir:
             agency_dir = Path(tmpdir) / ".agency"
             agency_dir.mkdir()
-            (agency_dir / "tasks").mkdir()
-            (agency_dir / "pending").mkdir()
+            (agency_dir / "var" / "tasks").mkdir(parents=True)
+            (agency_dir / "var" / "pending").mkdir(parents=True)
             yield agency_dir
 
     @pytest.fixture
@@ -66,8 +66,8 @@ class TestTaskStore:
 
     def test_init_creates_directories(self, temp_agency_dir):
         """Test that TaskStore creates required directories."""
-        tasks_dir = temp_agency_dir / "tasks"
-        pending_dir = temp_agency_dir / "pending"
+        tasks_dir = temp_agency_dir / "var" / "tasks"
+        pending_dir = temp_agency_dir / "var" / "pending"
 
         assert tasks_dir.exists()
         assert pending_dir.exists()
@@ -212,11 +212,11 @@ class TestTaskStore:
         assert updated.result == "Work completed"
 
         # Check pending file
-        pending_file = store.agency_dir / "pending" / f"{task.task_id}.json"
+        pending_file = store.agency_dir / "var" / "pending" / f"{task.task_id}.json"
         assert pending_file.exists()
 
         # Check result file
-        result_file = store.agency_dir / "tasks" / task.task_id / "result.json"
+        result_file = store.agency_dir / "var" / "tasks" / task.task_id / "result.json"
         assert result_file.exists()
 
     def test_approve_task(self, store):
@@ -246,7 +246,7 @@ class TestTaskStore:
         assert updated.status == "failed"
 
         # Check rejection file
-        rejection_file = store.agency_dir / "pending" / f"{task.task_id}.rejected"
+        rejection_file = store.agency_dir / "var" / "pending" / f"{task.task_id}.rejected"
         assert rejection_file.exists()
         content = rejection_file.read_text()
         assert "Missing tests" in content
@@ -262,7 +262,7 @@ class TestTaskStore:
         assert store.get_task(task.task_id) is None
 
         # Check directory removed
-        task_dir = store.agency_dir / "tasks" / task.task_id
+        task_dir = store.agency_dir / "var" / "tasks" / task.task_id
         assert not task_dir.exists()
 
     def test_history(self, store):
@@ -339,8 +339,8 @@ class TestTaskStoreFileLocking:
         with tempfile.TemporaryDirectory() as tmpdir:
             agency_dir = Path(tmpdir) / ".agency"
             agency_dir.mkdir()
-            (agency_dir / "tasks").mkdir()
-            (agency_dir / "pending").mkdir()
+            (agency_dir / "var" / "tasks").mkdir(parents=True)
+            (agency_dir / "var" / "pending").mkdir(parents=True)
             yield agency_dir
 
     def test_lock_file_created(self, temp_agency_dir):
@@ -357,7 +357,7 @@ class TestTaskStoreFileLocking:
         store = TaskStore(temp_agency_dir)
         store.add_task(description="Version test")
 
-        tasks_file = temp_agency_dir / "tasks.json"
+        tasks_file = temp_agency_dir / "var" / "tasks.json"
         data = json.loads(tasks_file.read_text())
 
         assert data["version"] == 2
@@ -373,8 +373,8 @@ class TestTaskDependencies:
         with tempfile.TemporaryDirectory() as tmpdir:
             agency_dir = Path(tmpdir) / ".agency"
             agency_dir.mkdir()
-            (agency_dir / "tasks").mkdir()
-            (agency_dir / "pending").mkdir()
+            (agency_dir / "var" / "tasks").mkdir(parents=True)
+            (agency_dir / "var" / "pending").mkdir(parents=True)
             yield agency_dir
 
     @pytest.fixture

@@ -6,12 +6,12 @@ from .config import Config
 from .halted import Halted
 from .manager import Manager
 from .notification import Notification
-from .notifications_store import Notifications_store
-from .pending_task import Pending_task
+from .notifications_store import NotificationsStore
+from .pending_task import PendingTask
 from .result import Result
-from .slots_available import Slots_available
+from .slots_available import SlotsAvailable
 from .task import Task
-from .tasks_store import Tasks_store
+from .tasks_store import TasksStore
 
 __all__ = [
     "Agent",
@@ -20,10 +20,10 @@ __all__ = [
     "Halted",
     "Manager",
     "Notification",
-    "Notifications_store",
-    "Pending_task",
+    "NotificationsStore",
+    "PendingTask",
     "Result",
-    "Slots_available",
+    "SlotsAvailable",
     "Task",
-    "Tasks_store",
+    "TasksStore",
 ]

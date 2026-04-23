@@ -193,8 +193,8 @@ class TestTaskWorkflow:
         # Create .agency structure manually
         agency_dir = project_dir / ".agency"
         agency_dir.mkdir()
-        (agency_dir / "tasks").mkdir()
-        (agency_dir / "pending").mkdir()
+        (agency_dir / "var" / "tasks").mkdir(parents=True)
+        (agency_dir / "var" / "pending").mkdir(parents=True)
         (agency_dir / "config.yaml").write_text("project: test\n")
 
         return project_dir
