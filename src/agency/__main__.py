@@ -27,6 +27,7 @@ from agency.session import (
     start_agent_window,
     start_manager_window,
 )
+from agency.session_logs import logs_cmd
 from agency.tasks import TaskStore
 from agency.template import TemplateManager
 
@@ -2550,6 +2551,7 @@ if _agency_role == "MANAGER":
     cli.add_command(tasks)
     cli.add_command(heartbeat_cmd)
     cli.add_command(audit_cmd)
+    cli.add_command(logs_cmd)
 elif _agency_role == "AGENT":
     # Agent sees: tasks_agent and tasks (limited commands)
     cli.add_command(tasks_agent)
@@ -2565,6 +2567,7 @@ else:
     cli.add_command(completions)
     cli.add_command(heartbeat_cmd)
     cli.add_command(audit_cmd)
+    cli.add_command(logs_cmd)
 
 
 def main():
