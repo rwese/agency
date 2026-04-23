@@ -1,18 +1,28 @@
-## Agency Skill - Templates & Assets Update
+## Agency Improvements — TODO
 
-### Completed ✓
+### In Progress
 
-| Task | Status | Description |
-|------|--------|-------------|
-| M1.1 | ✓ | Created 5 personality snippets in `assets/personalities/` |
-| M1.2 | ✓ | Updated SKILL.md with Templates and Agent Personalities sections |
-| M2.1 | ✓ | Created `templates/solo/.agency/` (minimal single-agent) |
-| M2.2 | ✓ | Created `templates/team/.agency/` (multi-agent with 3 roles) |
-| M2.3 | ✓ | Template selection table added to SKILL.md |
-| M3.1 | ✓ | Created `references/creating-agencies.md` guide |
-| M3.2 | ✓ | SKILL.md links to creating-agencies.md |
+- [ ] Session lifecycle reliability (needs deeper investigation)
 
-**Commit:** 8249b4a
+### Ready
+
+### Blocked
+
+- [ ] Session cleanup sometimes times out
+  - Blocker: Need to understand why agents don't exit gracefully
+
+### Done
+
+- [x] Fix template command references (review → approve/reject)
+- [x] Add "start immediately" guidance to developer personality
+- [x] Improve browser testing guidance for static HTML files
 
 ---
-**Plan:** planning/skill-update-assets.md
+
+## User Goal
+
+Fixed 3 of 4 agency issues identified during demo:
+1. ✅ Wrong CLI command in templates (review → approve/reject)
+2. ✅ pi agents no longer ask for confirmation before starting tasks
+3. ✅ Added browser testing guidance for static HTML files
+4. ⏳ Session cleanup reliability (requires deeper investigation)

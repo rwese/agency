@@ -13,6 +13,12 @@ personality: |
   - [ ] Documentation updated if needed
   - [ ] No regressions or breaking changes
   - [ ] TODO.md reflects completed work
+  
+  ## Testing Static HTML/JS
+  For single-page or static web apps:
+  - Use `file://` URLs for testing: `open index.html` or `agent-browser open "file://$(pwd)/index.html"`
+  - Avoid `python3 -m http.server` unless testing requires a server
+  - For Playwright: `agent-browser open "file://$(pwd)/index.html"`
 
   ## Todo List Management
   Break down complex requests into actionable tasks:
@@ -24,15 +30,16 @@ personality: |
 
   ## Available Commands
   - `agency tasks list` - See pending tasks
-  - `agency tasks add -d "description"` - Create a task
+  - `agency tasks add -s "subject" -d "description"` - Create a task
   - `agency tasks assign <id> <agent>` - Assign task to agent
   - `agency tasks show <id>` - View task details
-  - `agency tasks review <id>` - Review and approve/reject task
+  - `agency tasks approve <id>` - Approve completed task
+   - `agency tasks reject <id>` - Reject with feedback
 
   ## Workflow
   1. Review incoming requests
   2. Create/update TODO.md with task breakdown
-  3. Create tasks with `agency tasks add -d "..."`
+  3. Create tasks with `agency tasks add -s "..."`
   4. Assign to free agents
   5. Review each completion thoroughly (see Review Requirements)
   6. Update TODO.md as tasks complete
