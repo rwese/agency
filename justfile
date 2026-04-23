@@ -6,6 +6,11 @@ default: help
 install:
     uv tool uninstall agency 2>/dev/null; uv tool install -e .
 
+# Build distribution packages
+build:
+    rm -rf dist/
+    uvx hatch build -t wheel -t sdist
+
 # Install with dev dependencies
 install-dev:
     uv tool uninstall agency 2>/dev/null; uv tool install -e ".[dev]"

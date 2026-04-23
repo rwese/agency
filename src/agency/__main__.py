@@ -30,7 +30,35 @@ from agency.session import (
 from agency.tasks import TaskStore
 from agency.template import TemplateManager
 
+# Get version info - try build metadata first, then runtime git, then fallback
 VERSION = __version__
+try:
+    from agency._build import get_build_info
+
+    VERSION = f"{__version__} ({get_build_info()})"
+except ImportError:
+    # No build metadata, try runtime git detection
+    try:
+        import subprocess
+
+        commit = subprocess.run(
+            ["git", "rev-parse", "--short=8", "HEAD"], capture_output=True, text=True, check=True
+        ).stdout.strip()
+
+        # Check for dirty
+        dirty = subprocess.run(["git", "diff", "--stat"], capture_output=True, text=True).stdout.strip()
+        dirty_str = " (dirty)" if dirty else ""
+
+        # Try to get tag
+        try:
+            tag = subprocess.run(
+                ["git", "describe", "--tags", "--abbrev=0"], capture_output=True, text=True, check=True
+            ).stdout.strip()
+            VERSION = f"{tag}{dirty_str} ({commit})"
+        except subprocess.CalledProcessError:
+            VERSION = f"{__version__} ({commit}){dirty_str}"
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass  # Keep static version
 
 
 def _log_cli_command(command: str, **opts):
