@@ -14,23 +14,22 @@ Syntax: ${{type:value}}
 
 import re
 import subprocess
-from dataclasses import dataclass
 from pathlib import Path
 
+from pydantic import BaseModel, Field
 
-@dataclass
-class InjectionResult:
+
+class InjectionResult(BaseModel):
     """Result of processing a template."""
 
     content: str
-    errors: list[str]  # Non-fatal errors encountered
+    errors: list[str] = Field(default_factory=list)  # Non-fatal errors encountered
 
 
-@dataclass
-class InjectionOptions:
+class InjectionOptions(BaseModel):
     """Options for template injection."""
 
-    base_dir: Path = Path.cwd()  # Base directory for relative file paths
+    base_dir: Path = Field(default_factory=Path.cwd)  # Base directory for relative file paths
     strip_newlines: bool = True  # Strip trailing newlines from shell output
     max_shell_output: int = 100_000  # Max bytes from shell command
 
