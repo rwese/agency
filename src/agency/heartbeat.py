@@ -850,23 +850,6 @@ def manager_heartbeat_v2(
                     print("[HEARTBEAT-V2] Notified about pending approvals")
             last_approval_count = current_approval_count
 
-            # 6b. AUTO-APPROVE: If configured, automatically approve pending tasks
-            from agency.config import load_manager_config
-            manager_config = load_manager_config(agency_dir)
-            if manager_config.auto_approve and current_approval_count > 0:
-                from agency.tasks import TaskStore
-                store = TaskStore(agency_dir)
-                for task in get_pending_approval_tasks(agency_dir):
-                    task_id = task.get("task_id")
-                    if task_id:
-                        result = store.approve_task(task_id)
-                        if result:
-                            print(f"[HEARTBEAT-V2] Auto-approved task: {task_id}")
-                            # Signal slot for the completed agent
-                            agent = task.get("assigned_to")
-                            if agent:
-                                orchestrator.signal_task_completed(agent)
-
             # 7. STATUS: Log status summary periodically
             _idle_cycles += 1
             if _idle_cycles % 10 == 0:
