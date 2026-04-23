@@ -199,10 +199,7 @@ def list_templates(repo, refresh):
     # Try local templates first
     local_templates_dir = Path(__file__).parent.parent.parent / "templates"
     if local_templates_dir.exists():
-        local_templates = [
-            d.name for d in local_templates_dir.iterdir()
-            if d.is_dir() and not d.name.startswith(".")
-        ]
+        local_templates = [d.name for d in local_templates_dir.iterdir() if d.is_dir() and not d.name.startswith(".")]
         if local_templates:
             click.echo("Available templates (local):\n")
             for template in sorted(local_templates):
@@ -333,7 +330,9 @@ def init_project(dir, force, non_interactive, refresh, template_name, template_s
         force=force,
         context_files=cli_context_files,
         template_name=template_name,
-        template_url=template_name if template_name and template_name.startswith(("http://", "https://")) else ("https://github.com/rwese/agency-templates" if template_name else None),
+        template_url=template_name
+        if template_name and template_name.startswith(("http://", "https://"))
+        else ("https://github.com/rwese/agency-templates" if template_name else None),
         template_subdir=template_subdir,
         agents=[AgentEntry(name="coder")],
     )
@@ -350,7 +349,11 @@ def init_project(dir, force, non_interactive, refresh, template_name, template_s
             click.echo("\n[?] Discovered agent context files:")
             for name, path in available:
                 click.echo(f"  - {name}: {path}")
-            response = click.prompt("    Include these files? [y/N]", default="n", type=str, show_default=False).strip().lower()
+            response = (
+                click.prompt("    Include these files? [y/N]", default="n", type=str, show_default=False)
+                .strip()
+                .lower()
+            )
             if response in ("y", "yes"):
                 for name, path in available:
                     if str(path) not in config.context_files:
