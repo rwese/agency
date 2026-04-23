@@ -17,17 +17,45 @@ These projects serve as **evaluation benchmarks** to:
 demo/
 ├── README.md              # This file
 └── projects/
+    # CLI Tools
     ├── 01-markdown-to-html/       # CLI: text transformation
-    ├── 02-json-schema-validator/  # Library: validation
     ├── 03-image-metadata-extractor/  # CLI: file processing
-    ├── 04-cron-parser/            # Library: parsing
     ├── 05-csv-sqlite-importer/    # CLI: data import
-    ├── 06-api-rate-limiter/        # Library: middleware
+    ├── 10-text-diff-viewer/       # CLI: text processing
+    
+    # Libraries
+    ├── 02-json-schema-validator/  # Library: validation
+    ├── 04-cron-parser/            # Library: parsing
+    ├── 06-api-rate-limiter/       # Library: middleware
     ├── 07-password-strength-checker/  # Library: security
-    ├── 08-git-hook-installer/     # Developer tool
     ├── 09-env-validator/          # Library: config
-    └── 10-text-diff-viewer/       # CLI: text processing
+    
+    # Developer Tools
+    ├── 08-git-hook-installer/     # Developer tool
+    
+    # Web (Static/Frontend)
+    ├── 11-notes-app-static/       # SPA: localStorage
+    
+    # Web (API/Backend)
+    ├── 12-todo-api/               # REST API: in-memory
+    
+    # Web (Full-Stack)
+    ├── 13-contacts-sqlite/        # Full-stack: SQLite
+    ├── 14-url-shortener-docker/   # Microservices: Docker
+    ├── 15-chat-realtime/          # Real-time: WebSockets
+    
+    # Build Tools
+    └── 16-static-site-generator/  # Static site gen
 ```
+
+## Complexity Levels
+
+| Level | Description | Projects |
+|-------|-------------|----------|
+| Low | Single file, simple logic | 01, 09, 11 |
+| Medium | Multiple modules, some deps | 02, 03, 04, 05, 08, 10, 12, 16 |
+| Medium-High | Multiple components, integration | 06, 07, 13 |
+| High | Full systems, multiple tiers | 14, 15 |
 
 ## Project Requirements
 
@@ -53,12 +81,33 @@ Each project must include:
 
 ## Complexity Levels
 
-| Level | Description | Examples |
+| Level | Description | Projects |
 |-------|-------------|----------|
-| Low | Single file, simple logic | Parser, converter |
-| Medium | Multiple modules, some deps | CLI tools, libraries |
-| Medium-High | Multiple components, integration | API middleware, web |
-| High | Full systems, multiple tiers | Web services, databases |
+| Low | Single file, simple logic | 01, 09, 11 |
+| Medium | Multiple modules, some deps | 02, 03, 04, 05, 08, 10, 12, 16 |
+| Medium-High | Multiple components, integration | 06, 07, 13 |
+| High | Full systems, multiple tiers | 14, 15 |
+
+## Complete Project Index
+
+| # | Project | Type | Tech Stack | Complexity |
+|---|---------|------|------------|------------|
+| 01 | Markdown to HTML | CLI | Python | Low |
+| 02 | JSON Schema Validator | Library | Python/Go | Medium |
+| 03 | Image Metadata Extractor | CLI | Python | Medium |
+| 04 | Cron Parser | Library | Python/Go | Medium |
+| 05 | CSV SQLite Importer | CLI | Python | Medium |
+| 06 | API Rate Limiter | Library | Python | Medium-High |
+| 07 | Password Strength Checker | Library | Python | Medium-High |
+| 08 | Git Hook Installer | Dev Tool | Python/Shell | Medium |
+| 09 | Env Validator | Library | Python | Low |
+| 10 | Text Diff Viewer | CLI | Python | Medium |
+| 11 | Notes App (Static) | SPA | Vanilla JS | Low |
+| 12 | Todo API | REST API | FastAPI | Medium |
+| 13 | Contacts Manager | Full-Stack | FastAPI + SQLite | Medium-High |
+| 14 | URL Shortener | Microservices | Docker + Redis | High |
+| 15 | Chat Room | Real-time | WebSockets + Redis | High |
+| 16 | Static Site Generator | Build Tool | Python | Medium |
 
 ## Running Projects
 

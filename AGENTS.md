@@ -71,7 +71,7 @@ cat .agency/var/tasks.json | jq '.tasks[].reviewer_assigned'
 
 Demo projects for testing agency orchestration capabilities. See `demo/README.md`.
 
-Projects are organized by complexity:
+### CLI & Libraries (01-10)
 
 | # | Project | Type | Complexity |
 |---|---------|------|------------|
@@ -83,13 +83,29 @@ Projects are organized by complexity:
 | 06 | API Rate Limiter | Library | Medium-High |
 | 07 | Password Strength Checker | Library | Medium |
 | 08 | Git Hook Installer | Dev Tool | Medium |
-| 09 | Env Validator | Library | Low-Medium |
+| 09 | Env Validator | Library | Low |
 | 10 | Text Diff Viewer | CLI | Medium |
 
+### Web Projects (11-16)
+
+| # | Project | Type | Complexity |
+|---|---------|------|------------|
+| 11 | Notes App (Static) | SPA | Low |
+| 12 | Todo API | REST API | Medium |
+| 13 | Contacts Manager | Full-Stack | Medium-High |
+| 14 | URL Shortener | Microservices | High |
+| 15 | Chat Room | Real-time | High |
+| 16 | Static Site Generator | Build Tool | Medium |
+
 ```bash
-# Run evaluation project
+# Run CLI project
 cd demo/projects/01-markdown-to-html
 agency init --dir . --template basic
+
+# Run web project
+cd demo/projects/12-todo-api
+agency init --dir . --template team
+
 agency session start
 ```
 
