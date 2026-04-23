@@ -1,37 +1,61 @@
-## Lazy Agent Spawning - TODO
+# Implementation TODO
 
-### Done
+## Phase 1: Schema Consolidation ✅
+- [x] 1.1 Audit existing schemas in `src/agency/schemas/`
+- [x] 1.2 Consolidate into unified schema structure
+- [x] 1.3 Add missing schemas (tasks, notifications, signals)
+- [x] 1.4 Add JSON Schema `$id` URLs for all schemas
+- [x] 1.5 Create schema index (_index.json)
 
-- [x] Plan created
-- [x] M1.1: Add slot availability tracking with blocking wait
-- [x] M1.2: Add `assigned_not_running` task query
-- [x] M1.3: Wire `start_agents_for_work` to assigned-but-not-running
-- [x] M1.4: Add test for slot-based spawning
-- [x] M2.1: Hook reviewer spawning into manager heartbeat
-- [x] M2.2: Add reviewer tracking to task state
-- [x] M2.3: Handle reviewer approval/rejection
-- [x] M3.1: Extend stale task detection to `pending_approval`
-- [x] M3.2: Auto-restart reviewer on crash
-- [x] M4.1: Update design docs
-- [x] M4.2: Update AGENTS.md
+## Phase 2: SPEC.md Creation ✅
+- [x] 2.1 Create root SPEC.md with frontmatter
+- [x] 2.2 Document all entities (Project, Manager, Agent, Task)
+- [x] 2.3 Embed schema references with `json:schema` or include syntax
+- [x] 2.4 Add task lifecycle diagrams
 
-### Deferred (low priority)
+## Phase 3: Pydantic Model Generation ✅
+- [x] 3.1 Add `datamodel-code-generator` to dependencies (skipped - custom generator)
+- [x] 3.2 Create `scripts/generate_models.py`
+- [x] 3.3 Generate Pydantic models from schemas
+- [x] 3.4 Verify generated models match existing dataclasses (config tests pass)
 
-- M2.4: Add test for reviewer flow
-- M3.3: Add test for crash recovery
+## Phase 4: Validation Pipeline ✅
+- [x] 4.1 Add JSON Schema validation to config loading (already exists in config.py)
+- [x] 4.2 Create `scripts/validate_schemas.py`
+- [x] 4.3 Add CI step for schema validation
 
----
+## Phase 5: Documentation Generation ✅
+- [x] 5.1 Add schema extraction script (included in generate_models.py)
+- [x] 5.2 Update README with schema references
+- [x] 5.3 Document migration path (in SPEC.md)
 
-## Template Integration (2026-04-23)
+## Acceptance Criteria
+- [x] All schemas have valid JSON Schema draft-2020-12 syntax
+- [x] Pydantic models generated from schemas match existing code
+- [x] Config files validate against schemas at runtime
+- [x] SPEC.md serves as single source of truth
+- [x] CI validates schemas on push
 
-Integrated `agency-templates` repo into `agency` repo as `templates/` directory.
+## Files Added/Modified
 
-### Done
+### New Files
+- `SPEC.md` - Complete specification with embedded schemas
+- `src/agency/schemas/task.json` - Task entity schema
+- `src/agency/schemas/tasks_store.json` - Task registry schema
+- `src/agency/schemas/result.json` - Task result schema
+- `src/agency/schemas/pending_task.json` - Pending approval schema
+- `src/agency/schemas/notification.json` - Notification event schema
+- `src/agency/schemas/notifications_store.json` - Notification registry schema
+- `src/agency/schemas/slots_available.json` - Slot tracking schema
+- `src/agency/schemas/halted.json` - Halt state schema
+- `src/agency/schemas/_index.json` - Schema index
+- `scripts/generate_models.py` - Pydantic model generator
+- `scripts/validate_schemas.py` - Schema validator
 
-- [x] Create `templates/` directory
-- [x] Copy templates (basic, api, fullstack)
-- [x] Update `TemplateManager` to prefer local templates
-- [x] Fix cache key to include subdir
-- [x] Update `list_templates` command
-- [x] Update documentation
-- [x] Delete agency-templates repo
+### Modified Files
+- `src/agency/schemas/config.json` - Updated to draft-2020-12
+- `src/agency/schemas/manager.json` - Updated to draft-2020-12
+- `src/agency/schemas/agent.json` - Updated to draft-2020-12
+- `src/agency/schemas/agents.json` - Updated to draft-2020-12
+- `.github/workflows/ci.yml` - Added schema validation steps
+- `README.md` - Added schema references

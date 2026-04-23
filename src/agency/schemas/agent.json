@@ -1,14 +1,14 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/agent.json",
   "title": "Agency Agent Configuration",
-  "description": "Configuration for an individual Agency agent",
+  "description": "Configuration for an individual Agency agent stored at .agency/agents/<name>.yaml",
   "type": "object",
   "required": ["name"],
   "properties": {
     "name": {
       "type": "string",
-      "description": "Agent name"
+      "description": "Agent name (must match window name)"
     },
     "personality": {
       "type": ["string", "null"],

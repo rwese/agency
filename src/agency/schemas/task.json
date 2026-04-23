@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/task.json",
+  "title": "Task",
+  "description": "Represents a unit of work to be completed by an agent",
+  "type": "object",
+  "required": ["task_id", "description", "status", "priority", "assigned_to", "created_at"],
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "pattern": "^[a-z]+-[a-z]+-[0-9a-f]{4}$",
+      "description": "Unique identifier using eff.org wordlist + hex suffix (e.g., swift-bear-a3f2)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable task description"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "in_progress", "pending_approval", "completed", "failed"],
+      "description": "Current task state"
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["low", "normal", "high"],
+      "default": "low",
+      "description": "Task priority"
+    },
+    "assigned_to": {
+      "type": ["string", "null"],
+      "description": "Agent name or null if unassigned"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 creation timestamp"
+    },
+    "started_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "ISO8601 timestamp when agent started work"
+    },
+    "completed_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "ISO8601 timestamp when task was completed"
+    },
+    "result": {
+      "type": ["string", "null"],
+      "description": "Markdown result summary"
+    },
+    "result_path": {
+      "type": ["string", "null"],
+      "description": "Path to result.json file"
+    },
+    "depends_on": {
+      "type": ["array", "null"],
+      "items": { "type": "string" },
+      "description": "List of task IDs this task depends on"
+    },
+    "agent_info": {
+      "type": ["object", "null"],
+      "description": "Agent tracking info (set when picked up)",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "description": "pi session ID for restart after rejection"
+        },
+        "pid": {
+          "type": "integer",
+          "description": "Process ID for crash detection"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When agent started this task"
+        }
+      },
+      "additionalProperties": false
+    },
+    "rejection_reason": {
+      "type": ["string", "null"],
+      "description": "Reason if task was rejected"
+    },
+    "review_notes": {
+      "type": ["string", "null"],
+      "description": "Notes from reviewer"
+    },
+    "reviewer_assigned": {
+      "type": ["string", "null"],
+      "description": "Name of reviewer agent handling pending_approval task"
+    }
+  },
+  "additionalProperties": false
+}

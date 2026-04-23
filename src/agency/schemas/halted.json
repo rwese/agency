@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/halted.json",
+  "title": "Halted State",
+  "description": "Halt state marker stored at .agency/.halted",
+  "type": "object",
+  "required": ["halted_at"],
+  "properties": {
+    "halted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 when session was halted"
+    },
+    "reason": {
+      "type": ["string", "null"],
+      "description": "Optional halt reason"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,8 +1,8 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/agents.json",
   "title": "Agency Agents Registry",
-  "description": "Registry of agents in an Agency project",
+  "description": "Registry of agents in an Agency project stored at .agency/agents.yaml",
   "type": "object",
   "required": ["agents"],
   "properties": {
@@ -23,7 +23,8 @@
           }
         },
         "additionalProperties": false
-      }
+      },
+      "description": "List of agent definitions"
     }
   },
   "additionalProperties": false

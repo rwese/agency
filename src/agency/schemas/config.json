@@ -1,14 +1,14 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/config.json",
   "title": "Agency Project Configuration",
-  "description": "Configuration for an Agency project",
+  "description": "Configuration for an Agency project stored at .agency/config.yaml",
   "type": "object",
   "required": ["project"],
   "properties": {
     "project": {
       "type": "string",
-      "description": "Project name"
+      "description": "Project name (derived from directory name if not set)"
     },
     "shell": {
       "type": "string",
@@ -18,21 +18,19 @@
     },
     "template_url": {
       "type": ["string", "null"],
-      "description": "Template repository URL",
-      "default": "https://github.com/rwese/agency-templates"
+      "default": "https://github.com/rwese/agency-templates",
+      "description": "Template repository URL"
     },
     "stop_timeout": {
       "type": "integer",
       "minimum": 1,
       "default": 30,
-      "description": "Seconds to wait before force killing"
+      "description": "Seconds to wait before force killing on stop"
     },
     "additional_context_files": {
       "type": ["array", "null"],
-      "items": {
-        "type": "string"
-      },
-      "description": "Files to add as context (env vars expanded)"
+      "items": { "type": "string" },
+      "description": "Files to add as context (env vars expanded, supports ${VAR} and ~)"
     },
     "template_delimiter": {
       "type": ["string", "null"],
@@ -47,7 +45,7 @@
     "audit_enabled": {
       "type": "boolean",
       "default": true,
-      "description": "Enable audit logging"
+      "description": "Enable audit logging to var/audit.db"
     }
   },
   "additionalProperties": false

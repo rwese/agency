@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/notification.json",
+  "title": "Notification",
+  "description": "A single notification event logged to var/notifications.json",
+  "type": "object",
+  "required": ["id", "timestamp", "recipient", "type", "message"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique notification ID"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 notification timestamp"
+    },
+    "recipient": {
+      "type": "string",
+      "enum": ["manager", "agent"],
+      "description": "Who was notified"
+    },
+    "recipient_name": {
+      "type": ["string", "null"],
+      "description": "Specific agent/manager name if applicable"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "unassigned_tasks",
+        "task_assigned",
+        "task_completed",
+        "task_approved",
+        "task_rejected",
+        "agent_idle",
+        "crash_detected",
+        "heartbeat"
+      ],
+      "description": "Notification type"
+    },
+    "message": {
+      "type": "string",
+      "description": "Human-readable notification message"
+    },
+    "task_ids": {
+      "type": ["array", "null"],
+      "items": { "type": "string" },
+      "description": "Related task IDs"
+    }
+  },
+  "additionalProperties": false
+}
