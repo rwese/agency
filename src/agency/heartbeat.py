@@ -727,10 +727,6 @@ def main():
     run_heartbeat()
 
 
-if __name__ == "__main__":
-    main()
-
-
 def manager_heartbeat_v2(
     agency_dir: Path,
     socket_name: str,
@@ -879,3 +875,7 @@ def manager_heartbeat_v2(
 
             traceback.print_exc()
             time.sleep(poll_interval)
+
+
+if __name__ == "__main__":
+    main()
