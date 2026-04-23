@@ -1,35 +1,43 @@
-# Agency - Demo Projects Status
+# Agency - Known Issues and Fixes
 
-## Completed Demos
+## Completed Fixes
 
-| Demo | Status | Notes |
-|------|--------|-------|
-| **Log Parser v3** | ✅ Complete | Auto-approval via TaskStore works |
-| **URL Shortener** | ✅ Complete | Backend + Frontend agents worked |
-| **Bookmarks Vault** | ⬜ Next | Web app demo |
-| **Secret Scanner** | ⬜ Planned | CLI tool demo |
+| # | Issue | Fix | Status |
+|---|-------|-----|--------|
+| 1 | Developer bypassed `pending_approval` status | Added status transition validation | ✅ |
+| 2 | Developer used wrong commands | Updated personality with correct workflow | ✅ |
+| 3 | Task ID injection with spaces | Documented as tmux behavior | ✅ |
+| 4 | Manager didn't auto-review | Updated manager personality + v2 heartbeat | ✅ |
+| 5 | Manager heartbeat v1 not auto-assigning | Switched to v2 heartbeat with `assign_tasks_to_agents()` | ✅ |
+| 6 | Auto-approval only on count change | Check every cycle for pending tasks | ✅ |
 
 ## Known Issues
 
-1. **Manager heartbeat not detecting new pending_approval** - The auto-approval only works on first poll after task is marked. New pending_approval tasks may not be detected until next poll cycle.
+1. **Heartbeat v2 may not be running** - Need to verify heartbeat process starts correctly
+2. **Auto-assignment may not be working** - Tasks created but not assigned to agents
 
-2. **Manager shows "No tasks assigned"** - When there are pending_approval tasks but no unassigned tasks, the manager doesn't auto-approve.
+## Demo Projects Status
 
-## Fix Needed
+| Demo | Status |
+|------|--------|
+| **Log Parser** | ✅ Complete |
+| **URL Shortener** | ✅ Complete (backend + frontend) |
+| **Bookmarks Vault** | ⏳ In progress - testing auto-assignment |
+| **Secret Scanner** | ⬜ Pending |
 
-The heartbeat should check for pending_approval tasks **every poll cycle**, not just when the count changes.
+## Testing Needed
 
-## Demo Results
+Verify that:
+1. Heartbeat v2 starts and runs for each session
+2. Tasks are auto-assigned by manager heartbeat
+3. Tasks are auto-approved by manager heartbeat
 
-### URL Shortener
-- **Backend (FastAPI):** ✅ Created with SQLite
-  - POST /links, GET /{code}, GET /{code}/stats, DELETE /{code}
-  - Tested and working
-- **Frontend (HTML/JS):** ✅ Created web UI
-  - Form, copy button, stats display
-  - Ready to use when backend is running
+## Commands to Test
 
-### Log Parser
-- CLI tool with click
-- Grep command with regex support
-- Multiple output formats
+```bash
+# Check heartbeat is running
+ps aux | grep heartbeat | grep <project>
+
+# Check task assignment
+agency tasks list
+```
