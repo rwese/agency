@@ -1,6 +1,6 @@
 ---
 name: agency
-description: Orchestrate AI agent sessions for project work. Use when: (1) initializing a new project with agency init, (2) starting/stopping multi-agent sessions, (3) assigning tasks with agency tasks add/assign, (4) monitoring session health, or (5) coordinating manager + coder workflows.
+description: "Orchestrate AI agent sessions for project work. Use when: (1) initializing a new project with agency init, (2) starting/stopping multi-agent sessions, (3) assigning tasks with agency tasks add/assign, (4) monitoring session health, or (5) coordinating manager + coder workflows."
 ---
 
 # Agency
