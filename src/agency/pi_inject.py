@@ -9,9 +9,10 @@ Sends steer, followup, and command messages to a running pi instance.
 import json
 import os
 import socket
-from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+
+from pydantic import BaseModel
 
 
 class MessageType(Enum):
@@ -21,8 +22,7 @@ class MessageType(Enum):
     PING = "ping"
 
 
-@dataclass
-class InjectResponse:
+class InjectResponse(BaseModel):
     type: str
     message: str | None = None
 
