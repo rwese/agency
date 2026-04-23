@@ -188,10 +188,32 @@ def cli(ctx):
 
 
 @click.command("templates")
-@click.option("--repo", default="https://github.com/rwese/agency-templates", help="Template repository URL")
+@click.option("--repo", default="local", help="Template repository URL (default: local)")
 @click.option("--refresh", is_flag=True, help="Bypass cache")
 def list_templates(repo, refresh):
-    """List available project templates."""
+    """List available project templates.
+
+    Shows local templates by default (bundled with agency).
+    Use --repo to specify a different GitHub repository.
+    """
+    # Try local templates first
+    local_templates_dir = Path(__file__).parent.parent.parent / "templates"
+    if local_templates_dir.exists():
+        local_templates = [
+            d.name for d in local_templates_dir.iterdir()
+            if d.is_dir() and not d.name.startswith(".")
+        ]
+        if local_templates:
+            click.echo("Available templates (local):\n")
+            for template in sorted(local_templates):
+                click.echo(f"  • {template}")
+            click.echo("\nUse: agency init --template <template-name>")
+            return
+
+    # Fall back to GitHub if no local templates
+    if repo == "local":
+        repo = "https://github.com/rwese/agency-templates"
+
     try:
         import json
 
@@ -217,7 +239,7 @@ def list_templates(repo, refresh):
         for template in sorted(templates):
             click.echo(f"  • {template}")
 
-        click.echo("\nUse: agency init --template https://github.com/rwese/agency-templates/tree/main/<template>")
+        click.echo("\nUse: agency init --template <template-name>")
 
     except Exception as e:
         click.echo(f"[ERROR] {e}", err=True)
@@ -311,7 +333,7 @@ def init_project(dir, force, non_interactive, refresh, template_name, template_s
         force=force,
         context_files=cli_context_files,
         template_name=template_name,
-        template_url="https://github.com/rwese/agency-templates" if template_name else None,
+        template_url=template_name if template_name and template_name.startswith(("http://", "https://")) else ("https://github.com/rwese/agency-templates" if template_name else None),
         template_subdir=template_subdir,
         agents=[AgentEntry(name="coder")],
     )
@@ -373,11 +395,26 @@ def _create_project(config: InitConfig, refresh: bool = False) -> None:
     click.echo("[2/4] Creating configuration...")
     if config.template_name:
         # Resolve template
+        # If template_url is a full URL, extract the subdir from it
         tm = TemplateManager(
             config.template_url or "https://github.com/rwese/agency-templates",
             cache_dir=Path.home() / ".cache" / "agency" / "templates",
         )
-        template_subdir = config.template_subdir or config.template_name
+
+        # Determine the subdir: explicit --template-subdir, or extract from URL
+        template_subdir = config.template_subdir
+        if not template_subdir:
+            # Extract subdir from URL if template_name is a full URL
+            if config.template_name.startswith(("http://", "https://")):
+                # Parse the URL to extract path after /tree/<branch>/
+                _, _, rest = config.template_name.partition("/tree/")
+                if rest:
+                    parts = rest.split("/")
+                    template_subdir = "/".join(parts[1:]) if len(parts) > 1 else ""
+            else:
+                # Use template name as subdir
+                template_subdir = config.template_name
+
         template_path = tm.get_template(subdir=template_subdir, refresh=refresh)
         if template_path:
             click.echo(f"[INFO] Using template: {template_path}")
@@ -2264,6 +2301,110 @@ def audit_clear(ctx, before, force):
     click.echo(f"[INFO] Deleted {deleted} events")
 
 
+# === Skill Commands ===
+
+
+@click.group("skill")
+def skill_cmd():
+    """Skill management commands."""
+    pass
+
+
+def _get_agency_skills_dir() -> Path | None:
+    """Find the agency's skills directory.
+
+    Checks:
+    1. Current working directory (development mode)
+    2. Agency package directory (installed mode)
+
+    Returns:
+        Path to .agents/skills/ directory, or None if not found
+    """
+    # Try current working directory
+    skills_dir = Path.cwd() / ".agents" / "skills"
+    if skills_dir.exists():
+        return skills_dir
+
+    # Try package directory
+    package_dir = Path(__file__).parent.parent.parent
+    skills_dir = package_dir / ".agents" / "skills"
+    if skills_dir.exists():
+        return skills_dir
+
+    return None
+
+
+def _get_skill_source_path(skill_name: str) -> Path | None:
+    """Get the source path for a skill.
+
+    Args:
+        skill_name: Name of the skill (e.g., 'agency')
+
+    Returns:
+        Path to the skill directory, or None if not found
+    """
+    skills_dir = _get_agency_skills_dir()
+    if not skills_dir:
+        return None
+
+    skill_path = skills_dir / skill_name
+    if skill_path.exists() and skill_path.is_dir():
+        return skill_path
+
+    return None
+
+
+@skill_cmd.command("install")
+@click.argument("path", type=click.Path())
+@click.option("--force", is_flag=True, help="Overwrite if skill already exists")
+def skill_install(path, force):
+    """Install an agency skill to the specified path.
+
+    Copies the skill to <path>/.agents/skills/<skill-name>/
+
+    Examples:
+
+        agency skill install ~/.pi/agent/skills/
+        agency skill install ~/projects/myproject/
+    """
+    import shutil
+
+    # Resolve the path
+    target_path = resolve_path(path)
+
+    # Find the skill to install (agency by default)
+    skill_name = "agency"
+    skill_source = _get_skill_source_path(skill_name)
+
+    if not skill_source:
+        click.echo("[ERROR] Agency skill not found in package", err=True)
+        click.echo("[ERROR] Make sure you're running from the agency repository", err=True)
+        sys.exit(1)
+
+    # Target: <path>/.agents/skills/<skill-name>/
+    target_skill_dir = target_path / ".agents" / "skills" / skill_name
+
+    if target_skill_dir.exists() and not force:
+        click.echo(f"[ERROR] Skill already exists at {target_skill_dir}", err=True)
+        click.echo("[ERROR] Use --force to overwrite", err=True)
+        sys.exit(1)
+
+    # Create parent directories
+    target_skill_dir.mkdir(parents=True, exist_ok=True)
+
+    # Copy skill files
+    for item in skill_source.iterdir():
+        dest = target_skill_dir / item.name
+        if item.is_file():
+            shutil.copy2(item, dest)
+        elif item.is_dir():
+            if dest.exists():
+                shutil.rmtree(dest)
+            shutil.copytree(item, dest)
+
+    click.echo(f"[INFO] Skill '{skill_name}' installed to {target_skill_dir}")
+
+
 # Register commands based on AGENCY_ROLE
 _agency_role = os.environ.get("AGENCY_ROLE", "").upper()
 
@@ -2280,9 +2421,10 @@ elif _agency_role == "AGENT":
     cli.add_command(tasks)
     cli.add_command(heartbeat_cmd)
 else:
-    # Default: all commands
+    # Default: all commands (no role set)
     cli.add_command(init_project, name="init")
     cli.add_command(list_templates, name="templates")
+    cli.add_command(skill_cmd)
     cli.add_command(session_cmd)
     cli.add_command(tasks)
     cli.add_command(completions)

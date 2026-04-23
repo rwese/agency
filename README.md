@@ -105,16 +105,18 @@ pending → in_progress → pending_approval → completed
 Use templates for quick project setup:
 
 ```bash
+# List available templates
+agency templates
+
 # Basic template (default)
-agency init-project --dir ~/projects/api
+agency init --dir ~/projects/api
 
 # API template
-agency init-project --dir ~/projects/api \
-  --template https://github.com/rwese/agency-templates/tree/main/api
+agency init --dir ~/projects/api --template api
 
-# Custom template
-agency init-project --dir ~/projects/app \
-  --template https://github.com/user/repo
+# Custom GitHub template
+agency init --dir ~/projects/app \
+  --template https://github.com/user/repo/tree/main/my-template
 ```
 
 ## Configuration

@@ -18,6 +18,30 @@ class TemplateManager:
         self.cache_dir = cache_dir or Path.home() / ".cache" / "agency" / "templates"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
+    def _get_local_templates_dir(self) -> Path | None:
+        """Find local templates directory in agency package.
+
+        Checks:
+        1. Current working directory/templates/ (development mode)
+        2. Agency package directory/templates/ (installed mode)
+
+        Returns:
+            Path to local templates directory, or None if not found
+        """
+        # Try current working directory first (development mode)
+        local_dir = Path.cwd() / "templates"
+        if local_dir.exists():
+            return local_dir
+
+        # Try package directory (installed mode)
+        # __file__ is in src/agency/, so parent.parent.parent reaches repo root
+        package_dir = Path(__file__).parent.parent.parent
+        local_dir = package_dir / "templates"
+        if local_dir.exists():
+            return local_dir
+
+        return None
+
     def _parse_url(self) -> tuple[str, str, str]:
         """Parse repo URL into (owner/repo, branch, subdir).
 
@@ -47,21 +71,39 @@ class TemplateManager:
         # Simple template name - assume it's in rwese/agency-templates
         return "rwese/agency-templates", "main", url
 
-    def _get_cache_key(self) -> str:
-        """Get cache key for this template."""
-        repo, branch, subdir = self._parse_url()
+    def _get_cache_key(self, subdir: str = "") -> str:
+        """Get cache key for this template.
+
+        Args:
+            subdir: Template subdirectory name
+        """
+        repo, branch, template_subdir = self._parse_url()
+
+        # Use provided subdir if specified
+        if subdir:
+            template_subdir = subdir
+
         repo_key = repo.replace("https://", "").replace("http://", "").replace("/", "_")
         key = f"{repo_key}_{branch}"
-        if subdir:
-            key += f"_{subdir.replace('/', '_')}"
+        if template_subdir:
+            key += f"_{template_subdir.replace('/', '_')}"
         return key
 
-    def get_cache_path(self) -> Path:
-        """Get the cache directory for this template."""
-        return self.cache_dir / self._get_cache_key()
+    def get_cache_path(self, subdir: str = "") -> Path:
+        """Get the cache directory for this template.
+
+        Args:
+            subdir: Template subdirectory name
+        """
+        return self.cache_dir / self._get_cache_key(subdir)
 
     def get_template(self, subdir: str = "", refresh: bool = False) -> Path | None:
         """Get a template root path, using cache if available.
+
+        Priority:
+        1. Cache (if not refreshing)
+        2. Local templates/ directory (agency package)
+        3. GitHub download fallback
 
         Args:
             subdir: Optional subdirectory within the template (e.g., 'fullstack-ts')
@@ -70,17 +112,54 @@ class TemplateManager:
         Returns:
             Path to template root directory, or None if download failed
         """
-        cache_path = self.get_cache_path()
+        # Use 'basic' as default if no subdir specified
+        effective_subdir = subdir if subdir else "basic"
+        cache_path = self.get_cache_path(effective_subdir)
 
-        # Check cache
+        # Check cache first
         if not refresh and cache_path.exists() and any(cache_path.iterdir()):
             return cache_path
 
-        # Download
-        if self._download_template(subdir):
+        # Try local templates first
+        if self._copy_local_template(effective_subdir, cache_path):
+            return cache_path
+
+        # Fall back to GitHub download
+        if self._download_template(effective_subdir):
             return cache_path
 
         return None
+
+    def _copy_local_template(self, subdir: str, cache_path: Path) -> bool:
+        """Copy template from local templates/ directory.
+
+        Args:
+            subdir: Template subdirectory name (e.g., 'basic')
+            cache_path: Where to copy the template
+
+        Returns:
+            True if copied successfully, False otherwise
+        """
+        if not subdir:
+            subdir = "basic"
+
+        local_templates = self._get_local_templates_dir()
+        if not local_templates:
+            return False
+
+        template_source = local_templates / subdir
+        if not template_source.exists():
+            return False
+
+        try:
+            if cache_path.exists():
+                shutil.rmtree(cache_path)
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(template_source, cache_path)
+            return True
+        except Exception as e:
+            print(f"[WARN] Local template copy failed: {e}", flush=True)
+            return False
 
     def _download_template(self, subdir: str = "") -> bool:
         """Download template from GitHub.

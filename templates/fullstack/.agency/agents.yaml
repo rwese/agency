@@ -1,0 +1,7 @@
+agents:
+  - name: backend
+    config: agents/backend.yaml
+  - name: frontend
+    config: agents/frontend.yaml
+  - name: devops
+    config: agents/devops.yaml

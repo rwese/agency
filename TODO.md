@@ -19,3 +19,19 @@
 
 - M2.4: Add test for reviewer flow
 - M3.3: Add test for crash recovery
+
+---
+
+## Template Integration (2026-04-23)
+
+Integrated `agency-templates` repo into `agency` repo as `templates/` directory.
+
+### Done
+
+- [x] Create `templates/` directory
+- [x] Copy templates (basic, api, fullstack)
+- [x] Update `TemplateManager` to prefer local templates
+- [x] Fix cache key to include subdir
+- [x] Update `list_templates` command
+- [x] Update documentation
+- [x] Delete agency-templates repo

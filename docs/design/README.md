@@ -61,4 +61,4 @@ Detailed workflows:
 
 - [AGENTS.md](../../AGENTS.md) - Developer-focused overview
 - [CHANGELOG.md](../../CHANGELOG.md) - Version history
-- [agency-templates](https://github.com/rwese/agency-templates) - Default templates repo
+- [templates/](../../templates/) - Bundled templates (basic, api, fullstack)
