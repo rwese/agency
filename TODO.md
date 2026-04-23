@@ -29,33 +29,50 @@
 - [x] 5.2 Update README with schema references
 - [x] 5.3 Document migration path (in SPEC.md)
 
-## Acceptance Criteria
+## Acceptance Criteria ✅
 - [x] All schemas have valid JSON Schema draft-2020-12 syntax
 - [x] Pydantic models generated from schemas match existing code
 - [x] Config files validate against schemas at runtime
 - [x] SPEC.md serves as single source of truth
 - [x] CI validates schemas on push
 
-## Files Added/Modified
+## Completed Features
 
-### New Files
+### Schema Files (12 total)
+- `config.json` - Project configuration
+- `manager.json` - Coordinator config
+- `agent.json` - Individual agent
+- `agents.json` - Agent registry
+- `task.json` - Work unit
+- `tasks_store.json` - Task registry
+- `result.json` - Task result
+- `pending_task.json` - Pending approval
+- `notification.json` - Event notification
+- `notifications_store.json` - Notification registry
+- `slots_available.json` - Task slot tracking
+- `halted.json` - Halt state
+
+### Generated Models (12 total)
+Auto-generated Pydantic models in `src/agency/models/`
+
+### Scripts
+- `scripts/generate_models.py` - Generate Pydantic from schemas
+- `scripts/validate_schemas.py` - Validate schema syntax
+
+### Documentation
 - `SPEC.md` - Complete specification with embedded schemas
-- `src/agency/schemas/task.json` - Task entity schema
-- `src/agency/schemas/tasks_store.json` - Task registry schema
-- `src/agency/schemas/result.json` - Task result schema
-- `src/agency/schemas/pending_task.json` - Pending approval schema
-- `src/agency/schemas/notification.json` - Notification event schema
-- `src/agency/schemas/notifications_store.json` - Notification registry schema
-- `src/agency/schemas/slots_available.json` - Slot tracking schema
-- `src/agency/schemas/halted.json` - Halt state schema
-- `src/agency/schemas/_index.json` - Schema index
-- `scripts/generate_models.py` - Pydantic model generator
-- `scripts/validate_schemas.py` - Schema validator
+- Updated `README.md` with schema references
+- Updated `.github/workflows/ci.yml` with validation step
 
-### Modified Files
-- `src/agency/schemas/config.json` - Updated to draft-2020-12
-- `src/agency/schemas/manager.json` - Updated to draft-2020-12
-- `src/agency/schemas/agent.json` - Updated to draft-2020-12
-- `src/agency/schemas/agents.json` - Updated to draft-2020-12
-- `.github/workflows/ci.yml` - Added schema validation steps
-- `README.md` - Added schema references
+## Usage
+
+```bash
+# Validate schemas
+uv run python scripts/validate_schemas.py
+
+# Generate/update Pydantic models
+uv run python scripts/generate_models.py
+
+# Commit schema changes
+git add src/agency/schemas/ && git commit -m "chore: update schemas"
+```
