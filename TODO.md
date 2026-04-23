@@ -1,25 +1,19 @@
-## Agency Hire — Implementation
+## Agency Hire — Complete ✅
 
-### Goal
-Generate project-specific agency configurations through an interactive interview process.
+### Done
 
-### In Progress
-
-- [ ] Design CLI interface for `agency hire`
+- [x] CLI interface for `agency hire`
+- [x] Interview question system (project type, language, framework, team)
+- [x] Manager personality generator
+- [x] Agent personality generator (coder, tester, devops, reviewer)
+- [x] Non-interactive mode with `--non-interactive`
+- [x] Preview mode with `--preview`
 
 ### Ready
 
-- [ ] Create interview question system
-- [ ] Build manager personality generator
-- [ ] Build agent personality generator
-- [ ] Create personality templates per project type
-- [ ] Implement task template generation
 - [ ] Add project type detection from existing files
 - [ ] Add template saving/sharing
-
-### Blocked
-
-- [ ] None
+- [ ] Create task templates
 
 ### Done
 
