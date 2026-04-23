@@ -1629,8 +1629,7 @@ def session_stop(session, timeout, force, idle):
         config_timeout = config.stop_timeout
 
     timeout = timeout or config_timeout or 60  # CLI > config > default
-    idle_check_interval = 2  # Check idle status every 2 seconds
-    idle_target = idle  # Seconds of inactivity to consider idle
+    idle_check_interval = 2  # Check status every 2 seconds
 
     # Phase 1: Send Escape to cancel ongoing operations
     click.echo("[INFO] Phase 1: Sending Escape to cancel ongoing operations...")
@@ -1641,10 +1640,9 @@ def session_stop(session, timeout, force, idle):
     click.echo("[INFO] Phase 2: Sending wrapup command...")
     sm.broadcast_wrapup()
 
-    # Wait for idle with graceful kill of idle windows
+    # Wait for graceful shutdown - let agents exit on their own
     elapsed = 0.0
     last_progress = 0.0
-    killed_windows: set[str] = set()
 
     while elapsed < timeout:
         time.sleep(idle_check_interval)
@@ -1655,21 +1653,16 @@ def session_stop(session, timeout, force, idle):
             sm.cleanup_socket()
             return
 
-        # Check idle status
-        idle_windows = [w for w in sm.get_idle_windows(idle_target) if w not in killed_windows]
-
-        if idle_windows:
-            click.echo(f"[INFO] Idle windows: {', '.join(idle_windows)}")
-
-            # Kill idle windows that haven't been killed yet
-            for window in idle_windows:
-                click.echo(f"[INFO] Killing idle window: {window}")
-                sm.kill_window(window)
-                killed_windows.add(window)
+        # Check which windows still exist
+        remaining_windows = sm.list_windows()
+        if not remaining_windows:
+            click.echo("[INFO] All windows exited gracefully")
+            sm.cleanup_socket()
+            return
 
         # Progress indicator every 30 seconds
         if elapsed - last_progress >= 30:
-            click.echo(f"[INFO] Waiting for graceful shutdown... ({elapsed:.0f}s elapsed)")
+            click.echo(f"[INFO] Waiting for graceful shutdown... ({elapsed:.0f}s elapsed, {len(remaining_windows)} windows remaining)")
             last_progress = elapsed
 
     # Force kill after timeout
