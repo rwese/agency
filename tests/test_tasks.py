@@ -54,7 +54,7 @@ class TestTask:
         task = Task(
             subject="API endpoint",
             description="Create GET /users endpoint",
-            task_id="api-endpoint-001",
+            task_id="api-endpoint-a001",
             acceptance_criteria=["Returns user list", "Handles empty list"],
         )
         data = task.to_dict()
@@ -67,7 +67,7 @@ class TestTask:
         task = Task(
             subject="Fix bug",
             description="Fix memory leak",
-            task_id="fix-bug-001",
+            task_id="fix-bug-a001",
             references=["src/cache.py", "https://github.com/issues/123"],
         )
         data = task.to_dict()
@@ -79,7 +79,7 @@ class TestTask:
         task = Task(
             subject="Debug crash",
             description="Analyze crash dump",
-            task_id="debug-crash-001",
+            task_id="debug-crash-b001",
             attachments=["crash.log", "screenshot.png"],
         )
         data = task.to_dict()
