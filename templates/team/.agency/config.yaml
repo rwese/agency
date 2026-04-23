@@ -1,0 +1,3 @@
+project: ${{project_name}}
+shell: bash
+parallel_limit: 3

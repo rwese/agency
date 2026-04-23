@@ -29,7 +29,7 @@ class TestApproveCommand:
         (agency_dir / "var" / "pending").mkdir(parents=True)
 
         store = TaskStore(agency_dir)
-        task = store.add_task(description="Test task")
+        task = store.add_task(subject="Test task", description="Test task description")
         store.complete_task(task.task_id, result="Done")
         return store, task.task_id
 
@@ -64,7 +64,7 @@ class TestRejectCommand:
         (agency_dir / "var" / "pending").mkdir(parents=True)
 
         store = TaskStore(agency_dir)
-        task = store.add_task(description="Test task")
+        task = store.add_task(subject="Test task", description="Test task description")
         store.complete_task(task.task_id, result="Done")
         return store, task.task_id
 
@@ -121,7 +121,7 @@ class TestReopenCommand:
         (agency_dir / "var" / "pending").mkdir(parents=True)
 
         store = TaskStore(agency_dir)
-        task = store.add_task(description="Test task")
+        task = store.add_task(subject="Test task", description="Test task description")
         store.complete_task(task.task_id, result="Done")
         store.approve_task(task.task_id)
         return store, task.task_id
@@ -135,7 +135,7 @@ class TestReopenCommand:
         (agency_dir / "var" / "pending").mkdir(parents=True)
 
         store = TaskStore(agency_dir)
-        task = store.add_task(description="Test task")
+        task = store.add_task(subject="Test task", description="Test task description")
         store.complete_task(task.task_id, result="Done")
         store.reject_task(task.task_id, reason="Failed")
         return store, task.task_id
@@ -176,7 +176,7 @@ class TestReopenCommand:
         (agency_dir / "var" / "pending").mkdir(parents=True)
 
         store = TaskStore(agency_dir)
-        task = store.add_task(description="Test task")
+        task = store.add_task(subject="Test task", description="Test task description")
         args = make_args(task_id=task.task_id)
         result = cmd_reopen(store, args)
 

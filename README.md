@@ -15,7 +15,7 @@ agency init-project --dir ~/projects/api --start-manager coordinator
 agency start developer --dir ~/projects/api
 
 # Manage tasks
-agency tasks add -d "Implement authentication"
+agency tasks add -s "Implement auth" -d "Add user authentication with JWT tokens"
 agency tasks assign swift-bear-a3f2 developer
 agency tasks list
 

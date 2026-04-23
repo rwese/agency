@@ -15,15 +15,17 @@ class TestTask:
     def test_task_to_dict(self):
         """Test Task serialization to dict."""
         task = Task(
+            subject="Test task",
+            description="This is a test task with proper description",
             task_id="swift-bear-a3f2",
-            description="Test task",
             status="pending",
             priority="normal",
         )
         data = task.to_dict()
 
         assert data["task_id"] == "swift-bear-a3f2"
-        assert data["description"] == "Test task"
+        assert data["subject"] == "Test task"
+        assert data["description"] == "This is a test task with proper description"
         assert data["status"] == "pending"
         assert data["priority"] == "normal"
         assert data["assigned_to"] is None
@@ -32,7 +34,8 @@ class TestTask:
         """Test Task deserialization from dict."""
         data = {
             "task_id": "jade-owl-7f2a",
-            "description": "Another task",
+            "subject": "Another task",
+            "description": "This is another task with proper description",
             "status": "in_progress",
             "priority": "high",
             "assigned_to": "coder",
@@ -40,10 +43,48 @@ class TestTask:
         task = Task.from_dict(data)
 
         assert task.task_id == "jade-owl-7f2a"
-        assert task.description == "Another task"
+        assert task.subject == "Another task"
+        assert task.description == "This is another task with proper description"
         assert task.status == "in_progress"
         assert task.priority == "high"
         assert task.assigned_to == "coder"
+
+    def test_task_with_acceptance_criteria(self):
+        """Test Task with acceptance criteria."""
+        task = Task(
+            subject="API endpoint",
+            description="Create GET /users endpoint",
+            task_id="api-endpoint-001",
+            acceptance_criteria=["Returns user list", "Handles empty list"],
+        )
+        data = task.to_dict()
+
+        assert data["acceptance_criteria"] == ["Returns user list", "Handles empty list"]
+        assert task.acceptance_criteria[0] == "Returns user list"
+
+    def test_task_with_references(self):
+        """Test Task with references."""
+        task = Task(
+            subject="Fix bug",
+            description="Fix memory leak",
+            task_id="fix-bug-001",
+            references=["src/cache.py", "https://github.com/issues/123"],
+        )
+        data = task.to_dict()
+
+        assert data["references"] == ["src/cache.py", "https://github.com/issues/123"]
+
+    def test_task_with_attachments(self):
+        """Test Task with attachments."""
+        task = Task(
+            subject="Debug crash",
+            description="Analyze crash dump",
+            task_id="debug-crash-001",
+            attachments=["crash.log", "screenshot.png"],
+        )
+        data = task.to_dict()
+
+        assert data["attachments"] == ["crash.log", "screenshot.png"]
 
 
 class TestTaskStore:
@@ -74,30 +115,31 @@ class TestTaskStore:
 
     def test_add_task(self, store):
         """Test adding a task."""
-        task = store.add_task(description="Test task")
+        task = store.add_task(subject="Test task", description="This is a test task")
 
         assert task.task_id is not None
-        assert task.description == "Test task"
+        assert task.subject == "Test task"
+        assert task.description == "This is a test task"
         assert task.status == "pending"
         assert task.priority == "low"
         assert task.assigned_to is None
 
     def test_add_task_with_priority(self, store):
         """Test adding a task with priority."""
-        task = store.add_task(description="High priority task", priority="high")
+        task = store.add_task(subject="High priority", description="High priority task", priority="high")
 
         assert task.priority == "high"
 
     def test_add_task_generates_unique_id(self, store):
         """Test that task IDs are unique."""
-        task1 = store.add_task(description="Task 1")
-        task2 = store.add_task(description="Task 2")
+        task1 = store.add_task(subject="Task 1", description="Task 1 description")
+        task2 = store.add_task(subject="Task 2", description="Task 2 description")
 
         assert task1.task_id != task2.task_id
 
     def test_task_id_format(self, store):
         """Test task ID format: word-word-xxxx."""
-        task = store.add_task(description="Test")
+        task = store.add_task(subject="Test", description="Test task")
 
         parts = task.task_id.split("-")
         assert len(parts) == 3
@@ -108,7 +150,7 @@ class TestTaskStore:
 
     def test_get_task(self, store):
         """Test getting a task by ID."""
-        task = store.add_task(description="Get test")
+        task = store.add_task(subject="Get test", description="Get test description")
 
         found = store.get_task(task.task_id)
         assert found is not None
@@ -122,17 +164,17 @@ class TestTaskStore:
 
     def test_list_tasks(self, store):
         """Test listing tasks."""
-        store.add_task(description="Task 1")
-        store.add_task(description="Task 2")
-        store.add_task(description="Task 3")
+        store.add_task(subject="Task 1", description="Task 1 description")
+        store.add_task(subject="Task 2", description="Task 2 description")
+        store.add_task(subject="Task 3", description="Task 3 description")
 
         tasks = store.list_tasks()
         assert len(tasks) == 3
 
     def test_list_tasks_filter_status(self, store):
         """Test filtering tasks by status."""
-        task1 = store.add_task(description="Task 1")
-        store.add_task(description="Task 2")
+        task1 = store.add_task(subject="Task 1", description="Task 1 description")
+        store.add_task(subject="Task 2", description="Task 2 description")
 
         store.update_task(task1.task_id, status="in_progress")
 
@@ -142,8 +184,8 @@ class TestTaskStore:
 
     def test_list_tasks_filter_assignee(self, store):
         """Test filtering tasks by assignee."""
-        task1 = store.add_task(description="Task 1", assigned_to="coder")
-        store.add_task(description="Task 2")
+        task1 = store.add_task(subject="Task 1", description="Task 1 description", assigned_to="coder")
+        store.add_task(subject="Task 2", description="Task 2 description")
 
         tasks = store.list_tasks(assignee="coder")
         assert len(tasks) == 1
@@ -151,7 +193,7 @@ class TestTaskStore:
 
     def test_assign_task(self, store):
         """Test assigning a task."""
-        task = store.add_task(description="Assign test")
+        task = store.add_task(subject="Assign test", description="Assign test description")
 
         result = store.assign_task(task.task_id, "coder")
 
@@ -166,18 +208,18 @@ class TestTaskStore:
 
     def test_assign_to_busy_agent(self, store):
         """Test assigning to an agent with active task."""
-        task1 = store.add_task(description="Task 1")
+        task1 = store.add_task(subject="Task 1", description="Task 1 description")
         store.assign_task(task1.task_id, "coder")
         store.update_task(task1.task_id, status="in_progress")
 
-        task2 = store.add_task(description="Task 2")
+        task2 = store.add_task(subject="Task 2", description="Task 2 description")
         result = store.assign_task(task2.task_id, "coder")
 
         assert result is False
 
     def test_update_task_status(self, store):
         """Test updating task status."""
-        task = store.add_task(description="Status test")
+        task = store.add_task(subject="Status test", description="Status test description")
 
         result = store.update_task(task.task_id, status="in_progress")
 
@@ -186,9 +228,26 @@ class TestTaskStore:
         assert updated.status == "in_progress"
         assert updated.started_at is not None
 
+    def test_update_task_invalid_transition(self, store):
+        """Test that invalid status transitions are rejected."""
+        task = store.add_task(subject="Invalid transition test", description="Test")
+
+        # Cannot go directly from pending to completed
+        result = store.update_task(task.task_id, status="completed")
+        assert result is False
+
+        # Cannot go from in_progress back to pending (should use reject instead)
+        store.update_task(task.task_id, status="in_progress")
+        result = store.update_task(task.task_id, status="completed")
+        assert result is False
+
+        # Valid: in_progress -> pending_approval
+        result = store.update_task(task.task_id, status="pending_approval")
+        assert result is True
+
     def test_update_task_priority(self, store):
         """Test updating task priority."""
-        task = store.add_task(description="Priority test")
+        task = store.add_task(subject="Priority test", description="Priority test description")
 
         result = store.update_task(task.task_id, priority="high")
 
@@ -198,7 +257,7 @@ class TestTaskStore:
 
     def test_complete_task(self, store):
         """Test completing a task."""
-        task = store.add_task(description="Complete test")
+        task = store.add_task(subject="Complete test", description="Complete test description")
 
         result = store.complete_task(
             task.task_id,
@@ -221,7 +280,7 @@ class TestTaskStore:
 
     def test_approve_task(self, store):
         """Test approving a task."""
-        task = store.add_task(description="Approve test")
+        task = store.add_task(subject="Approve test", description="Approve test description")
         store.complete_task(task.task_id, result="Done")
 
         result = store.approve_task(task.task_id)
@@ -232,7 +291,7 @@ class TestTaskStore:
 
     def test_reject_task(self, store):
         """Test rejecting a task."""
-        task = store.add_task(description="Reject test")
+        task = store.add_task(subject="Reject test", description="Reject test description")
         store.complete_task(task.task_id, result="Done")
 
         result = store.reject_task(
@@ -254,7 +313,7 @@ class TestTaskStore:
 
     def test_delete_task(self, store):
         """Test deleting a task."""
-        task = store.add_task(description="Delete test")
+        task = store.add_task(subject="Delete test", description="Delete test description")
 
         result = store.delete_task(task.task_id)
 
@@ -267,11 +326,11 @@ class TestTaskStore:
 
     def test_history(self, store):
         """Test getting task history."""
-        task1 = store.add_task(description="Completed task")
+        task1 = store.add_task(subject="Completed task", description="Completed task description")
         store.complete_task(task1.task_id, result="Done")
         store.approve_task(task1.task_id)
 
-        task2 = store.add_task(description="Failed task")
+        task2 = store.add_task(subject="Failed task", description="Failed task description")
         store.complete_task(task2.task_id, result="Done")
         store.reject_task(task2.task_id, reason="Error")
 
@@ -284,11 +343,11 @@ class TestTaskStore:
 
     def test_history_filter_by_agent(self, store):
         """Test filtering history by agent."""
-        task1 = store.add_task(description="Task 1", assigned_to="coder")
+        task1 = store.add_task(subject="Task 1", description="Task 1 description", assigned_to="coder")
         store.complete_task(task1.task_id, result="Done")
         store.approve_task(task1.task_id)
 
-        task2 = store.add_task(description="Task 2", assigned_to="tester")
+        task2 = store.add_task(subject="Task 2", description="Task 2 description", assigned_to="tester")
         store.complete_task(task2.task_id, result="Done")
         store.approve_task(task2.task_id)
 
@@ -303,7 +362,7 @@ class TestTaskStore:
         assert store.is_agent_free("coder") is True
 
         # With pending task = not free
-        task = store.add_task(description="Pending task", assigned_to="coder")
+        task = store.add_task(subject="Pending task", description="Pending task description", assigned_to="coder")
         assert store.is_agent_free("coder") is False
 
         # With in_progress task = not free
@@ -320,7 +379,7 @@ class TestTaskStore:
         # This tests that the lock prevents concurrent modifications
         tasks = []
         for i in range(10):
-            task = store.add_task(description=f"Concurrent task {i}")
+            task = store.add_task(subject=f"Concurrent task {i}", description=f"Concurrent task {i} description")
             tasks.append(task)
 
         assert len(store.list_tasks()) == 10
@@ -346,7 +405,7 @@ class TestTaskStoreFileLocking:
     def test_lock_file_created(self, temp_agency_dir):
         """Test that lock file is created."""
         store = TaskStore(temp_agency_dir)
-        store.add_task(description="Lock test")
+        store.add_task(subject="Lock test", description="Lock test description")
 
         # Lock file may or may not exist depending on timing
         # The important thing is that operations complete without error
@@ -355,7 +414,7 @@ class TestTaskStoreFileLocking:
     def test_tasks_json_version(self, temp_agency_dir):
         """Test that tasks.json has correct version."""
         store = TaskStore(temp_agency_dir)
-        store.add_task(description="Version test")
+        store.add_task(subject="Version test", description="Version test description")
 
         tasks_file = temp_agency_dir / "var" / "tasks.json"
         data = json.loads(tasks_file.read_text())
@@ -384,8 +443,8 @@ class TestTaskDependencies:
 
     def test_set_dependencies(self, store):
         """Test setting dependencies for a task."""
-        task1 = store.add_task(description="Task 1")
-        task2 = store.add_task(description="Task 2")
+        task1 = store.add_task(subject="Task 1", description="Task 1 description")
+        task2 = store.add_task(subject="Task 2", description="Task 2 description")
 
         result = store.set_dependencies(task2.task_id, [task1.task_id])
 
@@ -395,23 +454,23 @@ class TestTaskDependencies:
 
     def test_set_dependencies_nonexistent(self, store):
         """Test setting dependencies with nonexistent task."""
-        task1 = store.add_task(description="Task 1")
+        task1 = store.add_task(subject="Task 1", description="Task 1 description")
 
         with pytest.raises(ValueError, match="does not exist"):
             store.set_dependencies(task1.task_id, ["nonexistent-id"])
 
     def test_set_dependencies_self_reference(self, store):
         """Test that a task cannot depend on itself."""
-        task1 = store.add_task(description="Task 1")
+        task1 = store.add_task(subject="Task 1", description="Task 1 description")
 
         with pytest.raises(ValueError, match="cannot depend on itself"):
             store.set_dependencies(task1.task_id, [task1.task_id])
 
     def test_circular_dependency_detection(self, store):
         """Test that circular dependencies are detected."""
-        task1 = store.add_task(description="Task 1")
-        task2 = store.add_task(description="Task 2")
-        task3 = store.add_task(description="Task 3")
+        task1 = store.add_task(subject="Task 1", description="Task 1 description")
+        task2 = store.add_task(subject="Task 2", description="Task 2 description")
+        task3 = store.add_task(subject="Task 3", description="Task 3 description")
 
         # Task1 depends on nothing
         # Task2 depends on Task1 (ok)
@@ -425,9 +484,9 @@ class TestTaskDependencies:
 
     def test_add_dependency(self, store):
         """Test adding a single dependency."""
-        task1 = store.add_task(description="Task 1")
-        task2 = store.add_task(description="Task 2")
-        task3 = store.add_task(description="Task 3")
+        task1 = store.add_task(subject="Task 1", description="Task 1 description")
+        task2 = store.add_task(subject="Task 2", description="Task 2 description")
+        task3 = store.add_task(subject="Task 3", description="Task 3 description")
 
         store.add_dependency(task2.task_id, task1.task_id)
         store.add_dependency(task2.task_id, task3.task_id)
@@ -438,8 +497,8 @@ class TestTaskDependencies:
 
     def test_add_duplicate_dependency(self, store):
         """Test adding a dependency that already exists."""
-        task1 = store.add_task(description="Task 1")
-        task2 = store.add_task(description="Task 2")
+        task1 = store.add_task(subject="Task 1", description="Task 1 description")
+        task2 = store.add_task(subject="Task 2", description="Task 2 description")
 
         store.add_dependency(task2.task_id, task1.task_id)
         result = store.add_dependency(task2.task_id, task1.task_id)
@@ -451,9 +510,9 @@ class TestTaskDependencies:
 
     def test_remove_dependency(self, store):
         """Test removing a dependency."""
-        task1 = store.add_task(description="Task 1")
-        task2 = store.add_task(description="Task 2")
-        task3 = store.add_task(description="Task 3")
+        task1 = store.add_task(subject="Task 1", description="Task 1 description")
+        task2 = store.add_task(subject="Task 2", description="Task 2 description")
+        task3 = store.add_task(subject="Task 3", description="Task 3 description")
 
         store.set_dependencies(task2.task_id, [task1.task_id, task3.task_id])
         store.remove_dependency(task2.task_id, task1.task_id)
@@ -464,8 +523,8 @@ class TestTaskDependencies:
 
     def test_has_blocked_dependencies(self, store):
         """Test detecting blocked tasks."""
-        task1 = store.add_task(description="Task 1")
-        task2 = store.add_task(description="Task 2")
+        task1 = store.add_task(subject="Task 1", description="Task 1 description")
+        task2 = store.add_task(subject="Task 2", description="Task 2 description")
 
         # Task2 depends on Task1 (not completed yet)
         store.set_dependencies(task2.task_id, [task1.task_id])
@@ -475,8 +534,8 @@ class TestTaskDependencies:
 
     def test_has_blocked_dependencies_completed(self, store):
         """Test that completed dependencies don't block."""
-        task1 = store.add_task(description="Task 1")
-        task2 = store.add_task(description="Task 2")
+        task1 = store.add_task(subject="Task 1", description="Task 1 description")
+        task2 = store.add_task(subject="Task 2", description="Task 2 description")
 
         store.set_dependencies(task2.task_id, [task1.task_id])
         store.complete_task(task1.task_id, result="Done")
@@ -487,9 +546,9 @@ class TestTaskDependencies:
 
     def test_list_tasks_excludes_blocked_by_default(self, store):
         """Test that list_tasks excludes blocked tasks by default."""
-        task1 = store.add_task(description="Task 1")
-        task2 = store.add_task(description="Task 2")
-        task3 = store.add_task(description="Task 3")  # No dependencies
+        task1 = store.add_task(subject="Task 1", description="Task 1 description")
+        task2 = store.add_task(subject="Task 2", description="Task 2 description")
+        task3 = store.add_task(subject="Task 3", description="Task 3 description")  # No dependencies
 
         store.set_dependencies(task2.task_id, [task1.task_id])
 
@@ -502,8 +561,8 @@ class TestTaskDependencies:
 
     def test_list_tasks_include_blocked(self, store):
         """Test listing tasks including blocked ones."""
-        task1 = store.add_task(description="Task 1")
-        task2 = store.add_task(description="Task 2")
+        task1 = store.add_task(subject="Task 1", description="Task 1 description")
+        task2 = store.add_task(subject="Task 2", description="Task 2 description")
 
         store.set_dependencies(task2.task_id, [task1.task_id])
 
@@ -515,8 +574,8 @@ class TestTaskDependencies:
 
     def test_assign_blocked_task_fails(self, store):
         """Test that assigning a blocked task raises error."""
-        task1 = store.add_task(description="Task 1")
-        task2 = store.add_task(description="Task 2")
+        task1 = store.add_task(subject="Task 1", description="Task 1 description")
+        task2 = store.add_task(subject="Task 2", description="Task 2 description")
 
         store.set_dependencies(task2.task_id, [task1.task_id])
 
@@ -525,9 +584,9 @@ class TestTaskDependencies:
 
     def test_get_blocked_by(self, store):
         """Test getting blocking tasks."""
-        task1 = store.add_task(description="Task 1")
-        task2 = store.add_task(description="Task 2")
-        task3 = store.add_task(description="Task 3")
+        task1 = store.add_task(subject="Task 1", description="Task 1 description")
+        task2 = store.add_task(subject="Task 2", description="Task 2 description")
+        task3 = store.add_task(subject="Task 3", description="Task 3 description")
 
         store.set_dependencies(task2.task_id, [task1.task_id, task3.task_id])
 
@@ -549,8 +608,8 @@ class TestTaskDependencies:
 
     def test_task_serialization_includes_depends_on(self, store):
         """Test that depends_on is serialized correctly."""
-        task1 = store.add_task(description="Task 1")
-        task2 = store.add_task(description="Task 2")
+        task1 = store.add_task(subject="Task 1", description="Task 1 description")
+        task2 = store.add_task(subject="Task 2", description="Task 2 description")
 
         store.set_dependencies(task2.task_id, [task1.task_id])
 

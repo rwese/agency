@@ -23,8 +23,9 @@ PENDING_DIR = "var/pending"
 class Task:
     """Represents a task."""
 
-    task_id: str
-    description: str
+    subject: str  # Brief title/summary of the task (required)
+    description: str  # Detailed description of what needs to be done (required)
+    task_id: str = ""
     status: str = "pending"  # pending, in_progress, pending_approval, completed, failed
     priority: str = "low"  # low, normal, high
     assigned_to: str | None = None
@@ -34,6 +35,18 @@ class Task:
     result: str | None = None
     result_path: str | None = None
     depends_on: list[str] | None = None  # List of task IDs this task depends on
+
+    # Acceptance criteria - what must be true for the task to be considered complete
+    acceptance_criteria: list[str] | None = None
+    # Example: ["Tests pass", "No linting errors", "Documentation updated"]
+
+    # References - file paths, URLs, or other resources relevant to this task
+    references: list[str] | None = None
+    # Example: ["src/auth.py", "https://docs.example.com/api", "#issue-123"]
+
+    # Attachments - file paths to files stored with this task
+    attachments: list[str] | None = None
+    # Files are copied to .agency/var/tasks/<task_id>/attachments/ on task creation
 
     # Agent info (set when agent picks up task)
     agent_info: dict | None = None
@@ -51,6 +64,7 @@ class Task:
     def to_dict(self) -> dict:
         return {
             "task_id": self.task_id,
+            "subject": self.subject,
             "description": self.description,
             "status": self.status,
             "priority": self.priority,
@@ -61,6 +75,9 @@ class Task:
             "result": self.result,
             "result_path": self.result_path,
             "depends_on": self.depends_on,
+            "acceptance_criteria": self.acceptance_criteria,
+            "references": self.references,
+            "attachments": self.attachments,
             "agent_info": self.agent_info,
             "rejection_reason": self.rejection_reason,
             "review_notes": self.review_notes,
@@ -70,7 +87,8 @@ class Task:
     @classmethod
     def from_dict(cls, data: dict) -> "Task":
         return cls(
-            task_id=data["task_id"],
+            task_id=data.get("task_id", ""),
+            subject=data["subject"],
             description=data["description"],
             status=data.get("status", "pending"),
             priority=data.get("priority", "low"),
@@ -81,6 +99,9 @@ class Task:
             result=data.get("result"),
             result_path=data.get("result_path"),
             depends_on=data.get("depends_on"),
+            acceptance_criteria=data.get("acceptance_criteria"),
+            references=data.get("references"),
+            attachments=data.get("attachments"),
             agent_info=data.get("agent_info"),
             rejection_reason=data.get("rejection_reason"),
             review_notes=data.get("review_notes"),
@@ -209,11 +230,37 @@ class TaskStore:
 
     def add_task(
         self,
+        subject: str,
         description: str,
         priority: str = "low",
         assigned_to: str | None = None,
+        acceptance_criteria: list[str] | None = None,
+        references: list[str] | None = None,
+        attachments: list[str] | None = None,
     ) -> Task:
-        """Add a new task."""
+        """Add a new task.
+
+        Args:
+            subject: Brief title/summary of the task (required)
+            description: Detailed description of what needs to be done (required)
+            priority: Task priority: low, normal, high (default: low)
+            assigned_to: Agent to assign the task to (optional)
+            acceptance_criteria: List of criteria for task completion (optional)
+            references: List of file paths, URLs, or other references (optional)
+            attachments: List of file paths to attach (optional, files are copied)
+
+        Returns:
+            Created Task object
+
+        Raises:
+            ValueError: If subject or description is empty/whitespace only
+        """
+        # Validate required fields
+        if not subject or not subject.strip():
+            raise ValueError("Task subject is required and cannot be empty")
+        if not description or not description.strip():
+            raise ValueError("Task description is required and cannot be empty")
+
         with self._lock():
             data = self._read_tasks_json()
 
@@ -224,17 +271,36 @@ class TaskStore:
             task_dir = self.agency_dir / TASKS_DIR / task_id
             task_dir.mkdir(parents=True, exist_ok=True)
 
+            # Create attachments directory and copy files
+            attachment_paths: list[str] = []
+            if attachments:
+                attachments_dir = task_dir / "attachments"
+                attachments_dir.mkdir(parents=True, exist_ok=True)
+                for attachment_path in attachments:
+                    src = Path(attachment_path).expanduser()
+                    if src.exists():
+                        dest = attachments_dir / src.name
+                        shutil.copy2(src, dest)
+                        attachment_paths.append(str(dest.relative_to(task_dir)))
+                    else:
+                        # Store the path even if file doesn't exist (warn but continue)
+                        attachment_paths.append(attachment_path)
+
             # Create task file
             task_json = task_dir / "task.json"
             now = datetime.now().isoformat()
 
             task = Task(
                 task_id=task_id,
-                description=description,
+                subject=subject.strip(),
+                description=description.strip(),
                 status="pending",
                 priority=priority,
                 assigned_to=assigned_to,
                 created_at=now,
+                acceptance_criteria=acceptance_criteria,
+                references=references,
+                attachments=attachment_paths if attachment_paths else None,
             )
 
             data["tasks"][task_id] = task.to_dict()
@@ -250,9 +316,13 @@ class TaskStore:
                     action="create",
                     task_id=task_id,
                     details={
+                        "subject": subject,
                         "description": description,
                         "priority": priority,
                         "assigned_to": assigned_to,
+                        "acceptance_criteria_count": len(acceptance_criteria) if acceptance_criteria else 0,
+                        "references_count": len(references) if references else 0,
+                        "attachments_count": len(attachment_paths),
                     },
                 )
 
@@ -395,7 +465,17 @@ class TaskStore:
         priority: str | None = None,
         reviewer_assigned: str | None = None,
     ) -> bool:
-        """Update task fields."""
+        """Update task fields.
+
+        Status transitions allowed:
+        - pending -> in_progress
+        - in_progress -> pending
+        - pending_approval -> pending (reject flow)
+        - completed/failed -> pending (reopen)
+
+        Note: completed/failed must be set via approve_task/reject_task,
+        not via update_task.
+        """
         with self._lock():
             data = self._read_tasks_json()
             tasks = data.get("tasks", {})
@@ -404,8 +484,24 @@ class TaskStore:
                 return False
 
             now = datetime.now().isoformat()
+            current_status = tasks[task_id].get("status", "pending")
 
             if status:
+                # Validate status transitions - prevent completed/failed via update_task
+                valid_transitions = {
+                    "pending": ["in_progress"],
+                    "in_progress": ["pending", "pending_approval"],
+                    "pending_approval": ["pending"],  # For rejection
+                    "completed": ["pending"],  # For reopening
+                    "failed": ["pending"],  # For reopening
+                }
+
+                allowed = valid_transitions.get(current_status, [])
+                if status not in allowed:
+                    # Also allow no-op transitions (setting same status)
+                    if status != current_status:
+                        return False
+
                 tasks[task_id]["status"] = status
 
                 if status == "in_progress" and not tasks[task_id].get("started_at"):

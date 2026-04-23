@@ -39,6 +39,16 @@ Detailed workflows:
 - Shutdown and halt/resume
 - Template system
 
+### [v2.0-requirements.md](v2.0-requirements.md)
+Requirements specification (source of truth):
+- Goals and principles
+- Core requirements
+- Task lifecycle rules
+- Heartbeat processing
+- Notification rules
+- Dos and don'ts
+- Edge cases
+
 ## Reading Order
 
 1. Start with `v2.0-index.md`
@@ -46,6 +56,7 @@ Detailed workflows:
 3. Reference `v2.0-cli.md` for commands
 4. Use `v2.0-schemas.md` for implementation
 5. Reference `v2.0-workflows.md` for behavior
+6. **Critical**: Read `v2.0-requirements.md` for operational rules (heartbeat, notifications, dos/don'ts)
 
 ## Status
 
@@ -56,6 +67,7 @@ Detailed workflows:
 | v2.0-cli.md | ✓ Complete |
 | v2.0-schemas.md | ✓ Complete |
 | v2.0-workflows.md | ✓ Complete |
+| v2.0-requirements.md | ✓ Complete |
 
 ## Related Documents
 

@@ -1,4 +1,33 @@
-# Implementation TODO
+# Agency - Known Issues and Fixes
+
+## Completed Fixes
+
+| # | Issue | Fix | Status |
+|---|-------|-----|--------|
+| 1 | Developer bypassed `pending_approval` status | Added status transition validation | ✅ |
+| 2 | Developer used wrong commands | Updated personality with correct workflow | ✅ |
+| 3 | Task ID injection with spaces | Documented as tmux behavior | ✅ |
+| 4 | Manager didn't auto-review | Updated manager personality + v2 heartbeat | ✅ |
+| 5 | Manager heartbeat v1 not auto-assigning | Switched to v2 heartbeat with `assign_tasks_to_agents()` | ✅ |
+| 6 | Auto-approval only on count change | Check every cycle for pending tasks | ✅ |
+
+## Known Issues
+
+1. **Heartbeat v2 not starting from `agency session start`** - Was defined after `__main__` block
+2. **Test fixtures use wrong directory structure** - Fixed to use `var/tasks` and `var/pending`
+
+## Demo Projects Status
+
+| Demo | Status |
+|------|--------|
+| **Log Parser** | ✅ Complete |
+| **URL Shortener** | ✅ Complete (backend + frontend) |
+| **Bookmarks Vault** | ✅ Complete |
+| **Secret Scanner** | ✅ Complete |
+
+---
+
+# Schema Implementation (Completed)
 
 ## Phase 1: Schema Consolidation ✅
 - [x] 1.1 Audit existing schemas in `src/agency/schemas/`

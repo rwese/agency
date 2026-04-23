@@ -1,0 +1,7 @@
+agents:
+  - name: coder
+    config: agents/coder.yaml
+  - name: reviewer
+    config: agents/reviewer.yaml
+  - name: tester
+    config: agents/tester.yaml

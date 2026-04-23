@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] - 2026-04-23
+
+### Added
+
+#### Skill Templates & Assets
+- **Personality snippets**: 5 reusable agent personalities in `assets/personalities/`
+  - coder, reviewer, devops, tester, architect
+- **New templates**: `solo` (minimal single-agent) and `team` (coder/reviewer/tester workflow)
+- **Creation guide**: `references/creating-agencies.md` for custom agency setup
+- **Template table**: SKILL.md includes template selection guide
+
+### Changed
+
+- **SKILL.md**: Added Templates and Agent Personalities sections for discoverability
+
 ## [2.1.0] - 2026-04-22
 
 ### Added

@@ -2,11 +2,8 @@
 Tests for template_inject module.
 """
 
-import os
 import tempfile
 from pathlib import Path
-
-import pytest
 
 from agency.template_inject import (
     InjectionOptions,

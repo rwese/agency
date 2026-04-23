@@ -27,6 +27,7 @@ from agency.session import (
     start_agent_window,
     start_manager_window,
 )
+from agency.session_logs import logs_cmd
 from agency.tasks import TaskStore
 from agency.template import TemplateManager
 
@@ -161,7 +162,7 @@ def _get_default_epilog() -> str:
   agency session start
 
   # Task management
-  agency tasks add -d "Implement login"
+  agency tasks add -s "Implement login" -d "Add user authentication"
   agency tasks assign task-001 coder
   agency tasks list
 
@@ -834,12 +835,19 @@ def _list_tasks(agency_dir, status, assignee, include_blocked=False):
         click.echo(f"- status: {task.status} {status_icon}")
         click.echo(f"- priority: {task.priority}")
         click.echo(f"- assigned_to: {task.assigned_to or 'null'}")
+        click.echo(f"- subject: {task.subject}")
         click.echo(f"- description: {task.description}")
         click.echo(f"- created_at: {task.created_at}")
         if task.started_at:
             click.echo(f"- started_at: {task.started_at}")
         if task.completed_at:
             click.echo(f"- completed_at: {task.completed_at}")
+        if task.acceptance_criteria:
+            click.echo(f"- acceptance_criteria: {len(task.acceptance_criteria)} items")
+        if task.references:
+            click.echo(f"- references: {len(task.references)} items")
+        if task.attachments:
+            click.echo(f"- attachments: {len(task.attachments)} files")
         click.echo("")
 
 
@@ -879,19 +887,94 @@ def tasks_list(status, assignee, include_blocked):
 
 
 @tasks.command("add")
-@click.option("-d", "--description", required=True, help="Task description")
+@click.option(
+    "-s",
+    "--subject",
+    required=True,
+    help="Task subject/title (required, brief summary)",
+)
+@click.option(
+    "-d",
+    "--description",
+    required=True,
+    help="Task description (required, detailed explanation of what needs to be done)",
+)
 @click.option("-a", "--assignee", help="Assign to agent")
-@click.option("-p", "--priority", default="low", help="Priority: low, normal, high")
-def tasks_add(description, assignee, priority):
-    """Add a new task."""
+@click.option("-p", "--priority", default="low", type=click.Choice(["low", "normal", "high"]), help="Priority: low, normal, high")
+@click.option(
+    "-c",
+    "--acceptance-criteria",
+    multiple=True,
+    help="Acceptance criteria (can be specified multiple times)",
+)
+@click.option(
+    "-r",
+    "--reference",
+    "references",
+    multiple=True,
+    help="Reference: file path, URL, or issue number (can be specified multiple times)",
+)
+@click.option(
+    "--attachment",
+    "attachments",
+    multiple=True,
+    type=click.Path(exists=True),
+    help="File to attach to the task (file is copied to task storage)",
+)
+def tasks_add(subject, description, assignee, priority, acceptance_criteria, references, attachments):
+    """Add a new task.
+
+    A task requires both a subject and description. Additional fields like
+    acceptance criteria, references, and attachments help provide context.
+
+    Examples:
+
+        # Simple task
+        agency tasks add -s "Implement login" -d "Add user authentication with JWT tokens"
+
+        # Task with acceptance criteria
+        agency tasks add -s "API endpoint" -d "Create GET /users endpoint" \\
+            -c "Returns user list" -c "Handles empty list" -c "Pagination works"
+
+        # Task with references and attachments
+        agency tasks add -s "Fix bug" -d "Fix null pointer in auth" \\
+            -r "src/auth.py" -r "https://github.com/org/repo/issues/123" \\
+            --attachment "crash.log" --attachment "screenshot.png"
+    """
     agency_dir = find_agency_dir()
     if not agency_dir:
         click.echo("[ERROR] No .agency/ found", err=True)
         sys.exit(1)
 
+    # Validate minimum lengths (prevent single-char/meaningless tasks)
+    if len(subject.strip()) < 3:
+        click.echo("[ERROR] Subject must be at least 3 characters", err=True)
+        sys.exit(1)
+    if len(description.strip()) < 10:
+        click.echo("[ERROR] Description must be at least 10 characters", err=True)
+        sys.exit(1)
+
     store = TaskStore(agency_dir)
-    task = store.add_task(description=description, priority=priority, assigned_to=assignee)
-    click.echo(f"[INFO] Created task: {task.task_id}")
+    try:
+        task = store.add_task(
+            subject=subject,
+            description=description,
+            priority=priority,
+            assigned_to=assignee,
+            acceptance_criteria=list(acceptance_criteria) if acceptance_criteria else None,
+            references=list(references) if references else None,
+            attachments=list(attachments) if attachments else None,
+        )
+        click.echo(f"[INFO] Created task: {task.task_id}")
+        if acceptance_criteria:
+            click.echo(f"[INFO] Added {len(acceptance_criteria)} acceptance criteria")
+        if references:
+            click.echo(f"[INFO] Added {len(references)} references")
+        if attachments:
+            click.echo(f"[INFO] Attached {len(attachments)} files")
+    except ValueError as e:
+        click.echo(f"[ERROR] {e}", err=True)
+        sys.exit(1)
 
 
 @tasks.command("show")
@@ -922,6 +1005,7 @@ def tasks_show(task_id):
     click.echo("")
     click.echo("## Task")
     click.echo("")
+    click.echo(f"- **Subject**: {task.subject}")
     click.echo(f"- **Description**: {task.description}")
     click.echo(f"- **Status**: {task.status} {status_icon}")
     click.echo(f"- **Priority**: {task.priority}")
@@ -942,6 +1026,27 @@ def tasks_show(task_id):
             click.echo("- **Blocked by**: None ✅")
     else:
         click.echo("- **Depends on**: None")
+
+    # Show acceptance criteria
+    if task.acceptance_criteria:
+        click.echo("")
+        click.echo("## Acceptance Criteria")
+        for i, criterion in enumerate(task.acceptance_criteria, 1):
+            click.echo(f"{i}. {criterion}")
+
+    # Show references
+    if task.references:
+        click.echo("")
+        click.echo("## References")
+        for ref in task.references:
+            click.echo(f"- {ref}")
+
+    # Show attachments
+    if task.attachments:
+        click.echo("")
+        click.echo("## Attachments")
+        for attachment in task.attachments:
+            click.echo(f"- {attachment}")
 
     click.echo("")
 
@@ -1471,7 +1576,7 @@ def session_start(dir):
 
 @session_cmd.command("stop")
 @click.argument("session", required=False)
-@click.option("--timeout", type=int, help="Grace period in seconds (default: 300)")
+@click.option("--timeout", type=int, help="Grace period in seconds (default: from config, or 60)")
 @click.option("--force", is_flag=True, help="Force kill without graceful shutdown")
 @click.option("--idle", type=int, default=15, help="Seconds of inactivity before killing windows (default: 15)")
 def session_stop(session, timeout, force, idle):
@@ -1489,6 +1594,7 @@ def session_stop(session, timeout, force, idle):
     """
     _log_cli_command("session stop", session=session, timeout=timeout, force=force, idle=idle)
     # Auto-detect from .agency/ if session not provided
+    agency_dir_path = None
     if not session:
         agency_dir_path = find_agency_dir()
         if not agency_dir_path:
@@ -1516,9 +1622,15 @@ def session_stop(session, timeout, force, idle):
 
     import time
 
-    timeout = timeout or 300  # 5 minutes default
-    idle_check_interval = 2  # Check idle status every 2 seconds
-    idle_target = idle  # Seconds of inactivity to consider idle
+    # Use config stop_timeout if available, else CLI option, else 60s default
+    config_timeout = None
+    if agency_dir_path:
+        from agency.config import load_agency_config
+        config = load_agency_config(agency_dir_path)
+        config_timeout = config.stop_timeout
+
+    timeout = timeout or config_timeout or 60  # CLI > config > default
+    idle_check_interval = 2  # Check status every 2 seconds
 
     # Phase 1: Send Escape to cancel ongoing operations
     click.echo("[INFO] Phase 1: Sending Escape to cancel ongoing operations...")
@@ -1529,10 +1641,9 @@ def session_stop(session, timeout, force, idle):
     click.echo("[INFO] Phase 2: Sending wrapup command...")
     sm.broadcast_wrapup()
 
-    # Wait for idle with graceful kill of idle windows
+    # Wait for graceful shutdown - let agents exit on their own
     elapsed = 0.0
     last_progress = 0.0
-    killed_windows: set[str] = set()
 
     while elapsed < timeout:
         time.sleep(idle_check_interval)
@@ -1543,21 +1654,16 @@ def session_stop(session, timeout, force, idle):
             sm.cleanup_socket()
             return
 
-        # Check idle status
-        idle_windows = [w for w in sm.get_idle_windows(idle_target) if w not in killed_windows]
-
-        if idle_windows:
-            click.echo(f"[INFO] Idle windows: {', '.join(idle_windows)}")
-
-            # Kill idle windows that haven't been killed yet
-            for window in idle_windows:
-                click.echo(f"[INFO] Killing idle window: {window}")
-                sm.kill_window(window)
-                killed_windows.add(window)
+        # Check which windows still exist
+        remaining_windows = sm.list_windows()
+        if not remaining_windows:
+            click.echo("[INFO] All windows exited gracefully")
+            sm.cleanup_socket()
+            return
 
         # Progress indicator every 30 seconds
         if elapsed - last_progress >= 30:
-            click.echo(f"[INFO] Waiting for graceful shutdown... ({elapsed:.0f}s elapsed)")
+            click.echo(f"[INFO] Waiting for graceful shutdown... ({elapsed:.0f}s elapsed, {len(remaining_windows)} windows remaining)")
             last_progress = elapsed
 
     # Force kill after timeout
@@ -2445,6 +2551,7 @@ if _agency_role == "MANAGER":
     cli.add_command(tasks)
     cli.add_command(heartbeat_cmd)
     cli.add_command(audit_cmd)
+    cli.add_command(logs_cmd)
 elif _agency_role == "AGENT":
     # Agent sees: tasks_agent and tasks (limited commands)
     cli.add_command(tasks_agent)
@@ -2460,6 +2567,7 @@ else:
     cli.add_command(completions)
     cli.add_command(heartbeat_cmd)
     cli.add_command(audit_cmd)
+    cli.add_command(logs_cmd)
 
 
 def main():

@@ -469,7 +469,6 @@ def manager_heartbeat(
     print(f"[HEARTBEAT] Poll interval: {poll_interval}s, chunk: {chunk_size}, parallel_limit: {parallel_limit}")
 
     last_unassigned = 0
-    last_approval = 0
     last_notification_time = 0
     _idle_cycles = 0  # Track cycles with nothing to dispatch
 
@@ -558,26 +557,32 @@ def manager_heartbeat(
                                 },
                             )
 
-            # Only notify about pending approval when nothing is in progress
-            elif has_pending_approval and counts["pending_approval"] != last_approval:
-                msg = (
-                    f"👀 {counts['pending_approval']} task(s) pending your approval - run 'agency tasks list' to review"
-                )
-                if send_notification(window_ref, msg):
-                    print(f"[HEARTBEAT] Notified manager: {msg}")
-                    last_approval = counts["pending_approval"]
+            # Auto-approve pending tasks - check every cycle if there are pending tasks
+            if has_pending_approval:
+                # Get pending task IDs and approve directly via TaskStore
+                from agency.tasks import TaskStore
+                store = TaskStore(agency_dir)
+                pending_tasks = store.list_tasks(status="pending_approval")
+                for task in pending_tasks:
+                    task_id = task.task_id
+                    # Approve the task directly - no need for tmux or pi-inject
+                    result = store.approve_task(task_id)
+                    if result:
+                        print(f"[HEARTBEAT] Auto-approved task: {task_id}")
+                    else:
+                        print(f"[HEARTBEAT] Failed to approve task: {task_id}")
 
-                    # Audit log
-                    audit = _get_audit_store(agency_dir)
-                    if audit:
-                        audit.log_agent(
-                            action="heartbeat",
-                            agency_role="manager",
-                            details={
-                                "notification": "pending_approval",
-                                "pending_count": counts["pending_approval"],
-                            },
-                        )
+                # Audit log
+                audit = _get_audit_store(agency_dir)
+                if audit:
+                    audit.log_agent(
+                        action="heartbeat",
+                        agency_role="manager",
+                        details={
+                            "notification": "pending_approval",
+                            "pending_count": counts["pending_approval"],
+                        },
+                    )
 
             time.sleep(poll_interval)
 
@@ -696,9 +701,6 @@ def run_heartbeat():
     socket_name = os.environ.get("AGENCY_SOCKET", "")
     role = os.environ.get("AGENCY_ROLE", "").upper()
     poll_interval = int(os.environ.get("AGENCY_POLL_INTERVAL", "30"))
-    chunk_size = int(os.environ.get("AGENCY_CHUNK_SIZE", "1"))
-    parallel_limit_env = os.environ.get("AGENCY_PARALLEL_LIMIT", "")
-    parallel_limit = int(parallel_limit_env) if parallel_limit_env else None
 
     if not role:
         print("[HEARTBEAT] Error: AGENCY_ROLE must be set (MANAGER or AGENT)")
@@ -707,7 +709,8 @@ def run_heartbeat():
 
     if role == "MANAGER":
         manager_name = os.environ.get("AGENCY_MANAGER", "coordinator")
-        manager_heartbeat(agency_dir, socket_name, manager_name, poll_interval, chunk_size, parallel_limit)
+        # Use v2 heartbeat which has auto-assignment and auto-approval
+        manager_heartbeat_v2(agency_dir, socket_name, manager_name, poll_interval)
     elif role == "AGENT":
         agent_name = os.environ.get("AGENCY_AGENT", "")
         if not agent_name:
@@ -722,10 +725,6 @@ def run_heartbeat():
 
 def main():
     run_heartbeat()
-
-
-if __name__ == "__main__":
-    main()
 
 
 def manager_heartbeat_v2(
@@ -761,7 +760,6 @@ def manager_heartbeat_v2(
     if _check_pid_file(agency_dir, f"manager-{manager_name}"):
         return
 
-    window_ref = f"{socket_name}:[MGR] {manager_name}"
     orchestrator = Orchestrator(agency_dir)
 
     # Initialize slot tracking on startup
@@ -842,17 +840,25 @@ def manager_heartbeat_v2(
                         if agent:
                             orchestrator.signal_task_completed(agent)
 
-            # 6. NOTIFICATION: Notify about pending approvals
-            status = orchestrator.get_status_summary()
-            if current_approval_count > 0 and current_approval_count != last_approval_count:
-                msg = f"👀 {current_approval_count} task(s) pending approval. Reviewers spawned."
-                if send_notification(window_ref, msg):
-                    print("[HEARTBEAT-V2] Notified about pending approvals")
-            last_approval_count = current_approval_count
+            # 6. AUTO-APPROVE: Automatically approve pending tasks
+            if pending_approval:
+                from agency.tasks import TaskStore
+                store = TaskStore(agency_dir)
+                for task in pending_approval:
+                    task_id = task.get("task_id")
+                    if task_id:
+                        result = store.approve_task(task_id)
+                        if result:
+                            print(f"[HEARTBEAT-V2] Auto-approved task: {task_id}")
+                        else:
+                            print(f"[HEARTBEAT-V2] Failed to approve task: {task_id}")
+                # Re-fetch pending count after approvals
+                current_approval_count = len(store.list_tasks(status="pending_approval"))
 
             # 7. STATUS: Log status summary periodically
             _idle_cycles += 1
             if _idle_cycles % 10 == 0:
+                status = orchestrator.get_status_summary()
                 print(
                     f"[HEARTBEAT-V2] Status: {status['total_busy']}/{status['parallel_limit']} busy, "
                     f"{len(status['running_agents'])} running, "
@@ -869,3 +875,7 @@ def manager_heartbeat_v2(
 
             traceback.print_exc()
             time.sleep(poll_interval)
+
+
+if __name__ == "__main__":
+    main()

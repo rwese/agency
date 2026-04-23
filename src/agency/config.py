@@ -120,7 +120,7 @@ def load_agency_config(agency_dir: Path) -> AgencyConfig:
         stop_timeout=data.get("stop_timeout", 30),
         additional_context_files=context_files_expanded if context_files_expanded else None,
         template_delimiter=data.get("template_delimiter"),
-        parallel_limit=data.get("parallel_limit"),
+        parallel_limit=data.get("parallel_limit", DEFAULT_PARALLEL_LIMIT),
         audit_enabled=data.get("audit_enabled", True),
     )
 
