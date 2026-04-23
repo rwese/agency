@@ -337,6 +337,36 @@ def write_notification(agency_dir: Path, role: str, agent_name: str, message: st
     system_hint_file.write_text(f"\n## NEW NOTIFICATION\n{message}\n")
 
 
+def send_tmux_keys(window_ref: str, cmd: str) -> bool:
+    """Send keys directly to a tmux window.
+
+    Args:
+        window_ref: tmux window reference like "socket:window"
+        cmd: Command to send
+
+    Returns:
+        True if successful, False otherwise
+    """
+    import subprocess
+
+    # Parse socket and window from window_ref (e.g., "agency-log-parser:[MGR] coordinator")
+    if ":" in window_ref:
+        socket_name, window_name = window_ref.rsplit(":", 1)
+    else:
+        return False
+
+    try:
+        subprocess.run(
+            ["tmux", "-L", socket_name, "send-keys", "-t", f"{socket_name}:{window_name}", cmd, "Enter"],
+            capture_output=True,
+            check=False
+        )
+        return True
+    except Exception as e:
+        print(f"[HEARTBEAT] tmux send error: {e}")
+        return False
+
+
 def send_notification(window_ref: str, message: str) -> bool:
     """Send a notification via pi-inject Unix socket.
 
@@ -567,26 +597,14 @@ def manager_heartbeat(
 
                 for task in pending_tasks:
                     task_id = task.task_id
-                    # Send approval command directly
+                    # Send approval command directly to tmux window
                     cmd = f"agency tasks approve {task_id}"
-                    if send_notification(window_ref, f"Please review and approve: {task_id}"):
-                        # Actually send the approve command
-                        import os
+                    if send_tmux_keys(window_ref, cmd):
+                        print(f"[HEARTBEAT] Sent approval for {task_id}")
+                    else:
+                        print(f"[HEARTBEAT] Could not send approval for {task_id}")
 
-                        from agency.pi_inject import get_client
-                        socket_path = os.environ.get("PI_INJECTOR_SOCKET", "")
-                        if socket_path:
-                            try:
-                                client = get_client(socket_path)
-                                resp = client.steer(cmd)
-                                if resp.is_ok:
-                                    print(f"[HEARTBEAT] Sent approval for {task_id}")
-                                else:
-                                    print(f"[HEARTBEAT] Approval error: {resp.message}")
-                            except Exception as e:
-                                print(f"[HEARTBEAT] Could not send approval: {e}")
-
-                print(f"[HEARTBEAT] Notified manager about {len(pending_tasks)} pending approval tasks")
+                print(f"[HEARTBEAT] Sent {len(pending_tasks)} approval commands")
                 last_approval = counts["pending_approval"]
 
                 # Audit log
