@@ -1,6 +1,6 @@
 ---
 name: agency-project-eval
-description: Build, run, and evaluate demo projects using agency. Use when: (1) running evaluation projects from demo/projects, (2) validating project outputs, (3) reviewing agency session results, (4) generating evaluation reports. Covers project initialization, session management, test execution, and result validation.
+description: "Build, run, and evaluate demo projects using agency. Use when: (1) running evaluation projects from demo/projects, (2) validating project outputs, (3) reviewing agency session results, (4) generating evaluation reports. Covers project initialization, session management, test execution, and result validation."
 ---
 
 # Agency Project Evaluation
