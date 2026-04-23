@@ -204,8 +204,8 @@ def _schema_to_model(
     lines.append("        return self.model_dump(mode=\"json\")")
     lines.append("")
     lines.append("    @classmethod")
-    lines.append("    def from_dict(cls, data: dict) -> \"Task\":")
-    lines.append('        """Create Task from dictionary (backwards compatible)."""')
+    lines.append(f"    def from_dict(cls, data: dict) -> \"{class_name}\":")
+    lines.append('        """Create from dictionary (backwards compatible)."""')
     lines.append("        return cls.model_validate(data)")
 
     return "\n".join(lines), imports, pattern_lines

@@ -44,5 +44,5 @@ class Task(BaseModel):
 
     @classmethod
     def from_dict(cls, data: dict) -> "Task":
-        """Create Task from dictionary (backwards compatible)."""
+        """Create from dictionary (backwards compatible)."""
         return cls.model_validate(data)
