@@ -469,7 +469,6 @@ def manager_heartbeat(
     print(f"[HEARTBEAT] Poll interval: {poll_interval}s, chunk: {chunk_size}, parallel_limit: {parallel_limit}")
 
     last_unassigned = 0
-    last_approval = 0
     last_notification_time = 0
     _idle_cycles = 0  # Track cycles with nothing to dispatch
 
@@ -558,8 +557,8 @@ def manager_heartbeat(
                                 },
                             )
 
-            # Auto-approve pending tasks directly
-            elif has_pending_approval and counts["pending_approval"] != last_approval:
+            # Auto-approve pending tasks - check every cycle if there are pending tasks
+            if has_pending_approval:
                 # Get pending task IDs and approve directly via TaskStore
                 from agency.tasks import TaskStore
                 store = TaskStore(agency_dir)
@@ -572,7 +571,6 @@ def manager_heartbeat(
                         print(f"[HEARTBEAT] Auto-approved task: {task_id}")
                     else:
                         print(f"[HEARTBEAT] Failed to approve task: {task_id}")
-                last_approval = counts["pending_approval"]
 
                 # Audit log
                 audit = _get_audit_store(agency_dir)
