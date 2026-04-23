@@ -465,7 +465,17 @@ class TaskStore:
         priority: str | None = None,
         reviewer_assigned: str | None = None,
     ) -> bool:
-        """Update task fields."""
+        """Update task fields.
+
+        Status transitions allowed:
+        - pending -> in_progress
+        - in_progress -> pending
+        - pending_approval -> pending (reject flow)
+        - completed/failed -> pending (reopen)
+
+        Note: completed/failed must be set via approve_task/reject_task,
+        not via update_task.
+        """
         with self._lock():
             data = self._read_tasks_json()
             tasks = data.get("tasks", {})
@@ -474,8 +484,24 @@ class TaskStore:
                 return False
 
             now = datetime.now().isoformat()
+            current_status = tasks[task_id].get("status", "pending")
 
             if status:
+                # Validate status transitions - prevent completed/failed via update_task
+                valid_transitions = {
+                    "pending": ["in_progress"],
+                    "in_progress": ["pending", "pending_approval"],
+                    "pending_approval": ["pending"],  # For rejection
+                    "completed": ["pending"],  # For reopening
+                    "failed": ["pending"],  # For reopening
+                }
+
+                allowed = valid_transitions.get(current_status, [])
+                if status not in allowed:
+                    # Also allow no-op transitions (setting same status)
+                    if status != current_status:
+                        return False
+
                 tasks[task_id]["status"] = status
 
                 if status == "in_progress" and not tasks[task_id].get("started_at"):

@@ -272,15 +272,15 @@ def cmd_update(store: TaskStore, args: argparse.Namespace) -> int:
         print("[ERROR] At least one of --status or --priority required", file=sys.stderr)
         return 1
 
-    # Validate status
+    # Validate status - only allow transitional states, not terminal states
+    # completed/failed must go through approve/reject commands
     if args.status and args.status not in (
         "pending",
         "in_progress",
         "pending_approval",
-        "completed",
-        "failed",
     ):
         print(f"[ERROR] Invalid status: {args.status}", file=sys.stderr)
+        print("[ERROR] Use 'agency tasks complete' or 'agency tasks approve' for completed tasks", file=sys.stderr)
         return 1
 
     # Validate priority

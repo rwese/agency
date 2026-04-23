@@ -39,9 +39,9 @@ Need to ensure proper escaping of arguments.
 
 ### In Progress
 
-- [ ] Fix 1: Enforce pending_approval before completed
-- [ ] Fix 2: Update developer personality with correct commands
-- [ ] Fix 3: Investigate pi-inject task ID quoting
+### Done
+
+- [x] Fix 1: Enforce pending_approval before completed - Added status transition validation in update_task and cmd_update
 
 ### Done
 

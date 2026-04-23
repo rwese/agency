@@ -228,6 +228,23 @@ class TestTaskStore:
         assert updated.status == "in_progress"
         assert updated.started_at is not None
 
+    def test_update_task_invalid_transition(self, store):
+        """Test that invalid status transitions are rejected."""
+        task = store.add_task(subject="Invalid transition test", description="Test")
+
+        # Cannot go directly from pending to completed
+        result = store.update_task(task.task_id, status="completed")
+        assert result is False
+
+        # Cannot go from in_progress back to pending (should use reject instead)
+        store.update_task(task.task_id, status="in_progress")
+        result = store.update_task(task.task_id, status="completed")
+        assert result is False
+
+        # Valid: in_progress -> pending_approval
+        result = store.update_task(task.task_id, status="pending_approval")
+        assert result is True
+
     def test_update_task_priority(self, store):
         """Test updating task priority."""
         task = store.add_task(subject="Priority test", description="Priority test description")
