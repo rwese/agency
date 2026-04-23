@@ -30,6 +30,7 @@ from agency.session import (
 from agency.session_logs import logs_cmd
 from agency.tasks import TaskStore
 from agency.template import TemplateManager
+from agency.hire import hire as hire_cmd
 
 # Get version info - try build metadata first, then runtime git, then fallback
 VERSION = __version__
@@ -2566,6 +2567,7 @@ else:
     cli.add_command(heartbeat_cmd)
     cli.add_command(audit_cmd)
     cli.add_command(logs_cmd)
+    cli.add_command(hire_cmd)
 
 
 def main():
