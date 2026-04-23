@@ -34,7 +34,7 @@ def _get_audit_store(agency_dir: Path | None = None):
 SESSION_PREFIX = "agency-"
 MANAGER_PREFIX = "[MGR] "
 SHUTDOWN_MESSAGE = "Please wrap up, save your work, then exit gracefully. Say 'Goodbye' when done."
-WRAPUP_MESSAGE = """Please perform cleanup: (1) Save all work, (2) Update pending tasks with remaining work status using 'agency tasks-agent update <task-id> --status pending --result incomplete: <what remains>', (3) Say 'Goodbye' in your response, then exit."""
+WRAPUP_MESSAGE = """Please perform cleanup: (1) Save all work, (2) Update pending tasks with remaining work status using 'agency tasks update <task-id> --status pending --result incomplete: <what remains>', (3) Say 'Goodbye' in your response, then exit."""
 
 # Default context files to discover
 DEFAULT_CONTEXT_FILES = ["AGENTS.md", "CLAUDE.md", ".claude.md"]
@@ -163,31 +163,31 @@ You are a specialized agent. Your job is to WORK on assigned tasks, not just rep
 
 1. **Check your work queue:**
    ```bash
-   agency tasks-agent my-work
+   agency tasks my-work
    ```
    This shows your tasks in priority order: in_progress → pending → pending_approval
 
 2. **For each pending task:**
-   a. View: `agency tasks-agent show <task-id>`
-   b. Mark in_progress: `agency tasks-agent update <task-id> --status in_progress`
+   a. View: `agency tasks show <task-id>`
+   b. Mark in_progress: `agency tasks update <task-id> --status in_progress`
    c. **DO THE WORK** - create files, write code, etc.
-   d. Mark complete: `agency tasks-agent complete <task-id> --result "<what you did>"`
+   d. Mark complete: `agency tasks complete <task-id> --result "<what you did>"`
 
 3. **After completing, check for more work:**
    ```bash
-   agency tasks-agent my-work
+   agency tasks my-work
    ```
 
 ### Critical Rules:
 - **DO NOT** just list tasks - WORK on them immediately
 - **DO NOT** say "I'll do X later" - do it NOW
 - **DO NOT** wait for permission - complete the task and mark it done
-- **When idle**, check `agency tasks-agent my-work` for work
+- **When idle**, check `agency tasks my-work` for work
 
 ## Coordinator Tasks
 If assigned a coordinator task (like reviewing docs):
 1. Complete the work as instructed
-2. Mark complete: `agency tasks-agent complete <id> --result "<summary>"`
+2. Mark complete: `agency tasks complete <id> --result "<summary>"`
 
 ## Working Directory
 All work happens in the project directory. Use `cd` to navigate.
@@ -746,8 +746,8 @@ def _generate_manager_launch_script(
     # Get parallel limit from agency config
     parallel_limit = agency_config.parallel_limit
 
-    # Get pi session directory (default: .agency/pi/sessions/)
-    pi_session_dir = os.environ.get("AGENCY_PI_SESSION_DIR", str(agency_dir / "pi" / "sessions"))
+    # Get pi session directory (default: .agency/pi/sessions/manager/)
+    pi_session_dir = os.environ.get("AGENCY_PI_SESSION_DIR", str(agency_dir / "pi" / "sessions" / "manager"))
 
     # Get pi extensions from project-local .agency/pi/extensions/ (self-contained)
     # pi-inject and pi-status have extensions/ subdirectory; no-frills is at root
@@ -789,7 +789,7 @@ set -euo pipefail
 
 # === Configuration ===
 readonly WORK_DIR="{work_dir}"
-readonly AGENCY_DIR="{agency_dir}"
+AGENCY_DIR="{agency_dir}"
 readonly SESSION_NAME="{session_name}"
 readonly SOCKET_NAME="{socket_name}"
 readonly MANAGER_NAME="{manager_name}"
@@ -843,7 +843,7 @@ export AGENCY_CHUNK_SIZE="$CHUNK_SIZE"
 [[ -n "$PARALLEL_LIMIT" ]] && export "$PARALLEL_LIMIT"
 export PI_INJECTOR_SOCKET="$INJECTOR_SOCKET"
 export PI_STATUS_SOCKET="$STATUS_SOCKET"
-$NOFRILLS_ENV
+eval $NOFRILLS_ENV
 
 $AGENT_CMD \
   -e "$INJECT_EXT" \
@@ -1004,8 +1004,8 @@ def _generate_agent_launch_script(
         poll_interval = config.get("poll_interval", 30)
         ping_interval = config.get("ping_interval", 120)
 
-    # Get pi session directory (default: .agency/pi/sessions/)
-    pi_session_dir = os.environ.get("AGENCY_PI_SESSION_DIR", str(agency_dir / "pi" / "sessions"))
+    # Get pi session directory (default: .agency/pi/sessions/<agent_name>/)
+    pi_session_dir = os.environ.get("AGENCY_PI_SESSION_DIR", str(agency_dir / "pi" / "sessions" / agent_name))
 
     # No-frills env vars for minimal UI (hide decorations)
     nofrills_env = (
@@ -1022,7 +1022,7 @@ set -euo pipefail
 
 # === Configuration ===
 readonly WORK_DIR="{work_dir}"
-readonly AGENCY_DIR="{agency_dir}"
+AGENCY_DIR="{agency_dir}"
 readonly SESSION_NAME="{session_name}"
 readonly SOCKET_NAME="{socket_name}"
 readonly AGENT_NAME="{agent_name}"
@@ -1071,7 +1071,7 @@ export AGENCY_AGENT="$AGENT_NAME"
 export AGENCY_SOCKET="$SOCKET_NAME"
 export PI_INJECTOR_SOCKET="$INJECTOR_SOCKET"
 export PI_STATUS_SOCKET="$STATUS_SOCKET"
-$NOFRILLS_ENV
+eval $NOFRILLS_ENV
 
 $AGENT_CMD \
   -e "$INJECT_EXT" \
