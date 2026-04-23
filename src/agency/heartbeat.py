@@ -337,36 +337,6 @@ def write_notification(agency_dir: Path, role: str, agent_name: str, message: st
     system_hint_file.write_text(f"\n## NEW NOTIFICATION\n{message}\n")
 
 
-def send_tmux_keys(window_ref: str, cmd: str) -> bool:
-    """Send keys directly to a tmux window.
-
-    Args:
-        window_ref: tmux window reference like "socket:window"
-        cmd: Command to send
-
-    Returns:
-        True if successful, False otherwise
-    """
-    import subprocess
-
-    # Parse socket and window from window_ref (e.g., "agency-log-parser:[MGR] coordinator")
-    if ":" in window_ref:
-        socket_name, window_name = window_ref.rsplit(":", 1)
-    else:
-        return False
-
-    try:
-        subprocess.run(
-            ["tmux", "-L", socket_name, "send-keys", "-t", f"{socket_name}:{window_name}", cmd, "Enter"],
-            capture_output=True,
-            check=False
-        )
-        return True
-    except Exception as e:
-        print(f"[HEARTBEAT] tmux send error: {e}")
-        return False
-
-
 def send_notification(window_ref: str, message: str) -> bool:
     """Send a notification via pi-inject Unix socket.
 
@@ -588,23 +558,20 @@ def manager_heartbeat(
                                 },
                             )
 
-            # Only notify about pending approval when nothing is in progress
+            # Auto-approve pending tasks directly
             elif has_pending_approval and counts["pending_approval"] != last_approval:
-                # Get pending task IDs and send approve commands
+                # Get pending task IDs and approve directly via TaskStore
                 from agency.tasks import TaskStore
                 store = TaskStore(agency_dir)
                 pending_tasks = store.list_tasks(status="pending_approval")
-
                 for task in pending_tasks:
                     task_id = task.task_id
-                    # Send approval command directly to tmux window
-                    cmd = f"agency tasks approve {task_id}"
-                    if send_tmux_keys(window_ref, cmd):
-                        print(f"[HEARTBEAT] Sent approval for {task_id}")
+                    # Approve the task directly - no need for tmux or pi-inject
+                    result = store.approve_task(task_id)
+                    if result:
+                        print(f"[HEARTBEAT] Auto-approved task: {task_id}")
                     else:
-                        print(f"[HEARTBEAT] Could not send approval for {task_id}")
-
-                print(f"[HEARTBEAT] Sent {len(pending_tasks)} approval commands")
+                        print(f"[HEARTBEAT] Failed to approve task: {task_id}")
                 last_approval = counts["pending_approval"]
 
                 # Audit log
