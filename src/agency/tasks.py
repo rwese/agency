@@ -2,165 +2,49 @@
 Agency v2.0 - Task Management
 
 Handles task operations with file locking and directory management.
+Uses Pydantic models generated from JSON schemas for validation.
 """
 
 import json
 import os
+import re
 import shutil
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 from filelock import FileLock
+from pydantic import ValidationError
+
+from agency.models.task import Task as TaskModel
+
+# Alias for backwards compatibility
+Task = TaskModel
 
 # Constants
 TASKS_FILE = "var/tasks.json"
 TASKS_DIR = "var/tasks"
 PENDING_DIR = "var/pending"
 
-# Valid status and priority values
+# Valid status and priority values (for methods that need them)
 VALID_STATUSES = {"pending", "in_progress", "pending_approval", "completed", "failed"}
 VALID_PRIORITIES = {"low", "normal", "high"}
 
 
-
-def _validate_task_data(data: dict) -> list[str]:
-    """Validate task data against schema. Returns list of error messages."""
-    errors = []
-    
-    # Required fields
-    if not data.get("subject"):
-        errors.append("subject: required field missing")
-    if not data.get("description"):
-        errors.append("description: required field missing")
-    
-    # Validate status
-    status = data.get("status", "pending")
-    if status not in VALID_STATUSES:
-        errors.append(f"status: must be one of {VALID_STATUSES}")
-    
-    # Validate priority
-    priority = data.get("priority", "low")
-    if priority not in VALID_PRIORITIES:
-        errors.append(f"priority: must be one of {VALID_PRIORITIES}")
-    
-    # Validate task_id format if present
-    task_id = data.get("task_id", "")
-    if task_id and not _is_valid_task_id(task_id):
-        errors.append(f"task_id: invalid format '{task_id}' (expected word-word-hex)")
-    
-    # Validate assigned_to is string or null
-    if "assigned_to" in data and data["assigned_to"] is not None:
-        if not isinstance(data["assigned_to"], str):
-            errors.append("assigned_to: must be string or null")
-    
-    # Validate depends_on is list or null
-    if "depends_on" in data and data["depends_on"] is not None:
-        if not isinstance(data["depends_on"], list):
-            errors.append("depends_on: must be list or null")
-    
-    return errors
-
-
 def _is_valid_task_id(task_id: str) -> bool:
     """Check if task_id matches pattern word-word-hex."""
-    import re
     return bool(re.match(r"^[a-z]+-[a-z]+-[0-9a-f]{4}$", task_id))
 
 
-@dataclass
-class Task:
-    """Represents a task."""
+def validate_task_data(data: dict) -> list[str]:
+    """Validate task data against schema using Pydantic.
 
-    subject: str  # Brief title/summary of the task (required)
-    description: str  # Detailed description of what needs to be done (required)
-    task_id: str = ""
-    status: str = "pending"  # pending, in_progress, pending_approval, completed, failed
-    priority: str = "low"  # low, normal, high
-    assigned_to: str | None = None
-    created_at: str | None = None
-    started_at: str | None = None
-    completed_at: str | None = None
-    result: str | None = None
-    result_path: str | None = None
-    depends_on: list[str] | None = None  # List of task IDs this task depends on
-
-    # Acceptance criteria - what must be true for the task to be considered complete
-    acceptance_criteria: list[str] | None = None
-    # Example: ["Tests pass", "No linting errors", "Documentation updated"]
-
-    # References - file paths, URLs, or other resources relevant to this task
-    references: list[str] | None = None
-    # Example: ["src/auth.py", "https://docs.example.com/api", "#issue-123"]
-
-    # Attachments - file paths to files stored with this task
-    attachments: list[str] | None = None
-    # Files are copied to .agency/var/tasks/<task_id>/attachments/ on task creation
-
-    # Agent info (set when agent picks up task)
-    agent_info: dict | None = None
-    # {
-    #   "session_id": "pi-session-coder-a1b2c3",
-    #   "pid": 12345,
-    #   "started_at": "2024-01-15T10:30:00Z"
-    # }
-
-    # Review info
-    rejection_reason: str | None = None
-    review_notes: str | None = None
-    reviewer_assigned: str | None = None  # Track which reviewer is handling this task
-
-    def to_dict(self) -> dict:
-        return {
-            "task_id": self.task_id,
-            "subject": self.subject,
-            "description": self.description,
-            "status": self.status,
-            "priority": self.priority,
-            "assigned_to": self.assigned_to,
-            "created_at": self.created_at,
-            "started_at": self.started_at,
-            "completed_at": self.completed_at,
-            "result": self.result,
-            "result_path": self.result_path,
-            "depends_on": self.depends_on,
-            "acceptance_criteria": self.acceptance_criteria,
-            "references": self.references,
-            "attachments": self.attachments,
-            "agent_info": self.agent_info,
-            "rejection_reason": self.rejection_reason,
-            "review_notes": self.review_notes,
-            "reviewer_assigned": self.reviewer_assigned,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "Task":
-        # Validate data on load
-        errors = _validate_task_data(data)
-        if errors:
-            raise ValueError(f"Invalid task data: {', '.join(errors)}")
-        
-        return cls(
-            task_id=data.get("task_id", ""),
-            subject=data["subject"],
-            description=data["description"],
-            status=data.get("status", "pending"),
-            priority=data.get("priority", "low"),
-            assigned_to=data.get("assigned_to"),
-            created_at=data.get("created_at"),
-            started_at=data.get("started_at"),
-            completed_at=data.get("completed_at"),
-            result=data.get("result"),
-            result_path=data.get("result_path"),
-            depends_on=data.get("depends_on"),
-            acceptance_criteria=data.get("acceptance_criteria"),
-            references=data.get("references"),
-            attachments=data.get("attachments"),
-            agent_info=data.get("agent_info"),
-            rejection_reason=data.get("rejection_reason"),
-            review_notes=data.get("review_notes"),
-            reviewer_assigned=data.get("reviewer_assigned"),
-        )
+    Returns list of error messages. Empty list means valid.
+    """
+    try:
+        Task.model_validate(data)
+        return []
+    except ValidationError as e:
+        return [f"{err['loc'][0]}: {err['msg']}" for err in e.errors()]
 
 
 class TaskStore:
@@ -170,23 +54,69 @@ class TaskStore:
         self.agency_dir = agency_dir
         self.tasks_file = agency_dir / TASKS_FILE
         self.lock_file = agency_dir / "var" / ".tasks.lock"
-        self._audit_store = None
+        self._lock = FileLock(str(self.lock_file), timeout=10)
+        self._audit_store = None  # Lazy init
 
         # Ensure directories exist
         agency_dir.mkdir(parents=True, exist_ok=True)
-        (agency_dir / "var").mkdir(exist_ok=True)
-        (agency_dir / TASKS_DIR).mkdir(exist_ok=True)
-        (agency_dir / PENDING_DIR).mkdir(exist_ok=True)
+        (agency_dir / "var" / "tasks").mkdir(parents=True, exist_ok=True)
+        (agency_dir / "var" / "pending").mkdir(parents=True, exist_ok=True)
+
+    def _read_tasks_json(self) -> dict:
+        """Read and parse tasks.json."""
+        if not self.tasks_file.exists():
+            return {"version": 2, "tasks": {}}
+
+        try:
+            with open(self.tasks_file) as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            return {"version": 2, "tasks": {}}
+
+    def _write_tasks_json(self, data: dict) -> None:
+        """Write tasks.json atomically."""
+        # Write to temp file first, then rename
+        temp_file = self.tasks_file.with_suffix(".tmp")
+        with open(temp_file, "w") as f:
+            json.dump(data, f, indent=2)
+        temp_file.rename(self.tasks_file)
+
+    def _generate_task_id(self, data: dict) -> str:
+        """Generate unique task ID using word-word-hex format."""
+        import secrets
+
+        # Get used IDs
+        used_ids = set(data.get("tasks", {}).keys())
+
+        # Use eff.org short words (subset for readability)
+        words = [
+            "atom", "bird", "cake", "desk", "eagle", "fire", "gold", "harp",
+            "iris", "jade", "kite", "lamp", "moon", "nest", "oaks", "palm",
+            "rain", "sage", "tree", "unit", "vine", "wave", "yarn", "zion",
+            "apex", "bark", "cave", "dawn", "echo", "fern", "glow", "haze",
+            "icon", "jolt", "knot", "lark", "mist", "node", "opal", "peak",
+            "quad", "rust", "sand", "tide", "unit", "volt", "wind", "xray",
+        ]
+
+        for _ in range(100):  # Max attempts
+            word1 = secrets.choice(words)
+            word2 = secrets.choice(words)
+            hex_id = secrets.token_hex(2)[:4]
+            task_id = f"{word1}-{word2}-{hex_id}"
+            if task_id not in used_ids:
+                return task_id
+
+        raise RuntimeError("Failed to generate unique task ID")
 
     def _get_audit_store(self):
-        """Get audit store lazily if audit is enabled in config."""
+        """Get audit store if available."""
         if self._audit_store is None:
             try:
                 from agency.audit import AuditStore
                 from agency.config import load_agency_config
 
                 config = load_agency_config(self.agency_dir)
-                if config.audit_enabled:
+                if config and config.audit_enabled:
                     self._audit_store = AuditStore(self.agency_dir)
                 else:
                     self._audit_store = False
@@ -194,83 +124,49 @@ class TaskStore:
                 self._audit_store = False  # Mark as unavailable
         return self._audit_store if self._audit_store else None
 
-    def _read_tasks_json(self) -> dict:
-        """Read tasks.json."""
-        if not self.tasks_file.exists():
-            return {"version": 2, "tasks": {}}
-
-        with open(self.tasks_file) as f:
-            return json.load(f)
-
-    def _write_tasks_json(self, data: dict) -> None:
-        """Write tasks.json."""
-        with open(self.tasks_file, "w") as f:
-            json.dump(data, f, indent=2)
-
-    def _lock(self):
-        """Acquire lock on tasks.json."""
-        return FileLock(str(self.lock_file), timeout=10)
-
     def list_tasks(
         self,
         status: str | None = None,
         assignee: str | None = None,
         include_blocked: bool = False,
     ) -> list[Task]:
-        """List tasks with optional filtering.
-
-        Args:
-            status: Filter by task status
-            assignee: Filter by assigned agent
-            include_blocked: If False, filter out tasks with incomplete dependencies
-        """
+        """List tasks with optional filters."""
         data = self._read_tasks_json()
-        tasks = [Task.from_dict(t) for t in data.get("tasks", {}).values()]
+        tasks = []
 
-        if status:
-            # Support comma-separated status values (e.g., "pending,in_progress")
-            status_list = [s.strip() for s in status.split(",")]
-            tasks = [t for t in tasks if t.status in status_list]
+        for task_data in data.get("tasks", {}).values():
+            # Validate task data
+            errors = validate_task_data(task_data)
+            if errors:
+                continue  # Skip invalid tasks
 
-        if assignee:
-            tasks = [t for t in tasks if t.assigned_to == assignee]
+            task = Task.model_validate(task_data)
 
-        if not include_blocked:
-            tasks = [t for t in tasks if not self._has_blocked_dependencies(t)]
+            # Filter by status
+            if status and task.status != status:
+                continue
 
+            # Filter by assignee
+            if assignee and task.assigned_to != assignee:
+                continue
+
+            # Filter blocked tasks
+            if not include_blocked and task.depends_on:
+                blocked = self.get_blocked_by(task.task_id)
+                if blocked:
+                    continue
+
+            tasks.append(task)
+
+        # Sort by priority (high > normal > low), then created_at
+        priority_order = {"high": 0, "normal": 1, "low": 2}
+        tasks.sort(
+            key=lambda t: (
+                priority_order.get(t.priority or "low", 1),
+                t.created_at or "",
+            )
+        )
         return tasks
-
-    def _has_blocked_dependencies(self, task: Task) -> bool:
-        """Check if task has incomplete dependencies.
-
-        A task is blocked if any of its dependencies are not completed.
-        """
-        if not task.depends_on:
-            return False
-
-        for dep_id in task.depends_on:
-            dep_task = self.get_task(dep_id)
-            if dep_task is None:
-                # Dependency task doesn't exist - consider it as blocking
-                return True
-            if dep_task.status != "completed":
-                return True
-
-        return False
-
-    def get_blocked_by(self, task_id: str) -> list[Task]:
-        """Get list of tasks blocking the given task."""
-        task = self.get_task(task_id)
-        if not task or not task.depends_on:
-            return []
-
-        blocking = []
-        for dep_id in task.depends_on:
-            dep_task = self.get_task(dep_id)
-            if dep_task and dep_task.status != "completed":
-                blocking.append(dep_task)
-
-        return blocking
 
     def get_task(self, task_id: str) -> Task | None:
         """Get a single task by ID."""
@@ -278,7 +174,10 @@ class TaskStore:
         tasks = data.get("tasks", {})
 
         if task_id in tasks:
-            return Task.from_dict(tasks[task_id])
+            try:
+                return Task.model_validate(tasks[task_id])
+            except ValidationError:
+                return None
 
         return None
 
@@ -314,12 +213,12 @@ class TaskStore:
             raise ValueError("Task subject is required and cannot be empty")
         if not description or not description.strip():
             raise ValueError("Task description is required and cannot be empty")
-        
+
         # Validate priority
         if priority not in VALID_PRIORITIES:
             raise ValueError(f"Task priority must be one of {VALID_PRIORITIES}")
 
-        with self._lock():
+        with self._lock:
             data = self._read_tasks_json()
 
             # Generate task ID
@@ -345,7 +244,6 @@ class TaskStore:
                         attachment_paths.append(attachment_path)
 
             # Create task file
-            task_json = task_dir / "task.json"
             now = datetime.now().isoformat()
 
             task = Task(
@@ -361,11 +259,8 @@ class TaskStore:
                 attachments=attachment_paths if attachment_paths else None,
             )
 
-            data["tasks"][task_id] = task.to_dict()
+            data["tasks"][task_id] = task.model_dump(mode="json")
             self._write_tasks_json(data)
-
-            # Write task.json to task directory
-            task_json.write_text(json.dumps(task.to_dict(), indent=2))
 
             # Audit log
             audit = self._get_audit_store()
@@ -373,39 +268,51 @@ class TaskStore:
                 audit.log_task(
                     action="create",
                     task_id=task_id,
-                    details={
-                        "subject": subject,
-                        "description": description,
-                        "priority": priority,
-                        "assigned_to": assigned_to,
-                        "acceptance_criteria_count": len(acceptance_criteria) if acceptance_criteria else 0,
-                        "references_count": len(references) if references else 0,
-                        "attachments_count": len(attachment_paths),
-                    },
+                    details={"subject": subject, "priority": priority},
                 )
 
             return task
 
+    def get_in_progress_tasks(self) -> list[Task]:
+        """Get all tasks currently in progress."""
+        return self.list_tasks(status="in_progress")
+
+    def get_unblocked_pending_tasks(self) -> list[Task]:
+        """Get pending tasks that are not blocked by dependencies."""
+        pending = self.list_tasks(status="pending")
+        return [t for t in pending if not self.get_blocked_by(t.task_id)]
+
+    def get_agent_busy_count(self, agent: str) -> int:
+        """Get count of pending + in_progress tasks for an agent."""
+        pending = self.list_tasks(status="pending", assignee=agent)
+        in_progress = self.list_tasks(status="in_progress", assignee=agent)
+        return len(pending) + len(in_progress)
+
     def assign_task(self, task_id: str, agent: str) -> bool:
-        """Assign a task to an agent."""
-        with self._lock():
+        """Assign a task to an agent.
+
+        Returns False if task doesn't exist.
+        Raises ValueError if task is blocked by incomplete dependencies.
+        """
+        with self._lock:
             data = self._read_tasks_json()
             tasks = data.get("tasks", {})
 
             if task_id not in tasks:
-                return False
+                return False  # Return False for nonexistent
 
-            task = Task.from_dict(tasks[task_id])
+            # Check if blocked by incomplete dependencies
+            if tasks[task_id].get("depends_on"):
+                blocked = []
+                for dep_id in tasks[task_id]["depends_on"]:
+                    if dep_id in tasks and tasks[dep_id]["status"] != "completed":
+                        blocked.append(dep_id)
+                if blocked:
+                    raise ValueError(f"Task is blocked by incomplete dependencies: {', '.join(blocked)}")
 
-            # Check if task is blocked by dependencies
-            if self._has_blocked_dependencies(task):
-                blocking = self.get_blocked_by(task_id)
-                blocking_ids = [t.task_id for t in blocking]
-                raise ValueError(f"Task {task_id} is blocked by incomplete dependencies: {blocking_ids}")
-
-            # Check if agent is free (no in_progress tasks)
-            for tid, t in tasks.items():
-                if t.get("assigned_to") == agent and t.get("status") == "in_progress":
+            # Check if agent is busy (has in_progress task)
+            for t_data in tasks.values():
+                if t_data.get("assigned_to") == agent and t_data.get("status") == "in_progress":
                     return False
 
             tasks[task_id]["assigned_to"] = agent
@@ -422,179 +329,46 @@ class TaskStore:
 
             return True
 
-    def set_dependencies(self, task_id: str, depends_on: list[str]) -> bool:
-        """Set dependencies for a task.
-
-        Args:
-            task_id: The task to add dependencies to
-            depends_on: List of task IDs this task depends on
-
-        Returns:
-            True if dependencies were set successfully
-        """
-        with self._lock():
+    def pickup_task(self, task_id: str, agent: str, session_id: str | None = None) -> bool:
+        """Mark a task as picked up by an agent (sets status to in_progress)."""
+        with self._lock:
             data = self._read_tasks_json()
             tasks = data.get("tasks", {})
 
             if task_id not in tasks:
                 return False
 
-            # Validate that all dependency tasks exist
-            for dep_id in depends_on:
-                if dep_id not in tasks:
-                    raise ValueError(f"Dependency task does not exist: {dep_id}")
-                if dep_id == task_id:
-                    raise ValueError(f"Task cannot depend on itself: {task_id}")
+            task = tasks[task_id]
 
-            # Check for circular dependencies
-            if self._would_create_cycle(task_id, depends_on):
-                raise ValueError("Setting these dependencies would create a circular dependency")
+            # Check if blocked
+            if task.get("depends_on"):
+                blocked = False
+                for dep_id in task["depends_on"]:
+                    if dep_id in tasks and tasks[dep_id]["status"] != "completed":
+                        blocked = True
+                        break
+                if blocked:
+                    return False
 
-            tasks[task_id]["depends_on"] = depends_on
+            # Update task
+            task["status"] = "in_progress"
+            task["assigned_to"] = agent
+            task["started_at"] = datetime.now().isoformat()
+            task["agent_info"] = {
+                "session_id": session_id,
+                "pid": os.getpid(),
+                "started_at": task["started_at"],
+            }
+
             self._write_tasks_json(data)
-
-            # Update task.json in task directory
-            task_json_path = self.agency_dir / TASKS_DIR / task_id / "task.json"
-            if task_json_path.exists():
-                task_json_path.write_text(json.dumps(tasks[task_id], indent=2))
 
             # Audit log
             audit = self._get_audit_store()
             if audit:
                 audit.log_task(
-                    action="update",
+                    action="pickup",
                     task_id=task_id,
-                    details={"depends_on": depends_on},
-                )
-
-            return True
-
-    def _would_create_cycle(self, task_id: str, new_depends_on: list[str]) -> bool:
-        """Check if adding dependencies would create a cycle.
-
-        A cycle exists if task_id depends on a task that (directly or indirectly)
-        depends on task_id.
-        """
-        visited: set[str] = set()
-        stack: list[str] = list(new_depends_on)
-
-        while stack:
-            current = stack.pop()
-            if current == task_id:
-                return True  # Found a cycle
-            if current in visited:
-                continue
-            visited.add(current)
-
-            task = self.get_task(current)
-            if task and task.depends_on:
-                stack.extend(task.depends_on)
-
-        return False
-
-    def add_dependency(self, task_id: str, depends_on: str) -> bool:
-        """Add a single dependency to a task."""
-        task = self.get_task(task_id)
-        if not task:
-            return False
-
-        current_deps = list(task.depends_on) if task.depends_on else []
-        if depends_on not in current_deps:
-            current_deps.append(depends_on)
-            return self.set_dependencies(task_id, current_deps)
-        return True  # Already has this dependency
-
-    def remove_dependency(self, task_id: str, depends_on: str) -> bool:
-        """Remove a dependency from a task."""
-        task = self.get_task(task_id)
-        if not task or not task.depends_on:
-            return False
-
-        if depends_on not in task.depends_on:
-            return False
-
-        new_deps = [d for d in task.depends_on if d != depends_on]
-        return self.set_dependencies(task_id, new_deps)
-
-    def update_task(
-        self,
-        task_id: str,
-        status: str | None = None,
-        priority: str | None = None,
-        reviewer_assigned: str | None = None,
-    ) -> bool:
-        """Update task fields.
-
-        Status transitions allowed:
-        - pending -> in_progress
-        - in_progress -> pending
-        - pending_approval -> pending (reject flow)
-        - completed/failed -> pending (reopen)
-
-        Note: completed/failed must be set via approve_task/reject_task,
-        not via update_task.
-        """
-        with self._lock():
-            data = self._read_tasks_json()
-            tasks = data.get("tasks", {})
-
-            if task_id not in tasks:
-                return False
-
-            now = datetime.now().isoformat()
-            current_status = tasks[task_id].get("status", "pending")
-
-            if status:
-                # Validate status transitions - prevent completed/failed via update_task
-                valid_transitions = {
-                    "pending": ["in_progress"],
-                    "in_progress": ["pending", "pending_approval"],
-                    "pending_approval": ["pending"],  # For rejection
-                    "completed": ["pending"],  # For reopening
-                    "failed": ["pending"],  # For reopening
-                }
-
-                allowed = valid_transitions.get(current_status, [])
-                if status not in allowed:
-                    # Also allow no-op transitions (setting same status)
-                    if status != current_status:
-                        return False
-                
-                # Validate status value
-                if status not in VALID_STATUSES:
-                    return False
-
-                tasks[task_id]["status"] = status
-
-                if status == "in_progress" and not tasks[task_id].get("started_at"):
-                    tasks[task_id]["started_at"] = now
-                elif status == "completed":
-                    tasks[task_id]["completed_at"] = now
-                elif status == "failed":
-                    tasks[task_id]["completed_at"] = now
-
-            if priority:
-                if priority not in VALID_PRIORITIES:
-                    return False
-                tasks[task_id]["priority"] = priority
-
-            if reviewer_assigned is not None:
-                tasks[task_id]["reviewer_assigned"] = reviewer_assigned
-
-            self._write_tasks_json(data)
-
-            # Update task.json in task directory
-            task_json_path = self.agency_dir / TASKS_DIR / task_id / "task.json"
-            if task_json_path.exists():
-                task_json_path.write_text(json.dumps(tasks[task_id], indent=2))
-
-            # Audit log
-            audit = self._get_audit_store()
-            if audit:
-                audit.log_task(
-                    action="update",
-                    task_id=task_id,
-                    details={"status": status, "priority": priority, "reviewer_assigned": reviewer_assigned},
+                    details={"agent": agent, "session_id": session_id},
                 )
 
             return True
@@ -608,7 +382,7 @@ class TaskStore:
         summary: str | None = None,
     ) -> bool:
         """Mark task as pending approval."""
-        with self._lock():
+        with self._lock:
             data = self._read_tasks_json()
             tasks = data.get("tasks", {})
 
@@ -636,12 +410,14 @@ class TaskStore:
             }
 
             result_path = self.agency_dir / TASKS_DIR / task_id / "result.json"
+            result_path.parent.mkdir(parents=True, exist_ok=True)
             result_path.write_text(json.dumps(result_data, indent=2))
             tasks[task_id]["result_path"] = str(result_path.relative_to(self.agency_dir))
 
             # Move to pending/
             pending_data = {**tasks[task_id], **result_data, "pending_approval_at": now}
             pending_file = self.agency_dir / PENDING_DIR / f"{task_id}.json"
+            pending_file.parent.mkdir(parents=True, exist_ok=True)
             pending_file.write_text(json.dumps(pending_data, indent=2))
 
             self._write_tasks_json(data)
@@ -661,35 +437,32 @@ class TaskStore:
             return True
 
     def approve_task(self, task_id: str) -> bool:
-        """Approve a pending task completion."""
-        with self._lock():
+        """Approve a task (move to completed)."""
+        with self._lock:
             data = self._read_tasks_json()
             tasks = data.get("tasks", {})
 
             if task_id not in tasks:
                 return False
 
-            task = tasks[task_id]
-
-            if task["status"] != "pending_approval":
+            if tasks[task_id]["status"] != "pending_approval":
                 return False
 
-            # Move pending file to task directory
+            tasks[task_id]["status"] = "completed"
+            tasks[task_id]["completed_at"] = datetime.now().isoformat()
+
+            # Remove pending file
             pending_file = self.agency_dir / PENDING_DIR / f"{task_id}.json"
             if pending_file.exists():
-                shutil.move(
-                    str(pending_file),
-                    str(self.agency_dir / TASKS_DIR / task_id / "pending_approval.json"),
-                )
+                pending_file.unlink()
 
-            # Update status
-            task["status"] = "completed"
+            # Archive task directory
+            task_dir = self.agency_dir / TASKS_DIR / task_id
+            archive_dir = self.agency_dir / "var" / "tasks" / task_id
+            if task_dir.exists() and not archive_dir.exists():
+                task_dir.rename(archive_dir)
+
             self._write_tasks_json(data)
-
-            # Update task.json in task directory
-            task_json_path = self.agency_dir / TASKS_DIR / task_id / "task.json"
-            if task_json_path.exists():
-                task_json_path.write_text(json.dumps(task, indent=2))
 
             # Audit log
             audit = self._get_audit_store()
@@ -697,51 +470,52 @@ class TaskStore:
                 audit.log_task(
                     action="approve",
                     task_id=task_id,
-                    details={"approved_by": os.environ.get("AGENCY_AGENT", "unknown")},
+                    details={},
                 )
 
             return True
 
-    def reject_task(self, task_id: str, reason: str, suggestions: list | None = None) -> bool:
-        """Reject a pending task completion."""
-        with self._lock():
+    def reject_task(
+        self, task_id: str, reason: str, suggestions: list | None = None
+    ) -> bool:
+        """Reject a task (mark as failed with reason)."""
+        with self._lock:
             data = self._read_tasks_json()
             tasks = data.get("tasks", {})
 
             if task_id not in tasks:
                 return False
 
-            task = tasks[task_id]
-
-            if task["status"] != "pending_approval":
+            if tasks[task_id]["status"] != "pending_approval":
                 return False
+
+            tasks[task_id]["status"] = "failed"
+            tasks[task_id]["completed_at"] = datetime.now().isoformat()
+            tasks[task_id]["rejection_reason"] = reason
+
+            # Clear agent_info to allow re-assignment
+            tasks[task_id]["agent_info"] = None
+            tasks[task_id]["started_at"] = None
 
             # Create rejection file
             rejection_path = self.agency_dir / PENDING_DIR / f"{task_id}.rejected"
-            rejection_content = f"""# Task Rejected: {task_id}
+            rejection_path.write_text(
+                json.dumps(
+                    {
+                        "reason": reason,
+                        "suggestions": suggestions or [],
+                        "rejected_at": datetime.now().isoformat(),
+                    },
+                    indent=2,
+                )
+            )
 
-## Reason
+            # Remove pending file
+            pending_file = self.agency_dir / PENDING_DIR / f"{task_id}.json"
+            if pending_file.exists():
+                pending_file.unlink()
 
-{reason}
-
-"""
-            if suggestions:
-                rejection_content += "## Suggestions\n\n"
-                for i, s in enumerate(suggestions, 1):
-                    rejection_content += f"{i}. {s}\n"
-
-            rejection_path.write_text(rejection_content)
-
-            # Update status to failed (agent can retry)
-            task["status"] = "failed"
-            task["completed_at"] = None  # Clear completion time
-            task["rejection_reason"] = reason
             self._write_tasks_json(data)
-
-            # Update task.json in task directory
-            task_json_path = self.agency_dir / TASKS_DIR / task_id / "task.json"
-            if task_json_path.exists():
-                task_json_path.write_text(json.dumps(task, indent=2))
 
             # Audit log
             audit = self._get_audit_store()
@@ -749,422 +523,291 @@ class TaskStore:
                 audit.log_task(
                     action="reject",
                     task_id=task_id,
-                    details={
-                        "reason": reason,
-                        "rejected_by": os.environ.get("AGENCY_AGENT", "unknown"),
-                    },
+                    details={"reason": reason, "suggestions": suggestions},
                 )
+
+            return True
+
+    def reopen_task(self, task_id: str) -> bool:
+        """Reopen a completed or failed task (set back to pending)."""
+        with self._lock:
+            data = self._read_tasks_json()
+            tasks = data.get("tasks", {})
+
+            if task_id not in tasks:
+                return False
+
+            current_status = tasks[task_id].get("status")
+            if current_status not in ("completed", "failed"):
+                return False
+
+            # Clear completion fields
+            tasks[task_id]["status"] = "pending"
+            tasks[task_id]["completed_at"] = None
+            tasks[task_id]["result"] = None
+            tasks[task_id]["rejection_reason"] = None
+            tasks[task_id]["agent_info"] = None
+            tasks[task_id]["started_at"] = None
+
+            # Remove rejection file if exists
+            rejection_file = self.agency_dir / PENDING_DIR / f"{task_id}.rejected"
+            if rejection_file.exists():
+                rejection_file.unlink()
+
+            self._write_tasks_json(data)
+
+            # Audit log
+            audit = self._get_audit_store()
+            if audit:
+                audit.log_task(
+                    action="reopen",
+                    task_id=task_id,
+                    details={"from_status": current_status},
+                )
+
+            return True
+
+    def is_agent_free(self, agent: str) -> bool:
+        """Check if agent has no assigned tasks (pending or in_progress)."""
+        return self.get_agent_busy_count(agent) == 0
+
+    def get_blocked_by(self, task_id: str) -> list[Task]:
+        """Get list of incomplete tasks that this task depends on."""
+        task = self.get_task(task_id)
+        if not task or not task.depends_on:
+            return []
+
+        blocking = []
+        for dep_id in task.depends_on:
+            dep_task = self.get_task(dep_id)
+            if dep_task and dep_task.status != "completed":
+                blocking.append(dep_task)
+
+        return blocking
+
+    def _has_blocked_dependencies(self, task: Task) -> bool:
+        """Check if task is blocked by incomplete dependencies (internal method)."""
+        if not task.depends_on:
+            return False
+        for dep_id in task.depends_on:
+            dep_task = self.get_task(dep_id)
+            if dep_task and dep_task.status != "completed":
+                return True
+        return False
+
+    def set_dependencies(self, task_id: str, depends_on: list[str]) -> bool:
+        """Set dependencies for a task.
+
+        Raises:
+            ValueError: If task doesn't exist, dependency doesn't exist,
+                        self-reference, or circular dependency.
+        """
+        with self._lock:
+            data = self._read_tasks_json()
+            tasks = data.get("tasks", {})
+
+            # Check task exists
+            if task_id not in tasks:
+                raise ValueError(f"Task '{task_id}' does not exist")
+
+            # Validate dependencies
+            for dep_id in depends_on:
+                # Self-reference check
+                if dep_id == task_id:
+                    raise ValueError(f"Task '{task_id}' cannot depend on itself")
+                # Existence check
+                if dep_id not in tasks:
+                    raise ValueError(f"Dependency '{dep_id}' does not exist")
+                # Circular dependency check
+                if self._would_create_cycle(task_id, dep_id, tasks):
+                    raise ValueError(f"Would create circular dependency: {task_id} -> {dep_id}")
+
+            tasks[task_id]["depends_on"] = depends_on
+            self._write_tasks_json(data)
+
+            # Audit log
+            audit = self._get_audit_store()
+            if audit:
+                audit.log_task(
+                    action="set_dependencies",
+                    task_id=task_id,
+                    details={"depends_on": depends_on},
+                )
+
+            return True
+
+    def _would_create_cycle(self, task_id: str, new_dep: str, tasks: dict) -> bool:
+        """Check if adding new_dep as dependency for task_id would create a cycle."""
+        # Check if task_id is reachable from new_dep
+        visited = set()
+        stack = [new_dep]
+        while stack:
+            current = stack.pop()
+            if current == task_id:
+                return True  # Cycle detected
+            if current in visited:
+                continue
+            visited.add(current)
+            deps = tasks.get(current, {}).get("depends_on", [])
+            if deps:
+                stack.extend(deps)
+        return False
+
+    def add_dependency(self, task_id: str, depends_on: str) -> bool:
+        """Add a dependency to a task.
+
+        Returns True if dependency was added or already exists (no-op).
+        """
+        task = self.get_task(task_id)
+        if not task:
+            return False
+
+        current_deps = list(task.depends_on) if task.depends_on else []
+        if depends_on in current_deps:
+            return True  # Already a dependency - no-op is success
+
+        current_deps.append(depends_on)
+        return self.set_dependencies(task_id, current_deps)
+
+    def remove_dependency(self, task_id: str, depends_on: str) -> bool:
+        """Remove a dependency from a task."""
+        task = self.get_task(task_id)
+        if not task or not task.depends_on:
+            return False
+
+        if depends_on not in task.depends_on:
+            return False
+
+        new_deps = [d for d in task.depends_on if d != depends_on]
+        return self.set_dependencies(task_id, new_deps)
+
+    def update_task(
+        self,
+        task_id: str,
+        status: str | None = None,
+        priority: str | None = None,
+        reviewer_assigned: str | None = None,
+    ) -> bool:
+        """Update task fields.
+
+        Status transitions allowed:
+        - pending -> in_progress
+        - in_progress -> pending
+        - in_progress -> pending_approval
+        - pending_approval -> pending (reject flow)
+        - completed/failed -> pending (reopen)
+
+        Note: completed/failed must be set via approve_task/reject_task,
+        not via update_task.
+        """
+        with self._lock:
+            data = self._read_tasks_json()
+            tasks = data.get("tasks", {})
+
+            if task_id not in tasks:
+                return False
+
+            now = datetime.now().isoformat()
+            current_status = tasks[task_id].get("status", "pending")
+
+            if status:
+                # Validate status transitions - prevent completed/failed via update_task
+                valid_transitions = {
+                    "pending": ["in_progress"],
+                    "in_progress": ["pending", "pending_approval"],
+                    "pending_approval": ["pending"],  # For rejection
+                    "completed": ["pending"],  # For reopening
+                    "failed": ["pending"],  # For reopening
+                }
+
+                allowed = valid_transitions.get(current_status, [])
+                if status not in allowed:
+                    # Also allow no-op transitions (setting same status)
+                    if status != current_status:
+                        return False
+
+                # Validate status value
+                if status not in VALID_STATUSES:
+                    return False
+
+                tasks[task_id]["status"] = status
+
+                if status == "in_progress" and not tasks[task_id].get("started_at"):
+                    tasks[task_id]["started_at"] = now
+                elif status == "completed":
+                    tasks[task_id]["completed_at"] = now
+                elif status == "failed":
+                    tasks[task_id]["completed_at"] = now
+
+            if priority:
+                if priority not in VALID_PRIORITIES:
+                    return False
+                tasks[task_id]["priority"] = priority
+
+            if reviewer_assigned is not None:
+                tasks[task_id]["reviewer_assigned"] = reviewer_assigned
+
+            self._write_tasks_json(data)
+
+            # Audit log
+            audit = self._get_audit_store()
+            if audit:
+                audit.log_task(action="update", task_id=task_id, details={})
 
             return True
 
     def delete_task(self, task_id: str) -> bool:
         """Delete a task."""
-        with self._lock():
+        with self._lock:
             data = self._read_tasks_json()
             tasks = data.get("tasks", {})
 
             if task_id not in tasks:
                 return False
 
-            # Remove from tasks.json
             del tasks[task_id]
             self._write_tasks_json(data)
 
-            # Remove task directory
+            # Clean up files
             task_dir = self.agency_dir / TASKS_DIR / task_id
             if task_dir.exists():
                 shutil.rmtree(task_dir)
 
-            # Remove pending file if exists
             pending_file = self.agency_dir / PENDING_DIR / f"{task_id}.json"
             if pending_file.exists():
                 pending_file.unlink()
 
+            rejection_file = self.agency_dir / PENDING_DIR / f"{task_id}.rejected"
+            if rejection_file.exists():
+                rejection_file.unlink()
+
             # Audit log
             audit = self._get_audit_store()
             if audit:
-                audit.log_task(
-                    action="delete",
-                    task_id=task_id,
-                )
+                audit.log_task(action="delete", task_id=task_id, details={})
 
             return True
 
     def history(self, agent: str | None = None) -> list[dict]:
-        """Get completed task history."""
+        """Get task history for audit purposes."""
+        data = self._read_tasks_json()
         history = []
-        tasks_dir = self.agency_dir / TASKS_DIR
 
-        if not tasks_dir.exists():
-            return history
-
-        for task_dir in tasks_dir.iterdir():
-            if not task_dir.is_dir():
-                continue
-
-            task_file = task_dir / "task.json"
-            if not task_file.exists():
-                continue
-
-            task_data = json.loads(task_file.read_text())
-
-            if task_data.get("status") not in ("completed", "failed"):
-                continue
-
+        for task_data in data.get("tasks", {}).values():
             if agent and task_data.get("assigned_to") != agent:
                 continue
 
-            # Get result if exists
-            result_data = None
-            result_file = task_dir / "result.json"
-            if result_file.exists():
-                result_data = json.loads(result_file.read_text())
-
             history.append(
                 {
-                    "task": task_data,
-                    "result": result_data,
+                    "task": {
+                        "task_id": task_data.get("task_id", ""),
+                        "subject": task_data.get("subject", ""),
+                        "status": task_data.get("status", ""),
+                        "assigned_to": task_data.get("assigned_to"),
+                        "created_at": task_data.get("created_at"),
+                        "completed_at": task_data.get("completed_at"),
+                    }
                 }
             )
 
-        return sorted(
-            history,
-            key=lambda x: x["task"].get("completed_at") or "",
-            reverse=True,
-        )
-
-    def _generate_task_id(self, data: dict) -> str:
-        """Generate a unique task ID."""
-        import random
-
-        # Get wordlist (eff.org short wordlist subset)
-        wordlist = [
-            "swift",
-            "bold",
-            "dark",
-            "warm",
-            "cool",
-            "gray",
-            "neon",
-            "iron",
-            "soft",
-            "loud",
-            "wolf",
-            "fox",
-            "bear",
-            "hawk",
-            "owl",
-            "crow",
-            "fish",
-            "deer",
-            "lynx",
-            "crane",
-            "frog",
-            "toad",
-            "hare",
-            "mole",
-            "seal",
-            "goat",
-            "jade",
-            "kite",
-            "link",
-            "node",
-            "orb",
-            "pipe",
-            "raft",
-            "slug",
-            "tank",
-            "void",
-            "wire",
-            "atom",
-            "base",
-            "byte",
-            "cache",
-            "daemon",
-            "ether",
-            "fiber",
-            "graph",
-            "hash",
-            "json",
-            "kernel",
-            "lambda",
-            "module",
-            "object",
-            "parse",
-            "query",
-            "root",
-            "socket",
-            "thread",
-        ]
-
-        max_attempts = 10
-        for _ in range(max_attempts):
-            words = [random.choice(wordlist), random.choice(wordlist)]
-            hex_suffix = f"{random.randint(0, 65535):04x}"
-            task_id = f"{words[0]}-{words[1]}-{hex_suffix}"
-
-            if task_id not in data.get("tasks", {}):
-                return task_id
-
-        # Fallback: add random suffix
-        return f"{random.choice(wordlist)}-{random.choice(wordlist)}-{random.randint(0, 9999):04x}"
-
-    def is_agent_free(self, agent: str) -> bool:
-        """Check if an agent is free (no active or pending tasks)."""
-        tasks = self.list_tasks(assignee=agent)
-        return not any(t.status in ("in_progress", "pending") for t in tasks)
-
-    def pickup_task(self, task_id: str, session_id: str, pid: int) -> bool:
-        """Mark task as picked up by an agent, storing session and PID info.
-
-        Called when an agent starts working on a task.
-        Updates status to in_progress and stores agent_info.
-
-        Args:
-            task_id: The task ID
-            session_id: pi session ID for the agent
-            pid: Process ID of the agent
-
-        Returns:
-            True if task was picked up, False otherwise
-        """
-        with self._lock():
-            data = self._read_tasks_json()
-            tasks = data.get("tasks", {})
-
-            if task_id not in tasks:
-                return False
-
-            task = tasks[task_id]
-
-            # Can only pickup pending or failed (rejected) tasks
-            if task["status"] not in ("pending", "failed"):
-                return False
-
-            now = datetime.now().isoformat()
-
-            # Update task
-            task["status"] = "in_progress"
-            task["started_at"] = now
-            task["agent_info"] = {
-                "session_id": session_id,
-                "pid": pid,
-                "started_at": now,
-            }
-
-            # Clear any previous rejection info if re-picking up after rejection
-            task["rejection_reason"] = None
-
-            self._write_tasks_json(data)
-
-            # Update task.json in task directory
-            task_json_path = self.agency_dir / TASKS_DIR / task_id / "task.json"
-            if task_json_path.exists():
-                task_json_path.write_text(json.dumps(task, indent=2))
-
-            # Audit log
-            audit = self._get_audit_store()
-            if audit:
-                audit.log_task(
-                    action="pickup",
-                    task_id=task_id,
-                    details={"session_id": session_id, "pid": pid},
-                )
-
-            return True
-
-    def clear_agent_info(self, task_id: str) -> bool:
-        """Clear agent info from a task (used when agent crashes or task is reassigned).
-
-        Resets the task to pending status, keeping the assignment but clearing
-        the agent_info so a new agent can pick it up.
-
-        Args:
-            task_id: The task ID
-
-        Returns:
-            True if cleared, False otherwise
-        """
-        with self._lock():
-            data = self._read_tasks_json()
-            tasks = data.get("tasks", {})
-
-            if task_id not in tasks:
-                return False
-
-            task = tasks[task_id]
-
-            # Only clear if task is in_progress
-            if task["status"] != "in_progress":
-                return False
-
-            # Reset to pending
-            task["status"] = "pending"
-            task["started_at"] = None
-            task["agent_info"] = None
-
-            self._write_tasks_json(data)
-
-            # Update task.json in task directory
-            task_json_path = self.agency_dir / TASKS_DIR / task_id / "task.json"
-            if task_json_path.exists():
-                task_json_path.write_text(json.dumps(task, indent=2))
-
-            # Audit log
-            audit = self._get_audit_store()
-            if audit:
-                audit.log_task(
-                    action="agent_cleared",
-                    task_id=task_id,
-                    details={"reason": "crash_detected"},
-                )
-
-            return True
-
-    def set_rejection(self, task_id: str, reason: str) -> bool:
-        """Mark a task as rejected with a reason.
-
-        Args:
-            task_id: The task ID
-            reason: The rejection reason
-
-        Returns:
-            True if set, False otherwise
-        """
-        with self._lock():
-            data = self._read_tasks_json()
-            tasks = data.get("tasks", {})
-
-            if task_id not in tasks:
-                return False
-
-            task = tasks[task_id]
-            task["rejection_reason"] = reason
-
-            self._write_tasks_json(data)
-
-            # Update task.json in task directory
-            task_json_path = self.agency_dir / TASKS_DIR / task_id / "task.json"
-            if task_json_path.exists():
-                task_json_path.write_text(json.dumps(task, indent=2))
-
-            return True
-
-    def set_review_notes(self, task_id: str, notes: str) -> bool:
-        """Set review notes on a task.
-
-        Args:
-            task_id: The task ID
-            notes: Review notes
-
-        Returns:
-            True if set, False otherwise
-        """
-        with self._lock():
-            data = self._read_tasks_json()
-            tasks = data.get("tasks", {})
-
-            if task_id not in tasks:
-                return False
-
-            task = tasks[task_id]
-            task["review_notes"] = notes
-
-            self._write_tasks_json(data)
-
-            # Update task.json in task directory
-            task_json_path = self.agency_dir / TASKS_DIR / task_id / "task.json"
-            if task_json_path.exists():
-                task_json_path.write_text(json.dumps(task, indent=2))
-
-            return True
-
-    def get_agent_busy_count(self, agent: str) -> int:
-        """Get count of in_progress tasks for an agent.
-
-        Args:
-            agent: Agent name
-
-        Returns:
-            Number of tasks the agent is currently working on
-        """
-        tasks = self.list_tasks(assignee=agent)
-        return sum(1 for t in tasks if t.status == "in_progress")
-
-    def get_in_progress_tasks(self) -> list[Task]:
-        """Get all tasks currently in progress.
-
-        Returns:
-            List of in_progress tasks
-        """
-        return self.list_tasks(status="in_progress")
-
-    def get_pending_approval_tasks(self) -> list[Task]:
-        """Get all tasks pending approval.
-
-        Returns:
-            List of pending_approval tasks
-        """
-        return self.list_tasks(status="pending_approval")
-
-    def get_unblocked_pending_tasks(self) -> list[Task]:
-        """Get pending tasks that are not blocked by dependencies.
-
-        Returns:
-            List of unblocked pending tasks
-        """
-        return self.list_tasks(status="pending", include_blocked=False)
-
-
-def process_exists(pid: int) -> bool:
-    """Check if a process with the given PID exists.
-
-    Args:
-        pid: Process ID to check
-
-    Returns:
-        True if process exists, False otherwise
-    """
-    import subprocess
-
-    try:
-        result = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "pid="],
-            capture_output=True,
-            text=True,
-        )
-        return result.returncode == 0
-    except (ValueError, OSError):
-        return False
-
-
-def check_stale_tasks(agency_dir: Path) -> list[dict]:
-    """Check for crashed agent tasks and revert them to pending.
-
-    Args:
-        agency_dir: Path to .agency directory
-
-    Returns:
-        List of stale task info dicts with task_id, agent, and reason
-    """
-    store = TaskStore(agency_dir)
-    stale = []
-
-    for task in store.get_in_progress_tasks():
-        if task.agent_info:
-            pid = task.agent_info.get("pid")
-            if pid and not process_exists(pid):
-                # Process is gone, clear agent info
-                session_id = task.agent_info.get("session_id")
-                store.clear_agent_info(task.task_id)
-
-                stale.append(
-                    {
-                        "task_id": task.task_id,
-                        "agent": task.assigned_to,
-                        "session_id": session_id,
-                        "reason": "process_not_found",
-                    }
-                )
-
-    return stale
+        return sorted(history, key=lambda x: x.get("task", {}).get("created_at") or "", reverse=True)
