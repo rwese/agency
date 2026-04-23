@@ -675,7 +675,8 @@ def _copy_pi_extensions(agency_dir: Path) -> None:
     # Find agency extras directory
     # Try current working directory first (development mode)
     # Then try package directory (installed mode)
-    agency_package_dir = Path(__file__).parent.parent
+    # Note: __file__ is in src/agency/, so we need parent.parent.parent to reach repo root
+    agency_package_dir = Path(__file__).parent.parent.parent
 
     possible_sources = [
         Path.cwd() / "extras" / "pi" / "extensions",  # Development: repo root
@@ -1853,7 +1854,7 @@ def heartbeat_cmd():
 def _get_heartbeat_pid_file(agency_dir: Path, role: str, name: str = "") -> Path:
     """Get the PID file path for a heartbeat process."""
     suffix = f"-{name}" if name else ""
-    return agency_dir / f".heartbeat-{role.lower()}{suffix}.pid"
+    return agency_dir / "run" / f".heartbeat-{role.lower()}{suffix}.pid"
 
 
 def _read_heartbeat_pid(pid_file: Path) -> int | None:
@@ -1962,7 +1963,7 @@ def heartbeat_start(ctx, role, agent_name):
         heartbeat_env["PI_STATUS_SOCKET"] = str(agency_dir / f"status-{agent_name}.sock")
 
     heartbeat_module = Path(__file__).parent / "heartbeat.py"
-    log_file = agency_dir / f".heartbeat-{role.lower()}{'-' + agent_name if agent_name else ''}.log"
+    log_file = agency_dir / "var" / f".heartbeat-{role.lower()}{'-' + agent_name if agent_name else ''}.log"
 
     with open(log_file, "w") as f:
         proc = subprocess.Popen(
@@ -2087,9 +2088,9 @@ def heartbeat_logs(ctx, lines):
     agent_name = os.environ.get("AGENCY_AGENT") if role == "AGENT" else None
 
     if role == "AGENT" and agent_name:
-        log_file = agency_dir / f".heartbeat-agent-{agent_name}.log"
+        log_file = agency_dir / "var" / f".heartbeat-agent-{agent_name}.log"
     elif role == "MANAGER":
-        log_file = agency_dir / ".heartbeat-manager.log"
+        log_file = agency_dir / "var" / ".heartbeat-manager.log"
     else:
         click.echo("[ERROR] AGENCY_ROLE must be set to MANAGER or AGENT", err=True)
         ctx.exit(1)
