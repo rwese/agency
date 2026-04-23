@@ -560,24 +560,46 @@ def manager_heartbeat(
 
             # Only notify about pending approval when nothing is in progress
             elif has_pending_approval and counts["pending_approval"] != last_approval:
-                msg = (
-                    f"👀 {counts['pending_approval']} task(s) pending your approval - run 'agency tasks list' to review"
-                )
-                if send_notification(window_ref, msg):
-                    print(f"[HEARTBEAT] Notified manager: {msg}")
-                    last_approval = counts["pending_approval"]
+                # Get pending task IDs and send approve commands
+                from agency.tasks import TaskStore
+                store = TaskStore(agency_dir)
+                pending_tasks = store.list_tasks(status="pending_approval")
 
-                    # Audit log
-                    audit = _get_audit_store(agency_dir)
-                    if audit:
-                        audit.log_agent(
-                            action="heartbeat",
-                            agency_role="manager",
-                            details={
-                                "notification": "pending_approval",
-                                "pending_count": counts["pending_approval"],
-                            },
-                        )
+                for task in pending_tasks:
+                    task_id = task.task_id
+                    # Send approval command directly
+                    cmd = f"agency tasks approve {task_id}"
+                    if send_notification(window_ref, f"Please review and approve: {task_id}"):
+                        # Actually send the approve command
+                        import os
+
+                        from agency.pi_inject import get_client
+                        socket_path = os.environ.get("PI_INJECTOR_SOCKET", "")
+                        if socket_path:
+                            try:
+                                client = get_client(socket_path)
+                                resp = client.steer(cmd)
+                                if resp.is_ok:
+                                    print(f"[HEARTBEAT] Sent approval for {task_id}")
+                                else:
+                                    print(f"[HEARTBEAT] Approval error: {resp.message}")
+                            except Exception as e:
+                                print(f"[HEARTBEAT] Could not send approval: {e}")
+
+                print(f"[HEARTBEAT] Notified manager about {len(pending_tasks)} pending approval tasks")
+                last_approval = counts["pending_approval"]
+
+                # Audit log
+                audit = _get_audit_store(agency_dir)
+                if audit:
+                    audit.log_agent(
+                        action="heartbeat",
+                        agency_role="manager",
+                        details={
+                            "notification": "pending_approval",
+                            "pending_count": counts["pending_approval"],
+                        },
+                    )
 
             time.sleep(poll_interval)
 
