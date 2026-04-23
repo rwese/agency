@@ -67,6 +67,32 @@ cat .agency/var/tasks.json | jq '.tasks[].reviewer_assigned'
 - Did agents update status to `in_progress`? (`started_at` should be set)
 - Were notifications sent? (check `notifications.json`)
 
+## Evaluation Projects
+
+Demo projects for testing agency orchestration capabilities. See `demo/README.md`.
+
+Projects are organized by complexity:
+
+| # | Project | Type | Complexity |
+|---|---------|------|------------|
+| 01 | Markdown to HTML | CLI | Low |
+| 02 | JSON Schema Validator | Library | Medium |
+| 03 | Image Metadata Extractor | CLI | Medium |
+| 04 | Cron Parser | Library | Medium |
+| 05 | CSV SQLite Importer | CLI | Medium |
+| 06 | API Rate Limiter | Library | Medium-High |
+| 07 | Password Strength Checker | Library | Medium |
+| 08 | Git Hook Installer | Dev Tool | Medium |
+| 09 | Env Validator | Library | Low-Medium |
+| 10 | Text Diff Viewer | CLI | Medium |
+
+```bash
+# Run evaluation project
+cd demo/projects/01-markdown-to-html
+agency init --dir . --template basic
+agency session start
+```
+
 ## Configuration
 
 ### config.yaml

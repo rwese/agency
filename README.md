@@ -226,8 +226,23 @@ agency/
 │   ├── test_session.py
 │   └── test_config.py
 ├── docs/design/           # Design documents
+├── demo/                   # Evaluation projects
+│   └── projects/           # Demo project specs
 ├── SPEC.md                # Complete specification
 └── pyproject.toml
+```
+
+## Evaluation Projects
+
+Demo projects for testing and validating agency orchestration. See [`demo/README.md`](demo/README.md) for details.
+
+```bash
+# View available projects
+ls demo/projects/
+
+# Run an evaluation project
+cd demo/projects/01-markdown-to-html
+agency init --dir . --template basic
 ```
 
 ## pi-inject Integration
