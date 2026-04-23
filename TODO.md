@@ -20,22 +20,17 @@ The task went `pending` → `completed` without:
 
 #### 1. Enforce `pending_approval` Status Transition
 
-The task should go: `pending` → `in_progress` → `pending_approval` → `completed`
-
-Current: Developer calls `complete` → goes directly to `completed`
-Fix: Developer calls `complete` → goes to `pending_approval`, then manager approves → `completed`
+✅ DONE - Added status transition validation in update_task and cmd_update
 
 #### 2. Better Command Guidance
 
-Developer tried `agency tasks-agent complete` but the command is `agency tasks complete`
-Also: Developer didn't mark task as `in_progress` first
-
-Fix: Add clear workflow instructions in personality
+✅ DONE - Updated developer personality with correct workflow commands
 
 #### 3. Task ID Quoting in pi-inject
 
-The task ID had spaces when passed via pi-inject socket.
-Need to ensure proper escaping of arguments.
+**Status:** Investigated - appears to be tmux send-keys behavior. pi-inject uses Unix sockets so this is not the direct cause.
+**Action:** Document that commands with spaces in task IDs may have issues. The core Fix 1 prevents bypassing review anyway.
+**Done:** Won't fix without deeper pi-inject/tmux investigation
 
 ### In Progress
 
