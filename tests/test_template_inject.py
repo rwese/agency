@@ -3,6 +3,7 @@ Tests for template_inject module.
 """
 
 import tempfile
+import pytest
 from pathlib import Path
 
 from agency.template_inject import (
