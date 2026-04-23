@@ -1,0 +1,3 @@
+agents:
+  - name: developer
+    config: agents/developer.yaml

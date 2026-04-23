@@ -63,4 +63,29 @@ agency tasks complete task-001 --result "Done!"
 
 - **CLI commands**: See [commands.md](references/commands.md)
 - **Config schemas**: See [config.md](references/config.md)
+- **Creating custom agencies**: See [creating-agencies.md](references/creating-agencies.md)
 - **Full docs**: [README](../../README.md), [design docs](../../docs/design/)
+
+## Templates
+
+| Template | Use Case | Agents |
+|----------|----------|--------|
+| `basic` | Single developer | manager + coder |
+| `solo` | Personal projects, minimal | manager + developer |
+| `api` | Backend + frontend | manager + backend + frontend |
+| `fullstack` | Full application | manager + backend + frontend + devops |
+| `team` | Small team | manager + coder + reviewer + tester |
+
+## Agent Personalities
+
+Pre-built personality templates available in `assets/personalities/`:
+
+| Personality | Purpose |
+|-------------|---------|
+| [coder.md](assets/personalities/coder.md) | Backend/API development |
+| [reviewer.md](assets/personalities/reviewer.md) | Code review and quality |
+| [devops.md](assets/personalities/devops.md) | Infrastructure and deployment |
+| [tester.md](assets/personalities/tester.md) | QA and test coverage |
+| [architect.md](assets/personalities/architect.md) | System design and decisions |
+
+**Usage:** Copy a personality file to `agents/<name>/personality.md` and reference it in your `agents.yaml`.
