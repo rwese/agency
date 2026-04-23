@@ -1,35 +1,35 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/manager.json",
   "title": "Agency Manager Configuration",
-  "description": "Configuration for the Agency manager/coordinator",
+  "description": "Configuration for the Agency manager/coordinator stored at .agency/manager.yaml",
   "type": "object",
   "required": ["name", "personality"],
   "properties": {
     "name": {
       "type": "string",
       "default": "coordinator",
-      "description": "Manager name (used in window title)"
+      "description": "Manager name (used in window title as [MGR] <name>)"
     },
     "personality": {
       "type": "string",
-      "description": "Manager personality/prompt (supports template injection)"
+      "description": "Manager personality/prompt (supports template injection with ${{file:path}} and ${{shell:cmd}})"
     },
     "poll_interval": {
       "type": "integer",
       "minimum": 1,
       "default": 30,
-      "description": "Seconds between task polling"
+      "description": "Seconds between heartbeat polling"
     },
     "auto_approve": {
       "type": "boolean",
       "default": false,
-      "description": "Auto-approve completed tasks"
+      "description": "Auto-approve completed tasks (not recommended)"
     },
     "max_retries": {
       "type": ["integer", "null"],
       "minimum": 1,
-      "description": "Max retries for failed tasks"
+      "description": "Max retries for failed tasks (null = unlimited)"
     }
   },
   "additionalProperties": false

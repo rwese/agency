@@ -206,7 +206,18 @@ agency/
 │   ├── template.py        # Template download
 │   ├── config.py          # Config loading
 │   ├── heartbeat.py       # Task monitoring & notification
-│   └── pi_inject.py      # pi-inject client
+│   ├── pi_inject.py      # pi-inject client
+│   ├── schemas/          # JSON Schema definitions (source of truth)
+│   │   ├── config.json
+│   │   ├── task.json
+│   │   └── ...
+│   └── models/          # Generated Pydantic models (do not edit)
+│       ├── __init__.py
+│       ├── task.py
+│       └── ...
+├── scripts/
+│   ├── validate_schemas.py
+│   └── generate_models.py
 ├── extras/
 │   └── pi/extensions/
 │       └── pi-inject/     # pi-inject extension (submodule)
@@ -215,6 +226,7 @@ agency/
 │   ├── test_session.py
 │   └── test_config.py
 ├── docs/design/           # Design documents
+├── SPEC.md                # Complete specification
 └── pyproject.toml
 ```
 
@@ -245,3 +257,28 @@ See `docs/design/` for complete specification:
 - [v2.0-cli.md](docs/design/v2.0-cli.md) - CLI reference
 - [v2.0-schemas.md](docs/design/v2.0-schemas.md) - Data schemas
 - [v2.0-workflows.md](docs/design/v2.0-workflows.md) - Workflows
+
+## Schemas & Specification
+
+The complete specification is in [SPEC.md](SPEC.md), and JSON schemas are in `src/agency/schemas/`:
+
+| Schema | Description | File |
+|--------|-------------|------|
+| Config | Project settings | `config.json` |
+| Manager | Coordinator config | `manager.json` |
+| Agent | Individual agent | `agent.json` |
+| Task | Work unit | `task.json` |
+| Notification | Event log | `notification.json` |
+
+### Schema Tools
+
+```bash
+# Validate all schemas
+uv run python scripts/validate_schemas.py
+
+# Generate Pydantic models from schemas
+uv run python scripts/generate_models.py
+
+# Regenerate when schemas change
+uv run python scripts/generate_models.py && uv run python scripts/validate_schemas.py
+```

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/tasks_store.json",
+  "title": "Tasks Store",
+  "description": "Root task registry stored at .agency/var/tasks.json",
+  "type": "object",
+  "required": ["version", "tasks"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 2,
+      "description": "Schema version (always 2)"
+    },
+    "tasks": {
+      "type": "object",
+      "description": "Map of task_id to Task object",
+      "additionalProperties": {
+        "$ref": "task.json"
+      }
+    }
+  },
+  "additionalProperties": false
+}

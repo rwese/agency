@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/result.json",
+  "title": "Task Result",
+  "description": "Completion result with artifacts, stored at .agency/var/tasks/<id>/result.json",
+  "type": "object",
+  "required": ["result", "completed_at"],
+  "properties": {
+    "result": {
+      "type": "string",
+      "description": "Markdown result summary"
+    },
+    "artifacts": {
+      "type": "object",
+      "description": "Changed files and diffs",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of modified file paths"
+        },
+        "diff": {
+          "type": "string",
+          "description": "Git diff of changes"
+        },
+        "summary": {
+          "type": "string",
+          "description": "Brief summary of changes"
+        }
+      },
+      "additionalProperties": false
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 completion timestamp"
+    },
+    "completed_by": {
+      "type": ["string", "null"],
+      "description": "Agent name who completed the task"
+    }
+  },
+  "additionalProperties": false
+}

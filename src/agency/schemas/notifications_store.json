@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/notifications_store.json",
+  "title": "Notifications Store",
+  "description": "Notification history stored at .agency/var/notifications.json",
+  "type": "object",
+  "required": ["notifications"],
+  "properties": {
+    "notifications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "description": "Notification event (see notification.json for schema)"
+      },
+      "description": "List of notification events"
+    }
+  },
+  "additionalProperties": false
+}

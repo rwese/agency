@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/pending_task.json",
+  "title": "Pending Task",
+  "description": "Task awaiting approval, stored at .agency/var/pending/<id>.json",
+  "type": "object",
+  "required": ["task_id", "description", "status", "priority", "assigned_to", "created_at", "completed_at", "result"],
+  "allOf": [
+    { "$ref": "task.json" },
+    {
+      "properties": {
+        "status": {
+          "const": "pending_approval"
+        },
+        "pending_approval_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO8601 when moved to pending_approval"
+        }
+      }
+    }
+  ]
+}

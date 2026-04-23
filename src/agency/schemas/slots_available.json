@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/slots_available.json",
+  "title": "Slots Available",
+  "description": "Task slot tracking stored at .agency/signals/slots-available.json",
+  "type": "object",
+  "required": ["slots", "parallel_limit", "in_progress", "updated_at"],
+  "properties": {
+    "slots": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Available slots"
+    },
+    "parallel_limit": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Max parallel tasks allowed"
+    },
+    "in_progress": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Currently in-progress tasks"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last update timestamp"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/index.json",
+  "title": "Agency Schema Index",
+  "description": "Index of all Agency JSON schemas for reference",
+  "definitions": {
+    "config": {
+      "$ref": "config.json"
+    },
+    "manager": {
+      "$ref": "manager.json"
+    },
+    "agent": {
+      "$ref": "agent.json"
+    },
+    "agents": {
+      "$ref": "agents.json"
+    },
+    "task": {
+      "$ref": "task.json"
+    },
+    "tasks_store": {
+      "$ref": "tasks_store.json"
+    },
+    "result": {
+      "$ref": "result.json"
+    },
+    "pending_task": {
+      "$ref": "pending_task.json"
+    },
+    "notification": {
+      "$ref": "notification.json"
+    },
+    "notifications_store": {
+      "$ref": "notifications_store.json"
+    },
+    "slots_available": {
+      "$ref": "slots_available.json"
+    },
+    "halted": {
+      "$ref": "halted.json"
+    }
+  }
+}
