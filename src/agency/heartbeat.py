@@ -701,9 +701,6 @@ def run_heartbeat():
     socket_name = os.environ.get("AGENCY_SOCKET", "")
     role = os.environ.get("AGENCY_ROLE", "").upper()
     poll_interval = int(os.environ.get("AGENCY_POLL_INTERVAL", "30"))
-    chunk_size = int(os.environ.get("AGENCY_CHUNK_SIZE", "1"))
-    parallel_limit_env = os.environ.get("AGENCY_PARALLEL_LIMIT", "")
-    parallel_limit = int(parallel_limit_env) if parallel_limit_env else None
 
     if not role:
         print("[HEARTBEAT] Error: AGENCY_ROLE must be set (MANAGER or AGENT)")
@@ -712,7 +709,8 @@ def run_heartbeat():
 
     if role == "MANAGER":
         manager_name = os.environ.get("AGENCY_MANAGER", "coordinator")
-        manager_heartbeat(agency_dir, socket_name, manager_name, poll_interval, chunk_size, parallel_limit)
+        # Use v2 heartbeat which has auto-assignment and auto-approval
+        manager_heartbeat_v2(agency_dir, socket_name, manager_name, poll_interval)
     elif role == "AGENT":
         agent_name = os.environ.get("AGENCY_AGENT", "")
         if not agent_name:
@@ -766,7 +764,6 @@ def manager_heartbeat_v2(
     if _check_pid_file(agency_dir, f"manager-{manager_name}"):
         return
 
-    window_ref = f"{socket_name}:[MGR] {manager_name}"
     orchestrator = Orchestrator(agency_dir)
 
     # Initialize slot tracking on startup
@@ -847,17 +844,22 @@ def manager_heartbeat_v2(
                         if agent:
                             orchestrator.signal_task_completed(agent)
 
-            # 6. NOTIFICATION: Notify about pending approvals
-            status = orchestrator.get_status_summary()
-            if current_approval_count > 0 and current_approval_count != last_approval_count:
-                msg = f"👀 {current_approval_count} task(s) pending approval. Reviewers spawned."
-                if send_notification(window_ref, msg):
-                    print("[HEARTBEAT-V2] Notified about pending approvals")
-            last_approval_count = current_approval_count
+            # 6. AUTO-APPROVE: Automatically approve pending tasks
+            for task in pending_approval:
+                task_id = task.get("task_id")
+                if task_id:
+                    result = store.approve_task(task_id)
+                    if result:
+                        print(f"[HEARTBEAT-V2] Auto-approved task: {task_id}")
+                    else:
+                        print(f"[HEARTBEAT-V2] Failed to approve task: {task_id}")
+            # Re-fetch pending count after approvals
+            current_approval_count = len(store.list_tasks(status="pending_approval"))
 
             # 7. STATUS: Log status summary periodically
             _idle_cycles += 1
             if _idle_cycles % 10 == 0:
+                status = orchestrator.get_status_summary()
                 print(
                     f"[HEARTBEAT-V2] Status: {status['total_busy']}/{status['parallel_limit']} busy, "
                     f"{len(status['running_agents'])} running, "
