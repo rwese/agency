@@ -9,9 +9,10 @@ import os
 import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from pydantic import BaseModel
 
 # Constants
 AUDIT_FILE = "var/audit.db"
@@ -40,8 +41,7 @@ ACTION_RESUME = "resume"
 ACTION_HEARTBEAT = "heartbeat"
 
 
-@dataclass
-class AuditEvent:
+class AuditEvent(BaseModel):
     """Represents an audit event."""
 
     event_type: str
