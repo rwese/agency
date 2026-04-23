@@ -367,7 +367,7 @@ class TestStopSession:
 
     def test_stop_session(self, clean_session):
         """Test stopping a session."""
-        result = run_agency(["stop", clean_session, "--force"], check=False)
+        result = run_agency(["session", "stop", clean_session, "--force"], check=False)
 
         # Give tmux time to clean up
         time.sleep(1)
