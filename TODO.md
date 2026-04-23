@@ -2,12 +2,11 @@
 
 ### In Progress
 
-- [ ] Wire __main__ dataclasses to Pydantic
+- [ ] Remove jsonschema dependency
 
 ### Ready
 
 - [ ] Add validation tests
-- [ ] Remove jsonschema dependency
 
 ### Done
 
@@ -17,6 +16,7 @@
 - [x] Wire AuditEvent to Pydantic
 - [x] Wire pi_inject InjectResponse to Pydantic
 - [x] Wire template_inject dataclasses to Pydantic
+- [x] Wire __main__ dataclasses to Pydantic
 - [x] Wire pi_inject InjectResponse to Pydantic
 
 ### Blocked
