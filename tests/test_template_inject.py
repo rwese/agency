@@ -153,6 +153,7 @@ class TestTemplateInjector:
         assert result.content == "plain text without placeholders"
         assert result.errors == []
 
+    @pytest.mark.timeout(90)
     def test_shell_timeout(self):
         """Test shell command timeout handling."""
         injector = TemplateInjector()

@@ -87,7 +87,7 @@ class TestAuditStore:
     def test_init_creates_db(self, temp_agency_dir):
         """Test that initialization creates the database."""
         AuditStore(temp_agency_dir)
-        db_path = temp_agency_dir / "audit.db"
+        db_path = temp_agency_dir / "var" / "audit.db"
         assert db_path.exists()
 
     def test_init_creates_tables(self, audit_store):
@@ -250,7 +250,7 @@ class TestAuditIntegration:
         audit_store = AuditStore(temp_agency_dir)
 
         # Create task
-        task = task_store.add_task(description="Test task", priority="high")
+        task = task_store.add_task(subject="Test task", description="Test task description", priority="high")
 
         # Check audit log
         events = audit_store.query(task_id=task.task_id)
