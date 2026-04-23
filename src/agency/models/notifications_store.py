@@ -6,3 +6,12 @@ from pydantic import BaseModel
 """Notification history stored at .agency/var/notifications.json"""
 class NotificationsStore(BaseModel):
     notifications: list[dict]
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary (backwards compatible)."""
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Task":
+        """Create Task from dictionary (backwards compatible)."""
+        return cls.model_validate(data)

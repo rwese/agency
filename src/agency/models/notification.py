@@ -13,3 +13,12 @@ class Notification(BaseModel):
     type: Literal['unassigned_tasks', 'task_assigned', 'task_completed', 'task_approved', 'task_rejected', 'agent_idle', 'crash_detected', 'heartbeat']
     message: str
     task_ids: list[str] | None = None
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary (backwards compatible)."""
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Task":
+        """Create Task from dictionary (backwards compatible)."""
+        return cls.model_validate(data)

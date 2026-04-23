@@ -7,3 +7,12 @@ from pydantic import BaseModel
 class Agent(BaseModel):
     name: str
     personality: str | None = None
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary (backwards compatible)."""
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Task":
+        """Create Task from dictionary (backwards compatible)."""
+        return cls.model_validate(data)

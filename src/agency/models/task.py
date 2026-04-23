@@ -1,13 +1,13 @@
 from __future__ import annotations
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
+from pydantic import field_validator
 from typing import Literal
 import re
 
+# Pattern from schema: ^[a-z]+-[a-z]+-[0-9a-f]{4}$
+_PATTERN_TASK_ID = re.compile(r'^[a-z]+-[a-z]+-[0-9a-f]{4}$')
+
 """Generated from JSON Schema - do not edit directly."""
-
-# Compile regex patterns from schema for validation
-_TASK_ID_PATTERN = re.compile(r"^[a-z]+-[a-z]+-[0-9a-f]{4}$")
-
 
 """Represents a unit of work to be completed by an agent"""
 class Task(BaseModel):
@@ -33,10 +33,9 @@ class Task(BaseModel):
 
     @field_validator('task_id')
     @classmethod
-    def validate_task_id(cls, v: str | None) -> str | None:
-        """Validate task_id matches pattern word-word-hex."""
-        if v is not None and not _TASK_ID_PATTERN.match(v):
-            raise ValueError(f"task_id must match pattern 'word-word-hex' (e.g., swift-bear-a3f2), got: {v}")
+    def validate_task_id(cls, v):
+        if v is not None and not _PATTERN_TASK_ID.match(str(v)):
+            raise ValueError(f"task_id must match pattern '^[a-z]+-[a-z]+-[0-9a-f]{4}$', got: {v}")
         return v
 
     def to_dict(self) -> dict:

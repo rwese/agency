@@ -69,17 +69,40 @@ def schema_to_pydantic(
         "",
     ]
 
+    # Extract patterns for validators
+    patterns = _extract_patterns(schema)
+    pattern_lines = []
+    if patterns:
+        imports.add("import re")
+        imports.add("from pydantic import field_validator")
+        # Add module-level pattern constants
+        for field_name, pattern in patterns:
+            var_name = f"_PATTERN_{field_name.upper()}"
+            pattern_lines.append(f"# Pattern from schema: {pattern}")
+            pattern_lines.append(f"{var_name} = re.compile(r'{pattern}')")
+            pattern_lines.append("")
+
     # Handle definitions in index schema
     if "definitions" in schema:
         for def_name, def_schema in schema["definitions"].items():
-            model_code, model_imports = _schema_to_model(def_name, def_schema, schemas)
+            model_code, model_imports, model_patterns = _schema_to_model(def_name, def_schema, schemas, _to_pascal_case(def_name))
             lines.append(model_code)
             lines.append("")
             imports.update(model_imports)
+            pattern_lines.extend(model_patterns)
     else:
-        model_code, model_imports = _schema_to_model(name, schema, schemas)
+        pascal_name = _to_pascal_case(name)
+        model_code, model_imports, model_patterns = _schema_to_model(name, schema, schemas, pascal_name)
         lines.append(model_code)
         imports.update(model_imports)
+        pattern_lines.extend(model_patterns)
+
+    # Insert pattern constants after imports but before class
+    if pattern_lines:
+        # Find the class line and insert before it
+        class_idx = next((i for i, l in enumerate(lines) if l.startswith("class ")), 0)
+        for j, pl in enumerate(reversed(pattern_lines)):
+            lines.insert(class_idx, pl)
 
     # Add imports at the top
     import_lines = sorted(imports)
@@ -89,27 +112,32 @@ def schema_to_pydantic(
 
 
 def _schema_to_model(
-    name: str, schema: dict, schemas: dict[str, dict] | None = None
-) -> tuple[str, list[str]]:
+    name: str, schema: dict, schemas: dict[str, dict] | None = None, class_name: str = ""
+) -> tuple[str, list[str], list[str]]:
     """Convert a single schema to Pydantic model.
 
     Args:
         name: Schema/file name or pre-computed class name
         schema: JSON schema dict
         schemas: Dict of all schemas for reference resolution
+        class_name: Name of the containing class for validator naming
+
+    Returns: (model_code, imports, pattern_lines)
     """
     lines = []
     imports = []
+    pattern_lines = []
 
     description = schema.get("description")
 
     # Skip index and private files
     if name.startswith("_") or name == "index":
-        return "", imports
+        return "", imports, pattern_lines
 
     # Build class - name is already in PascalCase if passed from main()
     # but we still need to handle names from definitions
-    class_name = _to_pascal_case(name)
+    if not class_name:
+        class_name = _to_pascal_case(name)
     if description:
         lines.append(f'"""{description}"""')
     lines.append(f"class {class_name}(BaseModel):")
@@ -143,7 +171,14 @@ def _schema_to_model(
     if not properties:
         # No properties
         lines.append("    pass")
-        return "\n".join(lines), imports
+        return "\n".join(lines), imports, pattern_lines
+
+    # Extract patterns for field validators
+    patterns = _extract_patterns(schema)
+    pattern_vars = {}
+    for i, (field_name, pattern) in enumerate(patterns):
+        var_name = f"_PATTERN_{field_name.upper()}"
+        pattern_vars[field_name] = var_name
 
     for prop_name, prop_schema in properties.items():
         is_required = prop_name in required
@@ -151,11 +186,40 @@ def _schema_to_model(
         lines.append(f"    {field_code}")
         imports.extend(field_imports)
 
-    return "\n".join(lines), imports
+    # Add validators for pattern fields
+    for field_name, pattern in patterns:
+        var_name = pattern_vars[field_name]
+        lines.append("")
+        lines.append(f"    @field_validator('{field_name}')")
+        lines.append(f"    @classmethod")
+        lines.append(f"    def validate_{field_name}(cls, v):")
+        lines.append(f"        if v is not None and not {var_name}.match(str(v)):")
+        lines.append(f"            raise ValueError(f\"{field_name} must match pattern '{pattern}', got: {{v}}\")")
+        lines.append(f"        return v")
+
+    # Add backwards compatibility methods
+    lines.append("")
+    lines.append("    def to_dict(self) -> dict:")
+    lines.append('        """Convert to dictionary (backwards compatible)."""')
+    lines.append("        return self.model_dump(mode=\"json\")")
+    lines.append("")
+    lines.append("    @classmethod")
+    lines.append("    def from_dict(cls, data: dict) -> \"Task\":")
+    lines.append('        """Create Task from dictionary (backwards compatible)."""')
+    lines.append("        return cls.model_validate(data)")
+
+    return "\n".join(lines), imports, pattern_lines
 
 
-def _schema_to_field(name: str, schema: dict, required: bool = False) -> tuple[str, list[str]]:
-    """Convert a property schema to a Pydantic field."""
+def _schema_to_field(name: str, schema: dict, required: bool = False, class_name: str = "") -> tuple[str, list[str]]:
+    """Convert a property schema to a Pydantic field.
+    
+    Args:
+        name: Property name
+        schema: Property schema
+        required: Whether field is required
+        class_name: Name of the containing class (for validator naming)
+    """
     imports = []
     prop_type, type_imports = _schema_to_type(schema)
     imports.extend(type_imports)
@@ -167,6 +231,30 @@ def _schema_to_field(name: str, schema: dict, required: bool = False) -> tuple[s
         field_line = f"{name}: {prop_type} | None = None"
 
     return field_line, imports
+
+
+def _extract_patterns(schema: dict) -> list[tuple[str, str]]:
+    """Extract pattern validators from schema properties.
+    
+    Returns list of (field_name, pattern) tuples.
+    """
+    patterns = []
+    
+    # Check properties directly
+    if "properties" in schema:
+        for prop_name, prop_schema in schema["properties"].items():
+            if "pattern" in prop_schema:
+                patterns.append((prop_name, prop_schema["pattern"]))
+    
+    # Check allOf
+    if "allOf" in schema:
+        for sub_schema in schema["allOf"]:
+            if "properties" in sub_schema:
+                for prop_name, prop_schema in sub_schema["properties"].items():
+                    if "pattern" in prop_schema:
+                        patterns.append((prop_name, prop_schema["pattern"]))
+    
+    return patterns
 
 
 def _get_schema_type(schema: dict) -> str | list | None:
