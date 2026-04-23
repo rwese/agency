@@ -18,6 +18,55 @@ TASKS_FILE = "var/tasks.json"
 TASKS_DIR = "var/tasks"
 PENDING_DIR = "var/pending"
 
+# Valid status and priority values
+VALID_STATUSES = {"pending", "in_progress", "pending_approval", "completed", "failed"}
+VALID_PRIORITIES = {"low", "normal", "high"}
+
+
+
+def _validate_task_data(data: dict) -> list[str]:
+    """Validate task data against schema. Returns list of error messages."""
+    errors = []
+    
+    # Required fields
+    if not data.get("subject"):
+        errors.append("subject: required field missing")
+    if not data.get("description"):
+        errors.append("description: required field missing")
+    
+    # Validate status
+    status = data.get("status", "pending")
+    if status not in VALID_STATUSES:
+        errors.append(f"status: must be one of {VALID_STATUSES}")
+    
+    # Validate priority
+    priority = data.get("priority", "low")
+    if priority not in VALID_PRIORITIES:
+        errors.append(f"priority: must be one of {VALID_PRIORITIES}")
+    
+    # Validate task_id format if present
+    task_id = data.get("task_id", "")
+    if task_id and not _is_valid_task_id(task_id):
+        errors.append(f"task_id: invalid format '{task_id}' (expected word-word-hex)")
+    
+    # Validate assigned_to is string or null
+    if "assigned_to" in data and data["assigned_to"] is not None:
+        if not isinstance(data["assigned_to"], str):
+            errors.append("assigned_to: must be string or null")
+    
+    # Validate depends_on is list or null
+    if "depends_on" in data and data["depends_on"] is not None:
+        if not isinstance(data["depends_on"], list):
+            errors.append("depends_on: must be list or null")
+    
+    return errors
+
+
+def _is_valid_task_id(task_id: str) -> bool:
+    """Check if task_id matches pattern word-word-hex."""
+    import re
+    return bool(re.match(r"^[a-z]+-[a-z]+-[0-9a-f]{4}$", task_id))
+
 
 @dataclass
 class Task:
@@ -86,6 +135,11 @@ class Task:
 
     @classmethod
     def from_dict(cls, data: dict) -> "Task":
+        # Validate data on load
+        errors = _validate_task_data(data)
+        if errors:
+            raise ValueError(f"Invalid task data: {', '.join(errors)}")
+        
         return cls(
             task_id=data.get("task_id", ""),
             subject=data["subject"],
@@ -260,6 +314,10 @@ class TaskStore:
             raise ValueError("Task subject is required and cannot be empty")
         if not description or not description.strip():
             raise ValueError("Task description is required and cannot be empty")
+        
+        # Validate priority
+        if priority not in VALID_PRIORITIES:
+            raise ValueError(f"Task priority must be one of {VALID_PRIORITIES}")
 
         with self._lock():
             data = self._read_tasks_json()
@@ -501,6 +559,10 @@ class TaskStore:
                     # Also allow no-op transitions (setting same status)
                     if status != current_status:
                         return False
+                
+                # Validate status value
+                if status not in VALID_STATUSES:
+                    return False
 
                 tasks[task_id]["status"] = status
 
@@ -512,6 +574,8 @@ class TaskStore:
                     tasks[task_id]["completed_at"] = now
 
             if priority:
+                if priority not in VALID_PRIORITIES:
+                    return False
                 tasks[task_id]["priority"] = priority
 
             if reviewer_assigned is not None:

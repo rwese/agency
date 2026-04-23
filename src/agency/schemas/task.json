@@ -4,20 +4,25 @@
   "title": "Task",
   "description": "Represents a unit of work to be completed by an agent",
   "type": "object",
-  "required": ["task_id", "description", "status", "priority", "assigned_to", "created_at"],
+  "required": ["subject", "description"],
   "properties": {
     "task_id": {
       "type": "string",
       "pattern": "^[a-z]+-[a-z]+-[0-9a-f]{4}$",
       "description": "Unique identifier using eff.org wordlist + hex suffix (e.g., swift-bear-a3f2)"
     },
+    "subject": {
+      "type": "string",
+      "description": "Brief title/summary of the task (required)"
+    },
     "description": {
       "type": "string",
-      "description": "Human-readable task description"
+      "description": "Detailed description of what needs to be done (required)"
     },
     "status": {
       "type": "string",
       "enum": ["pending", "in_progress", "pending_approval", "completed", "failed"],
+      "default": "pending",
       "description": "Current task state"
     },
     "priority": {
@@ -28,21 +33,19 @@
     },
     "assigned_to": {
       "type": ["string", "null"],
+      "default": null,
       "description": "Agent name or null if unassigned"
     },
     "created_at": {
-      "type": "string",
-      "format": "date-time",
+      "type": ["string", "null"],
       "description": "ISO8601 creation timestamp"
     },
     "started_at": {
       "type": ["string", "null"],
-      "format": "date-time",
       "description": "ISO8601 timestamp when agent started work"
     },
     "completed_at": {
       "type": ["string", "null"],
-      "format": "date-time",
       "description": "ISO8601 timestamp when task was completed"
     },
     "result": {
@@ -58,6 +61,21 @@
       "items": { "type": "string" },
       "description": "List of task IDs this task depends on"
     },
+    "acceptance_criteria": {
+      "type": ["array", "null"],
+      "items": { "type": "string" },
+      "description": "What must be true for task to be complete"
+    },
+    "references": {
+      "type": ["array", "null"],
+      "items": { "type": "string" },
+      "description": "File paths, URLs, or resources relevant to task"
+    },
+    "attachments": {
+      "type": ["array", "null"],
+      "items": { "type": "string" },
+      "description": "File paths to files stored with this task"
+    },
     "agent_info": {
       "type": ["object", "null"],
       "description": "Agent tracking info (set when picked up)",
@@ -72,7 +90,6 @@
         },
         "started_at": {
           "type": "string",
-          "format": "date-time",
           "description": "When agent started this task"
         }
       },
