@@ -1,34 +1,12 @@
 ---
 name: agency
-description: Orchestrate tmux-based AI agent sessions for project work. Use when: (1) initializing a new project with agency init, (2) starting/stopping multi-agent sessions, (3) assigning tasks with agency tasks add/assign, (4) monitoring session health, or (5) coordinating manager + coder workflows.
+description: Orchestrate AI agent sessions for project work. Use when: (1) initializing a new project with agency init, (2) starting/stopping multi-agent sessions, (3) assigning tasks with agency tasks add/assign, (4) monitoring session health, or (5) coordinating manager + coder workflows.
 ---
 
 # Agency
 
-tmux-based AI agent orchestration with project-centric model.
+AI agent orchestration with project-centric model.
 
-## Architecture
-
-```
-agency-<project>                    # tmux session + socket
-├── [MGR] coordinator              # Manager (index 0)
-├── coder                           # Agent (index 1+)
-└── tester                          # Agent
-```
-
-**Relationships:**
-- Project 1:1 Manager
-- Project 1:N Agents
-- Manager 1:N Tasks
-- Agent 1:1 Task (active)
-
-## Task Lifecycle
-
-```
-pending → in_progress → pending_approval → completed
-                     ↓
-                  failed (on reject)
-```
 
 ## Quick Start
 
