@@ -40,15 +40,31 @@ The task went `pending` → `completed` without:
 
 ### Done
 
-- [ ] None yet
+- [x] Fix 1: Enforce pending_approval before completed - Added status transition validation
+- [x] Fix 2: Update developer personality with correct commands - Added clear workflow
+- [x] Fix 3: Task ID escaping - Documented as tmux behavior, core fix prevents bypass anyway
 
 ---
 
 ## Demo Retries
 
-After fixing the issues, retry building demo projects:
+All fixes implemented. Ready to retry demos.
 
-- [ ] **Log Parser v2** - Retry after workflow fixes (log-parser was bypassed, needs review flow)
+### Completed
+
+- [x] **Log Parser v2** - ✅ SUCCESS! Manager review flow worked correctly.
+  - Developer marked task → pending_approval
+  - Manager detected pending task → offered review
+  - Manager reviewed → approved
+
+### Feature Added
+
+- [x] **Auto-Approve** - Added `auto_approve` support to manager heartbeat.
+  - Set `auto_approve: true` in `manager.yaml` to auto-approve tasks
+  - Manager's heartbeat now auto-approves when configured
+
+### Ready
+
 - [ ] **URL Shortener** - Next demo
 - [ ] **Bookmarks Vault** - Next demo
 - [ ] **Secret Scanner** - Final demo
