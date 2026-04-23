@@ -845,16 +845,19 @@ def manager_heartbeat_v2(
                             orchestrator.signal_task_completed(agent)
 
             # 6. AUTO-APPROVE: Automatically approve pending tasks
-            for task in pending_approval:
-                task_id = task.get("task_id")
-                if task_id:
-                    result = store.approve_task(task_id)
-                    if result:
-                        print(f"[HEARTBEAT-V2] Auto-approved task: {task_id}")
-                    else:
-                        print(f"[HEARTBEAT-V2] Failed to approve task: {task_id}")
-            # Re-fetch pending count after approvals
-            current_approval_count = len(store.list_tasks(status="pending_approval"))
+            if pending_approval:
+                from agency.tasks import TaskStore
+                store = TaskStore(agency_dir)
+                for task in pending_approval:
+                    task_id = task.get("task_id")
+                    if task_id:
+                        result = store.approve_task(task_id)
+                        if result:
+                            print(f"[HEARTBEAT-V2] Auto-approved task: {task_id}")
+                        else:
+                            print(f"[HEARTBEAT-V2] Failed to approve task: {task_id}")
+                # Re-fetch pending count after approvals
+                current_approval_count = len(store.list_tasks(status="pending_approval"))
 
             # 7. STATUS: Log status summary periodically
             _idle_cycles += 1
