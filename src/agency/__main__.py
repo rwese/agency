@@ -9,10 +9,10 @@ import os
 import signal
 import subprocess
 import sys
-from dataclasses import dataclass, field
 from pathlib import Path
 
 import click
+from pydantic import BaseModel, Field
 
 from agency import __version__
 from agency.audit import EVENT_AGENT, EVENT_CLI, EVENT_SESSION, EVENT_TASK, AuditStore
@@ -293,25 +293,23 @@ def _init_signal_handler(signum, frame):
     sys.exit(130)
 
 
-@dataclass
-class AgentEntry:
+class AgentEntry(BaseModel):
     """An agent entry for init."""
 
     name: str
     personality: str = ""
 
 
-@dataclass
-class InitConfig:
+class InitConfig(BaseModel):
     """Configuration for project initialization."""
 
     project_name: str
     shell: str = "bash"
     work_dir: Path | None = None
-    agents: list[AgentEntry] = field(default_factory=list)
+    agents: list[AgentEntry] = Field(default_factory=list)
     manager_name: str = "coordinator"
     manager_personality: str = ""
-    context_files: list[str] = field(default_factory=list)
+    context_files: list[str] = Field(default_factory=list)
     template_name: str | None = None
     template_url: str | None = None
     template_subdir: str | None = None
