@@ -119,12 +119,12 @@ heartbeat-logs:
 # === Task Management ===
 
 # Add task
-task-add desc:
-    agency tasks add -d "{{desc}}"
+task-add subject desc:
+    agency tasks add -s "{{subject}}" -d "{{desc}}"
 
 # Add task with priority
-task-add-priority desc priority:
-    agency tasks add -d "{{desc}}" -p {{priority}}
+task-add-priority subject desc priority:
+    agency tasks add -s "{{subject}}" -d "{{desc}}" -p {{priority}}
 
 # Assign task
 task-assign task-id agent:

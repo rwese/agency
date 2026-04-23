@@ -25,11 +25,11 @@ class TestApproveCommand:
         """Create a TaskStore with a pending task."""
         agency_dir = tmp_path / ".agency"
         agency_dir.mkdir()
-        (agency_dir / "tasks").mkdir()
-        (agency_dir / "pending").mkdir()
+        (agency_dir / "var" / "tasks").mkdir(parents=True)
+        (agency_dir / "var" / "pending").mkdir(parents=True)
 
         store = TaskStore(agency_dir)
-        task = store.add_task(description="Test task")
+        task = store.add_task(subject="Test task", description="Test task description")
         store.complete_task(task.task_id, result="Done")
         return store, task.task_id
 
@@ -60,11 +60,11 @@ class TestRejectCommand:
         """Create a TaskStore with a pending task."""
         agency_dir = tmp_path / ".agency"
         agency_dir.mkdir()
-        (agency_dir / "tasks").mkdir()
-        (agency_dir / "pending").mkdir()
+        (agency_dir / "var" / "tasks").mkdir(parents=True)
+        (agency_dir / "var" / "pending").mkdir(parents=True)
 
         store = TaskStore(agency_dir)
-        task = store.add_task(description="Test task")
+        task = store.add_task(subject="Test task", description="Test task description")
         store.complete_task(task.task_id, result="Done")
         return store, task.task_id
 
@@ -79,7 +79,7 @@ class TestRejectCommand:
         assert task.status == "failed"
 
         # Check rejection file
-        rejection_file = store.agency_dir / "pending" / f"{task_id}.rejected"
+        rejection_file = store.agency_dir / "var" / "pending" / f"{task_id}.rejected"
         assert rejection_file.exists()
         content = rejection_file.read_text()
         assert "Missing tests" in content
@@ -95,7 +95,7 @@ class TestRejectCommand:
         result = cmd_reject(store, args)
 
         assert result == 0
-        content = (store.agency_dir / "pending" / f"{task_id}.rejected").read_text()
+        content = (store.agency_dir / "var" / "pending" / f"{task_id}.rejected").read_text()
         assert "Incomplete" in content
         assert "Add error handling" in content
         assert "Write tests" in content
@@ -117,11 +117,11 @@ class TestReopenCommand:
         """Create a TaskStore with a completed task."""
         agency_dir = tmp_path / ".agency"
         agency_dir.mkdir()
-        (agency_dir / "tasks").mkdir()
-        (agency_dir / "pending").mkdir()
+        (agency_dir / "var" / "tasks").mkdir(parents=True)
+        (agency_dir / "var" / "pending").mkdir(parents=True)
 
         store = TaskStore(agency_dir)
-        task = store.add_task(description="Test task")
+        task = store.add_task(subject="Test task", description="Test task description")
         store.complete_task(task.task_id, result="Done")
         store.approve_task(task.task_id)
         return store, task.task_id
@@ -131,11 +131,11 @@ class TestReopenCommand:
         """Create a TaskStore with a failed task."""
         agency_dir = tmp_path / ".agency"
         agency_dir.mkdir()
-        (agency_dir / "tasks").mkdir()
-        (agency_dir / "pending").mkdir()
+        (agency_dir / "var" / "tasks").mkdir(parents=True)
+        (agency_dir / "var" / "pending").mkdir(parents=True)
 
         store = TaskStore(agency_dir)
-        task = store.add_task(description="Test task")
+        task = store.add_task(subject="Test task", description="Test task description")
         store.complete_task(task.task_id, result="Done")
         store.reject_task(task.task_id, reason="Failed")
         return store, task.task_id
@@ -172,11 +172,11 @@ class TestReopenCommand:
         """Test reopening a pending task (should fail)."""
         agency_dir = tmp_path / ".agency"
         agency_dir.mkdir()
-        (agency_dir / "tasks").mkdir()
-        (agency_dir / "pending").mkdir()
+        (agency_dir / "var" / "tasks").mkdir(parents=True)
+        (agency_dir / "var" / "pending").mkdir(parents=True)
 
         store = TaskStore(agency_dir)
-        task = store.add_task(description="Test task")
+        task = store.add_task(subject="Test task", description="Test task description")
         args = make_args(task_id=task.task_id)
         result = cmd_reopen(store, args)
 

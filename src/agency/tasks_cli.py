@@ -81,14 +81,21 @@ def cmd_list(store: TaskStore, args: argparse.Namespace) -> int:
 
 def cmd_add(store: TaskStore, args: argparse.Namespace) -> int:
     """Add a new task."""
-    task = store.add_task(
-        description=args.description,
-        priority=args.priority,
-        assigned_to=args.assignee,
-    )
-
-    print(f"[INFO] Created task: {task.task_id}")
-    return 0
+    try:
+        task = store.add_task(
+            subject=args.subject,
+            description=args.description,
+            priority=args.priority,
+            assigned_to=args.assignee,
+            acceptance_criteria=args.acceptance_criteria if hasattr(args, 'acceptance_criteria') else None,
+            references=args.references if hasattr(args, 'references') else None,
+            attachments=args.attachments if hasattr(args, 'attachments') else None,
+        )
+        print(f"[INFO] Created task: {task.task_id}")
+        return 0
+    except ValueError as e:
+        print(f"[ERROR] {e}", file=sys.stderr)
+        return 1
 
 
 def cmd_show(store: TaskStore, args: argparse.Namespace) -> int:
@@ -111,6 +118,7 @@ def cmd_show(store: TaskStore, args: argparse.Namespace) -> int:
     print()
     print("## Task")
     print()
+    print(f"- **Subject**: {getattr(task, 'subject', 'N/A')}")
     print(f"- **Description**: {task.description}")
     print(f"- **Status**: {task.status} {status_icon}")
     print(f"- **Priority**: {task.priority}")
@@ -118,6 +126,28 @@ def cmd_show(store: TaskStore, args: argparse.Namespace) -> int:
     print(f"- **Created**: {task.created_at or 'Unknown'}")
     print(f"- **Started**: {task.started_at or 'Not started'}")
     print(f"- **Completed**: {task.completed_at or 'In progress'}")
+
+    # Show acceptance criteria
+    if getattr(task, 'acceptance_criteria', None):
+        print()
+        print("## Acceptance Criteria")
+        for i, criterion in enumerate(task.acceptance_criteria, 1):
+            print(f"{i}. {criterion}")
+
+    # Show references
+    if getattr(task, 'references', None):
+        print()
+        print("## References")
+        for ref in task.references:
+            print(f"- {ref}")
+
+    # Show attachments
+    if getattr(task, 'attachments', None):
+        print()
+        print("## Attachments")
+        for attachment in task.attachments:
+            print(f"- {attachment}")
+
     print()
 
     if task.result:

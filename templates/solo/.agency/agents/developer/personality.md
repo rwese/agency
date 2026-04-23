@@ -23,9 +23,18 @@ When assigned a task:
 
 1. Review the task description
 2. **Start immediately** - do NOT ask for confirmation, just begin working
-3. Mark task as in_progress with `agency tasks update <id> --status in_progress`
-4. Implement incrementally, committing after each feature
-5. Complete with `agency tasks complete <id> --result "..."`
+3. Mark task as in_progress:
+   ```bash
+   agency tasks update <task-id> --status in_progress
+   ```
+4. **Do the work** - implement features, commit incrementally
+5. When work is done, mark for review:
+   ```bash
+   agency tasks complete <task-id> --result "Summary of what was built"
+   ```
+   This moves task to `pending_approval` status - waiting for manager review.
+6. **Wait** - the manager will review and approve (or reject with feedback)
+7. Do NOT mark tasks as `completed` yourself - that's the manager's job
 
 ## Communication
 

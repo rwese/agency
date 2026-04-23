@@ -193,8 +193,8 @@ class TestTaskWorkflow:
         # Create .agency structure manually
         agency_dir = project_dir / ".agency"
         agency_dir.mkdir()
-        (agency_dir / "tasks").mkdir()
-        (agency_dir / "pending").mkdir()
+        (agency_dir / "var" / "tasks").mkdir(parents=True)
+        (agency_dir / "var" / "pending").mkdir(parents=True)
         (agency_dir / "config.yaml").write_text("project: test\n")
 
         return project_dir
@@ -203,7 +203,7 @@ class TestTaskWorkflow:
         """Test adding a task."""
         # Change to project dir so find_agency_dir() works
         result = subprocess.run(
-            ["agency", "tasks", "add", "-d", "Test task"],
+            ["agency", "tasks", "add", "-s", "Test task", "-d", "Test task description"],
             capture_output=True,
             text=True,
             cwd=str(project_with_agency),
@@ -216,7 +216,7 @@ class TestTaskWorkflow:
         """Test listing tasks."""
         # Add a task first
         subprocess.run(
-            ["agency", "tasks", "add", "-d", "List test task"],
+            ["agency", "tasks", "add", "-s", "List test", "-d", "List test task description"],
             capture_output=True,
             cwd=str(project_with_agency),
         )
@@ -236,7 +236,7 @@ class TestTaskWorkflow:
         """Test complete -> approve workflow."""
         # Add task
         result = subprocess.run(
-            ["agency", "tasks", "add", "-d", "Complete test"],
+            ["agency", "tasks", "add", "-s", "Complete test", "-d", "Complete test description"],
             capture_output=True,
             text=True,
             cwd=str(project_with_agency),
@@ -285,7 +285,7 @@ class TestTaskWorkflow:
         """Test complete -> reject -> reopen workflow."""
         # Add and complete task
         result = subprocess.run(
-            ["agency", "tasks", "add", "-d", "Reject test"],
+            ["agency", "tasks", "add", "-s", "Reject test", "-d", "Reject test description"],
             capture_output=True,
             text=True,
             cwd=str(project_with_agency),

@@ -33,12 +33,39 @@ pending → in_progress → pending_approval → completed
 <project-root>/
 ├── .agency/
 │   ├── config.yaml           # Project settings
-│   ├── manager.yaml           # Manager personality
-│   ├── agents.yaml            # Agent registry
-│   ├── tasks/                 # Task data
-│   └── agents/                # Agent configs
+│   ├── manager.yaml          # Manager personality
+│   ├── agents.yaml           # Agent registry
+│   ├── var/                  # Session artifacts (for review)
+│   │   ├── audit.db          # Audit log of all actions
+│   │   ├── notifications.json # All notifications sent
+│   │   ├── tasks.json        # Final task state
+│   │   └── tasks/            # Per-task details
+│   └── agents/               # Agent configs
 └── src/
 ```
+
+## Session Review
+
+After a session ends, review session artifacts in `.agency/var/`:
+
+```bash
+# Review notification history (who was notified of what)
+cat .agency/var/notifications.json | jq .
+
+# Review audit trail
+sqlite3 .agency/var/audit.db "SELECT * FROM events ORDER BY ts DESC LIMIT 50;"
+
+# Review task completion states
+cat .agency/var/tasks.json | jq '.tasks | to_entries[] | {id: .key, status: .value.status, agent: .value.assigned_to}'
+
+# Check for manager review
+cat .agency/var/tasks.json | jq '.tasks[].reviewer_assigned'
+```
+
+**Key session metrics:**
+- Did manager review tasks? (`reviewer_assigned` should not be null)
+- Did agents update status to `in_progress`? (`started_at` should be set)
+- Were notifications sent? (check `notifications.json`)
 
 ## Configuration
 
