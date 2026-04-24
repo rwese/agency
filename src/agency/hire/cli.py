@@ -4,15 +4,14 @@ Agency Hire — CLI Commands
 Interactive CLI for hiring project-specific agencies.
 """
 
-import sys
 from pathlib import Path
 from typing import Any
 
 import click
 
-from agency.hire.questions import ALL_GROUPS, Question, QuestionGroup, get_answers_dict
-from agency.hire.generators.manager import write_manager_config
 from agency.hire.generators.agent import write_agent_configs
+from agency.hire.generators.manager import write_manager_config
+from agency.hire.questions import ALL_GROUPS, Question, get_answers_dict
 
 
 @click.command()
@@ -44,7 +43,6 @@ def hire(
         agency hire --preview               # Preview without writing
     """
     agency_path = Path(agency_dir).resolve()
-    dot_agency_dir = agency_path / ".agency"
 
     click.echo("\n🚀 Agency Hire — Let's build your team!\n")
 
@@ -219,6 +217,45 @@ def _preview_config(answers: dict[str, Any]) -> None:
     click.echo(f"\n👥 Agents: {', '.join(answers.get('agents', ['coder']))}")
 
 
+def _copy_pi_extensions(agency_dir: Path) -> None:
+    """Copy pi extensions from agency package to project .agency/pi/extensions/.
+
+    This ensures agency projects are self-contained with their own pi extensions.
+    """
+    import shutil
+
+    # Find agency extras directory
+    agency_package_dir = Path(__file__).parent.parent.parent
+
+    possible_sources = [
+        Path.cwd() / "extras" / "pi" / "extensions",
+        agency_package_dir / "extras" / "pi" / "extensions",
+    ]
+
+    source_extensions_dir = None
+    for src in possible_sources:
+        if src.exists():
+            source_extensions_dir = src
+            break
+
+    if not source_extensions_dir:
+        click.echo("[WARN] Agency package extras not found, pi extensions not copied")
+        return
+
+    dest_extensions_dir = agency_dir / "pi" / "extensions"
+    dest_extensions_dir.mkdir(parents=True, exist_ok=True)
+
+    extensions_to_copy = ["pi-inject", "pi-status", "no-frills"]
+    for ext_name in extensions_to_copy:
+        source_ext = source_extensions_dir / ext_name
+        dest_ext = dest_extensions_dir / ext_name
+        if source_ext.exists():
+            if dest_ext.exists():
+                shutil.rmtree(dest_ext)
+            shutil.copytree(source_ext, dest_ext)
+            click.echo(f"✓ Copied pi extension: {ext_name}")
+
+
 def _write_configs(agency_dir: Path, answers: dict[str, Any]) -> None:
     """Write all configuration files."""
 
@@ -227,6 +264,9 @@ def _write_configs(agency_dir: Path, answers: dict[str, Any]) -> None:
     (agency_dir / "agents").mkdir(exist_ok=True)
     (agency_dir / "var" / "tasks").mkdir(parents=True, exist_ok=True)
     (agency_dir / "var" / "pending").mkdir(parents=True, exist_ok=True)
+
+    # Copy pi extensions
+    _copy_pi_extensions(agency_dir)
 
     # Write manager config
     manager_path = write_manager_config(agency_dir, answers)

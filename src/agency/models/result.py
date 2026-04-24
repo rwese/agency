@@ -15,6 +15,6 @@ class Result(BaseModel):
         return self.model_dump(mode="json")
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Result":
+    def from_dict(cls, data: dict) -> Result:
         """Create from dictionary (backwards compatible)."""
         return cls.model_validate(data)

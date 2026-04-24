@@ -20,6 +20,6 @@ class Config(BaseModel):
         return self.model_dump(mode="json")
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Config":
+    def from_dict(cls, data: dict) -> Config:
         """Create from dictionary (backwards compatible)."""
         return cls.model_validate(data)

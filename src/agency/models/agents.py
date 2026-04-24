@@ -12,6 +12,6 @@ class Agents(BaseModel):
         return self.model_dump(mode="json")
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Agents":
+    def from_dict(cls, data: dict) -> Agents:
         """Create from dictionary (backwards compatible)."""
         return cls.model_validate(data)

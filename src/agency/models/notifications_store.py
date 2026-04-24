@@ -12,6 +12,6 @@ class NotificationsStore(BaseModel):
         return self.model_dump(mode="json")
 
     @classmethod
-    def from_dict(cls, data: dict) -> "NotificationsStore":
+    def from_dict(cls, data: dict) -> NotificationsStore:
         """Create from dictionary (backwards compatible)."""
         return cls.model_validate(data)

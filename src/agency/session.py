@@ -440,6 +440,134 @@ def create_project_session(
         raise RuntimeError(f"Failed to create session: {result.stderr}")
 
 
+def start_heartbeat_window(
+    session_name: str,
+    socket_name: str,
+    member_name: str,
+    member_type: str,  # "manager" or "agent"
+    agency_dir: Path,
+    work_dir: Path,
+) -> None:
+    """Start a heartbeat window in the tmux session.
+
+    The heartbeat runs in its own window to ensure it stays with the session
+    and doesn't get orphaned when the parent process exits.
+    """
+    window_name = f"[HB] {member_name}"
+
+    # Import heartbeat module for path
+    from agency import heartbeat as heartbeat_module
+
+    heartbeat_path = Path(heartbeat_module.__file__).parent / "heartbeat.py"
+
+    # Get socket paths from /tmp/agency-{uid}/
+    socket_dir = f"/tmp/agency-{os.getuid()}"
+    os.makedirs(socket_dir, exist_ok=True)
+    if member_type == "manager":
+        injector_socket = f"{socket_dir}/inj-mgr.sock"
+        status_socket = f"{socket_dir}/sta-mgr.sock"
+        role = "MANAGER"
+        poll_interval = "30"
+        chunk_size = "1"
+    else:
+        injector_socket = f"{socket_dir}/inj-agent.sock"
+        status_socket = f"{socket_dir}/sta-agent.sock"
+        role = "AGENT"
+        poll_interval = "30"
+        ping_interval = "120"
+
+    # Create heartbeat window
+    result = subprocess.run(
+        [
+            "tmux",
+            "-L",
+            socket_name,
+            "new-window",
+            "-d",
+            "-t",
+            f"{session_name}:",
+            "-n",
+            window_name,
+            "-c",
+            str(work_dir),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(f"[WARN] Failed to create heartbeat window: {result.stderr}")
+        return
+
+    # Apply dim styling to heartbeat window (it's background)
+    subprocess.run(
+        [
+            "tmux",
+            "-L",
+            socket_name,
+            "set-window-option",
+            "-t",
+            f"{session_name}:{window_name}",
+            "window-status-style",
+            "fg=240,bg=236",  # Dim gray
+        ],
+        capture_output=True,
+    )
+
+    # Set pane title for visibility
+    subprocess.run(
+        [
+            "tmux",
+            "-L",
+            socket_name,
+            "set-option",
+            "-t",
+            f"{session_name}:{window_name}",
+            "set-clipboard",
+            "off",
+        ],
+        capture_output=True,
+    )
+
+    # Build the command to run heartbeat
+    env_vars = [
+        f"AGENCY_ROLE={role}",
+        f"AGENCY_DIR={agency_dir}",
+        f"AGENCY_SOCKET={socket_name}",
+        f"PI_INJECTOR_SOCKET={injector_socket}",
+        f"PI_STATUS_SOCKET={status_socket}",
+        "PYTHONUNBUFFERED=1",  # Ensure immediate output
+    ]
+
+    if member_type == "manager":
+        env_vars.append(f"AGENCY_MANAGER={member_name}")
+        env_vars.append(f"AGENCY_POLL_INTERVAL={poll_interval}")
+        env_vars.append(f"AGENCY_CHUNK_SIZE={chunk_size}")
+        heartbeat_cmd = f"python3 {heartbeat_path}"
+    else:
+        env_vars.append(f"AGENCY_AGENT={member_name}")
+        env_vars.append(f"AGENCY_POLL_INTERVAL={poll_interval}")
+        env_vars.append(f"AGENCY_PING_INTERVAL={ping_interval}")
+        heartbeat_cmd = f"python3 {heartbeat_path}"
+
+    # Send command to heartbeat window
+    cmd = "env " + " ".join(env_vars) + " " + heartbeat_cmd
+    subprocess.run(
+        [
+            "tmux",
+            "-L",
+            socket_name,
+            "send-keys",
+            "-t",
+            f"{session_name}:{window_name}",
+            cmd,
+            "Enter",
+        ],
+        capture_output=True,
+    )
+
+    print(f"[INFO] Started heartbeat window: {window_name}")
+
+
 def start_manager_window(
     session_name: str,
     socket_name: str,
@@ -507,8 +635,11 @@ def start_manager_window(
         capture_output=True,
     )
 
-    # Generate and execute launch script
-    script_path = _generate_manager_launch_script(session_name, socket_name, manager_name, agency_dir, work_dir)
+    # Start heartbeat in separate window
+    start_heartbeat_window(session_name, socket_name, manager_name, "manager", agency_dir, work_dir)
+
+    # Generate and execute launch script (without heartbeat - it's in own window)
+    script_path = _generate_manager_launch_script(session_name, socket_name, manager_name, agency_dir, work_dir, with_heartbeat=False)
 
     # Execute script in window (use bash to run it)
     subprocess.run(
@@ -582,8 +713,11 @@ def start_agent_window(
     if result.returncode != 0:
         raise RuntimeError(f"Failed to create agent window: {result.stderr}")
 
-    # Generate and execute launch script
-    script_path = _generate_agent_launch_script(session_name, socket_name, agent_name, agency_dir, work_dir)
+    # Start heartbeat in separate window
+    start_heartbeat_window(session_name, socket_name, agent_name, "agent", agency_dir, work_dir)
+
+    # Generate and execute launch script (without heartbeat - it's in own window)
+    script_path = _generate_agent_launch_script(session_name, socket_name, agent_name, agency_dir, work_dir, with_heartbeat=False)
 
     # Execute script in window (use bash to run it)
     subprocess.run(
@@ -636,8 +770,14 @@ def _generate_manager_launch_script(
     manager_name: str,
     agency_dir: Path,
     work_dir: Path,
+    with_heartbeat: bool = True,
 ) -> Path:
-    """Generate the manager launch script."""
+    """Generate the manager launch script.
+
+    Args:
+        with_heartbeat: If True, includes heartbeat startup in script.
+                       If False, heartbeat is expected to run in its own tmux window.
+    """
     from agency.config import load_agency_config
 
     scripts_dir = agency_dir / "run" / ".scripts"
@@ -768,8 +908,10 @@ def _generate_manager_launch_script(
 
     # Build command with heartbeat in background
     # Use unique socket path per member
-    injector_socket = f"{agency_dir}/run/injector-{manager_name}.sock"
-    status_socket = f"{agency_dir}/run/status-{manager_name}.sock"
+    socket_dir = f"/tmp/agency-{os.getuid()}"
+    os.makedirs(socket_dir, exist_ok=True)
+    injector_socket = f"{socket_dir}/inj-mgr.sock"
+    status_socket = f"{socket_dir}/sta-mgr.sock"
 
     # Build parallel limit env var
     parallel_limit_line = f"AGENCY_PARALLEL_LIMIT={parallel_limit}" if parallel_limit else ""
@@ -805,6 +947,7 @@ readonly POLL_INTERVAL={poll_interval}
 readonly CHUNK_SIZE={chunk_size}
 readonly PARALLEL_LIMIT="{parallel_limit_line}"
 readonly NOFRILLS_ENV="{nofrills_env}"
+readonly WITH_HEARTBEAT="{'1' if with_heartbeat else '0'}"
 readonly CONTEXT_ARGS={context_args_heredoc if context_args_heredoc else '""'}
 
 # === System Prompt (heredoc) ===
@@ -818,18 +961,20 @@ cd "$WORK_DIR"
 rm -f "$INJECTOR_SOCKET"
 
 # === Start Heartbeat (background) ===
-env \
-  AGENCY_ROLE=MANAGER \
-  AGENCY_DIR="$AGENCY_DIR" \
-  AGENCY_MANAGER="$MANAGER_NAME" \
-  AGENCY_SOCKET="$SOCKET_NAME" \
-  AGENCY_POLL_INTERVAL="$POLL_INTERVAL" \
-  AGENCY_CHUNK_SIZE="$CHUNK_SIZE" \
-  $PARALLEL_LIMIT \
-  PI_INJECTOR_SOCKET="$INJECTOR_SOCKET" \
-  PI_STATUS_SOCKET="$STATUS_SOCKET" \
-  python3 "$HEARTBEAT_PATH" > /dev/null 2>&1 &
-sleep 1
+if [[ "$WITH_HEARTBEAT" == "1" ]]; then
+  env \
+    AGENCY_ROLE=MANAGER \
+    AGENCY_DIR="$AGENCY_DIR" \
+    AGENCY_MANAGER="$MANAGER_NAME" \
+    AGENCY_SOCKET="$SOCKET_NAME" \
+    AGENCY_POLL_INTERVAL="$POLL_INTERVAL" \
+    AGENCY_CHUNK_SIZE="$CHUNK_SIZE" \
+    $PARALLEL_LIMIT \
+    PI_INJECTOR_SOCKET="$INJECTOR_SOCKET" \
+    PI_STATUS_SOCKET="$STATUS_SOCKET" \
+    python3 "$HEARTBEAT_PATH" > /dev/null 2>&1 &
+  sleep 1
+fi
 
 # === Launch pi ===
 export AGENCY_ROLE=MANAGER
@@ -870,8 +1015,14 @@ def _generate_agent_launch_script(
     agent_name: str,
     agency_dir: Path,
     work_dir: Path,
+    with_heartbeat: bool = True,
 ) -> Path:
-    """Generate the agent launch script."""
+    """Generate the agent launch script.
+
+    Args:
+        with_heartbeat: If True, includes heartbeat startup in script.
+                       If False, heartbeat is expected to run in its own tmux window.
+    """
     from agency.config import load_agency_config
 
     scripts_dir = agency_dir / "run" / ".scripts"
@@ -990,8 +1141,10 @@ def _generate_agent_launch_script(
 
     # Build command with heartbeat in background
     # Use unique socket path per member
-    injector_socket = f"{agency_dir}/run/injector-{agent_name}.sock"
-    status_socket = f"{agency_dir}/run/status-{agent_name}.sock"
+    socket_dir = f"/tmp/agency-{os.getuid()}"
+    os.makedirs(socket_dir, exist_ok=True)
+    injector_socket = f"{socket_dir}/inj-agent.sock"
+    status_socket = f"{socket_dir}/sta-agent.sock"
 
     # Get poll and ping intervals from manager config
     poll_interval = 30
@@ -1038,6 +1191,7 @@ readonly POLL_INTERVAL={poll_interval}
 readonly PING_INTERVAL={ping_interval}
 readonly NOFRILLS_ENV="{nofrills_env}"
 readonly CONTEXT_ARGS={context_args_heredoc if context_args_heredoc else '""'}
+readonly WITH_HEARTBEAT="{'1' if with_heartbeat else '0'}"
 
 # === System Prompt (heredoc) ===
 readonly SYSTEM_PROMPT=$(cat << 'AGENCY_EOF'
@@ -1050,17 +1204,19 @@ cd "$WORK_DIR"
 rm -f "$INJECTOR_SOCKET"
 
 # === Start Heartbeat (background) ===
-env \
-  AGENCY_ROLE=AGENT \
-  AGENCY_DIR="$AGENCY_DIR" \
-  AGENCY_AGENT="$AGENT_NAME" \
-  AGENCY_SOCKET="$SOCKET_NAME" \
-  AGENCY_POLL_INTERVAL="$POLL_INTERVAL" \
-  AGENCY_PING_INTERVAL="$PING_INTERVAL" \
-  PI_INJECTOR_SOCKET="$INJECTOR_SOCKET" \
-  PI_STATUS_SOCKET="$STATUS_SOCKET" \
-  python3 "$HEARTBEAT_PATH" > /dev/null 2>&1 &
-sleep 1
+if [[ "$WITH_HEARTBEAT" == "1" ]]; then
+  env \
+    AGENCY_ROLE=AGENT \
+    AGENCY_DIR="$AGENCY_DIR" \
+    AGENCY_AGENT="$AGENT_NAME" \
+    AGENCY_SOCKET="$SOCKET_NAME" \
+    AGENCY_POLL_INTERVAL="$POLL_INTERVAL" \
+    AGENCY_PING_INTERVAL="$PING_INTERVAL" \
+    PI_INJECTOR_SOCKET="$INJECTOR_SOCKET" \
+    PI_STATUS_SOCKET="$STATUS_SOCKET" \
+    python3 "$HEARTBEAT_PATH" > /dev/null 2>&1 &
+  sleep 1
+fi
 
 # === Launch pi ===
 export AGENCY_ROLE=AGENT

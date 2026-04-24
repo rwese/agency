@@ -13,6 +13,6 @@ class Halted(BaseModel):
         return self.model_dump(mode="json")
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Halted":
+    def from_dict(cls, data: dict) -> Halted:
         """Create from dictionary (backwards compatible)."""
         return cls.model_validate(data)

@@ -21,6 +21,7 @@ from agency.config import (
     load_agents_config,
     load_manager_config,
 )
+from agency.hire import hire as hire_cmd
 from agency.session import (
     SessionManager,
     create_project_session,
@@ -30,7 +31,6 @@ from agency.session import (
 from agency.session_logs import logs_cmd
 from agency.tasks import TaskStore
 from agency.template import TemplateManager
-from agency.hire import hire as hire_cmd
 
 # Get version info - try build metadata first, then runtime git, then fallback
 VERSION = __version__

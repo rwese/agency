@@ -13,6 +13,6 @@ class TasksStore(BaseModel):
         return self.model_dump(mode="json")
 
     @classmethod
-    def from_dict(cls, data: dict) -> "TasksStore":
+    def from_dict(cls, data: dict) -> TasksStore:
         """Create from dictionary (backwards compatible)."""
         return cls.model_validate(data)

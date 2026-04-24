@@ -247,7 +247,7 @@ def write_agent_configs(agency_dir: Path, answers: dict[str, Any]) -> list[Path]
         agent_list.append({"name": agent, "config": agent_config})
         configs.append(agent_config)
 
-    agents_yaml.write_text(f"""$schema: https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/agents.json
+    agents_yaml.write_text("""$schema: https://raw.githubusercontent.com/rwese/agency/main/src/agency/schemas/agents.json
 agents:
 """)
 

@@ -4,12 +4,12 @@ Tests for Pydantic model validation throughout the codebase.
 These tests verify that invalid data is properly rejected by Pydantic models.
 """
 
+
 import pytest
-from pathlib import Path
 from pydantic import ValidationError
 
+from agency.config import AgencyConfig, AgentConfig, ManagerConfig
 from agency.models.task import Task
-from agency.config import AgencyConfig, ManagerConfig, AgentConfig
 
 
 class TestTaskValidation:

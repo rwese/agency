@@ -363,10 +363,25 @@ def send_notification(window_ref: str, message: str) -> bool:
         return False
 
     # Security check: socket path must be within agency directory
+    # OR in /tmp/agency-{uid}/ pattern (for short socket paths)
     # This ensures we only talk to our own pi-inject instance
     socket_path_obj = Path(socket_path)
-    if agency_dir and not str(socket_path_obj).startswith(str(Path(agency_dir).absolute())):
-        print(f"[HEARTBEAT] Socket {socket_path} outside agency dir, skipping injection")
+    socket_allowed = False
+
+    if agency_dir:
+        agency_path = str(Path(agency_dir).absolute())
+        socket_str = str(socket_path_obj)
+        current_uid = str(os.getuid())
+
+        # Check if socket is within agency directory
+        if socket_str.startswith(agency_path):
+            socket_allowed = True
+        # OR if socket is in /tmp/agency-{uid}/ pattern for this user
+        elif socket_str.startswith(f"/tmp/agency-{current_uid}/"):
+            socket_allowed = True
+
+    if agency_dir and not socket_allowed:
+        print(f"[HEARTBEAT] Socket {socket_path} not in allowed path, skipping injection")
         return False
 
     # Import here to avoid circular imports and use module directly
@@ -621,6 +636,8 @@ def agent_heartbeat(
 
     last_ping_time = 0  # Track when we last sent a ping
     last_notified_task_id = None  # Track last notified task
+    _startup_time = current_time = time.time()  # Track when agent started
+    _min_ping_delay = 60  # Don't send pings until 60 seconds after startup
 
     while True:
         try:
@@ -680,11 +697,21 @@ def agent_heartbeat(
                         )
 
             # Periodic ping with no tasks (keep agent engaged) - only if idle
+            # Only send if: pane is idle, enough time passed, agent has been running for min delay
+            # AND there are actually unassigned tasks in the system (not just no tasks for this agent)
             elif pane_is_idle and current_time - last_ping_time >= ping_interval * 2:
-                msg = "🏃 No tasks assigned. Check 'agency tasks list' or wait for new assignments."
-                if send_notification(window_ref, msg):
-                    print("[HEARTBEAT] Pinged idle agent")
-                    last_ping_time = current_time
+                # Check if there are unassigned tasks in the system
+                all_tasks = get_all_tasks(agency_dir)
+                unassigned_in_system = any(
+                    t.get("status") == "pending" and not t.get("assigned_to")
+                    for t in all_tasks
+                )
+                # Only ping if agent has been running for min delay and there are unassigned tasks
+                if unassigned_in_system and (current_time - _startup_time) >= _min_ping_delay:
+                    msg = "🏃 No tasks assigned to you. Check 'agency tasks list' for available tasks."
+                    if send_notification(window_ref, msg):
+                        print("[HEARTBEAT] Pinged idle agent about available tasks")
+                        last_ping_time = current_time
 
             time.sleep(poll_interval)
 
@@ -804,8 +831,22 @@ def manager_heartbeat_v2(
                     store.update_task(task_id, reviewer_assigned=None)
                     print(f"[HEARTBEAT-V2] Cleared orphan reviewer for {task_id}")
 
+                # Audit orphan detection
+                audit = _get_audit_store(agency_dir)
+                if audit:
+                    for orphan in orphans:
+                        audit.log_agent(
+                            action="orphan_detected",
+                            agency_role="manager",
+                            details={
+                                "task_id": orphan["task_id"],
+                                "reason": orphan.get("reason"),
+                            },
+                        )
+
             # 2. REVIEW: Spawn reviewer agents for pending_approval tasks
             pending_approval = get_pending_approval_tasks(agency_dir)
+            spawned_reviewers = []
             for task in pending_approval:
                 task_id = task.get("task_id")
                 reviewer = task.get("reviewer_assigned")
@@ -813,11 +854,30 @@ def manager_heartbeat_v2(
                     # Spawn reviewer for this task
                     if start_reviewer(agency_dir, task_id):
                         print(f"[HEARTBEAT-V2] Spawned reviewer for {task_id}")
+                        spawned_reviewers.append(task_id)
+
+            # Audit reviewer spawning
+            if spawned_reviewers:
+                audit = _get_audit_store(agency_dir)
+                if audit:
+                    audit.log_agent(
+                        action="reviewer_spawned",
+                        agency_role="manager",
+                        details={"task_ids": spawned_reviewers},
+                    )
 
             # 3. ASSIGNMENT: Assign pending unblocked tasks to available agents
             assigned = assign_tasks_to_agents(agency_dir)
             if assigned:
                 print(f"[HEARTBEAT-V2] Assigned tasks: {assigned}")
+                # Audit assignment
+                audit = _get_audit_store(agency_dir)
+                if audit:
+                    audit.log_agent(
+                        action="tasks_assigned",
+                        agency_role="manager",
+                        details={"assignments": assigned},
+                    )
 
             # 4. SPAWN: Start agents for tasks assigned but not running
             # This is the lazy spawning - agents only start when work is assigned
@@ -828,6 +888,14 @@ def manager_heartbeat_v2(
                     spawned.append(task.assigned_to)
             if spawned:
                 print(f"[HEARTBEAT-V2] Spawned agents for assigned tasks: {spawned}")
+                # Audit agent spawning
+                audit = _get_audit_store(agency_dir)
+                if audit:
+                    audit.log_agent(
+                        action="agent_spawned",
+                        agency_role="manager",
+                        details={"agents": spawned},
+                    )
 
             # 5. SLOT SIGNALING: Release slots for completed tasks
             # Signal when in_progress tasks complete (moved to pending_approval)
@@ -855,7 +923,7 @@ def manager_heartbeat_v2(
                 # Re-fetch pending count after approvals
                 current_approval_count = len(store.list_tasks(status="pending_approval"))
 
-            # 7. STATUS: Log status summary periodically
+            # 7. STATUS: Log status summary and heartbeat periodically
             _idle_cycles += 1
             if _idle_cycles % 10 == 0:
                 status = orchestrator.get_status_summary()
@@ -864,6 +932,22 @@ def manager_heartbeat_v2(
                     f"{len(status['running_agents'])} running, "
                     f"{status['unblocked_tasks']} unblocked tasks"
                 )
+
+                # Audit periodic heartbeat (every 10 cycles = 5 minutes at 30s interval)
+                audit = _get_audit_store(agency_dir)
+                if audit:
+                    audit.log_agent(
+                        action="heartbeat",
+                        agency_role="manager",
+                        details={
+                            "status": "idle",
+                            "cycle": _idle_cycles,
+                            "total_busy": status["total_busy"],
+                            "running_agents": len(status["running_agents"]),
+                            "unblocked_tasks": status["unblocked_tasks"],
+                            "pending_approval": len(pending_approval),
+                        },
+                    )
 
             time.sleep(poll_interval)
 

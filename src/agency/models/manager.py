@@ -16,6 +16,6 @@ class Manager(BaseModel):
         return self.model_dump(mode="json")
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Manager":
+    def from_dict(cls, data: dict) -> Manager:
         """Create from dictionary (backwards compatible)."""
         return cls.model_validate(data)

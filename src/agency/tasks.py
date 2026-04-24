@@ -95,7 +95,7 @@ class TaskStore:
             "rain", "sage", "tree", "unit", "vine", "wave", "yarn", "zion",
             "apex", "bark", "cave", "dawn", "echo", "fern", "glow", "haze",
             "icon", "jolt", "knot", "lark", "mist", "node", "opal", "peak",
-            "quad", "rust", "sand", "tide", "unit", "volt", "wind", "xray",
+            "quad", "rust", "sand", "tide", "volt", "wind", "xray", "year",
         ]
 
         for _ in range(100):  # Max attempts
@@ -123,6 +123,19 @@ class TaskStore:
             except Exception:
                 self._audit_store = False  # Mark as unavailable
         return self._audit_store if self._audit_store else None
+
+    def _find_task_by_subject(self, data: dict, subject: str) -> Task | None:
+        """Find existing task by subject (case-insensitive).
+
+        Used for deduplication to prevent creating duplicate tasks.
+        Returns the first matching task or None if not found.
+        """
+        tasks = data.get("tasks", {})
+        subject_lower = subject.lower()
+        for task_data in tasks.values():
+            if task_data.get("subject", "").lower() == subject_lower:
+                return Task.model_validate(task_data)
+        return None
 
     def list_tasks(
         self,
@@ -220,6 +233,12 @@ class TaskStore:
 
         with self._lock:
             data = self._read_tasks_json()
+
+            # Deduplication: Check for existing task with same subject (case-insensitive)
+            existing_task = self._find_task_by_subject(data, subject.strip())
+            if existing_task:
+                # Return existing task instead of creating duplicate
+                return existing_task
 
             # Generate task ID
             task_id = self._generate_task_id(data)
