@@ -555,8 +555,10 @@ def get_assigned_not_running_tasks(agency_dir: Path) -> list:
     orchestrator = Orchestrator(agency_dir)
     store = TaskStore(agency_dir)
 
-    # Get tasks that are pending/failed (need work) and assigned
-    assigned = store.list_tasks(status="pending,failed")
+    # Get tasks that are pending or failed (need work) and assigned
+    pending = store.list_tasks(status="pending")
+    failed = store.list_tasks(status="failed")
+    assigned = pending + failed
 
     result = []
     for task in assigned:

@@ -1219,6 +1219,7 @@ if [[ "$WITH_HEARTBEAT" == "1" ]]; then
 fi
 
 # === Launch pi ===
+cd "$WORK_DIR"
 export AGENCY_ROLE=AGENT
 export AGENCY_PROJECT="$SESSION_NAME"
 export AGENCY_DIR="$AGENCY_DIR"
