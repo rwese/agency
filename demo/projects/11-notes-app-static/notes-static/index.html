@@ -1,0 +1,2120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="A simple notes application with localStorage persistence">
+  <title>Notes App</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📝</text></svg>">
+  <style>
+    :root {
+      --color-bg: #ffffff;
+      --color-surface: #f5f5f5;
+      --color-text: #333333;
+      --color-text-secondary: #666666;
+      --color-border: #e0e0e0;
+      --color-primary: #4a90d9;
+      --color-primary-hover: #3a7bc8;
+      --color-danger: #dc3545;
+      --color-danger-hover: #c82333;
+      --color-sidebar-bg: #fafafa;
+      --color-note-active: #e3f2fd;
+      --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      --radius: 8px;
+      --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    }
+
+    [data-theme="dark"] {
+      --color-bg: #1a1a2e;
+      --color-surface: #16213e;
+      --color-text: #e0e0e0;
+      --color-text-secondary: #a0a0a0;
+      --color-border: #2d3a4f;
+      --color-primary: #5c9ee8;
+      --color-primary-hover: #7ab3f0;
+      --color-danger: #e74c3c;
+      --color-danger-hover: #c0392b;
+      --color-sidebar-bg: #0f0f23;
+      --color-note-active: #1e3a5f;
+      --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: var(--font-family);
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.6;
+      min-height: 100vh;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    /* Layout */
+    .app {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.5rem;
+      background-color: var(--color-surface);
+      border-bottom: 1px solid var(--color-border);
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .header-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .search-input {
+      padding: 0.5rem 1rem;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      font-size: 0.9rem;
+      width: 200px;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px rgba(74, 144, 217, 0.2);
+    }
+
+    .search-input::placeholder {
+      color: var(--color-text-secondary);
+    }
+
+    .btn {
+      padding: 0.5rem 1rem;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s ease, transform 0.1s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .btn-primary {
+      background-color: var(--color-primary);
+      color: #ffffff;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--color-primary-hover);
+    }
+
+    .btn-icon {
+      padding: 0.5rem;
+      background-color: transparent;
+      border: 1px solid var(--color-border);
+      color: var(--color-text);
+    }
+
+    .btn-icon:hover {
+      background-color: var(--color-surface);
+    }
+
+    .btn-icon svg {
+      width: 20px;
+      height: 20px;
+      display: block;
+    }
+
+    /* Main Content */
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 280px;
+      min-width: 280px;
+      background-color: var(--color-sidebar-bg);
+      border-right: 1px solid var(--color-border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      padding: 1rem;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .sidebar-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--color-text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .notes-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.5rem;
+    }
+
+    .note-item {
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.5rem;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+      border: 1px solid transparent;
+    }
+
+    .note-item:hover {
+      background-color: var(--color-surface);
+    }
+
+    .note-item.active {
+      background-color: var(--color-note-active);
+      border-color: var(--color-primary);
+    }
+
+    .note-item-title {
+      font-weight: 500;
+      margin-bottom: 0.25rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .note-item-preview {
+      font-size: 0.8rem;
+      color: var(--color-text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .note-item-date {
+      font-size: 0.75rem;
+      color: var(--color-text-secondary);
+      margin-top: 0.25rem;
+    }
+
+    .notes-empty {
+      padding: 2rem 1rem;
+      text-align: center;
+      color: var(--color-text-secondary);
+    }
+
+    /* Editor */
+    .editor {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 1.5rem;
+      overflow-y: auto;
+    }
+
+    .editor-empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-text-secondary);
+    }
+
+    .editor-empty-icon {
+      font-size: 4rem;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
+
+    .editor-form {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      max-width: 800px;
+      width: 100%;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .form-label {
+      font-weight: 500;
+      font-size: 0.9rem;
+      color: var(--color-text-secondary);
+    }
+
+    .form-input {
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      font-size: 1rem;
+      font-family: inherit;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px rgba(74, 144, 217, 0.2);
+    }
+
+    .form-textarea {
+      min-height: 300px;
+      resize: vertical;
+      font-family: inherit;
+    }
+
+    .editor-actions {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-top: 0.5rem;
+    }
+
+    .btn-secondary {
+      background-color: var(--color-surface);
+      color: var(--color-text);
+      border: 1px solid var(--color-border);
+    }
+
+    .btn-secondary:hover {
+      background-color: var(--color-border);
+    }
+
+    .btn-danger {
+      background-color: var(--color-danger);
+      color: #ffffff;
+    }
+
+    .btn-danger:hover {
+      background-color: var(--color-danger-hover);
+    }
+
+    /* Preview Display */
+    #note-preview {
+      padding: 1rem;
+      background-color: var(--color-surface);
+      border-radius: var(--radius);
+      line-height: 1.7;
+    }
+
+    #note-preview h1,
+    #note-preview h2,
+    #note-preview h3,
+    #note-preview h4,
+    #note-preview h5,
+    #note-preview h6 {
+      margin-top: 1.5em;
+      margin-bottom: 0.5em;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+
+    #note-preview h1 { font-size: 1.75rem; }
+    #note-preview h2 { font-size: 1.5rem; }
+    #note-preview h3 { font-size: 1.25rem; }
+    #note-preview h4 { font-size: 1.1rem; }
+    #note-preview h5 { font-size: 1rem; }
+    #note-preview h6 { font-size: 0.9rem; }
+
+    #note-preview p {
+      margin-bottom: 1em;
+    }
+
+    #note-preview ul,
+    #note-preview ol {
+      margin-bottom: 1em;
+      padding-left: 1.5em;
+    }
+
+    #note-preview li {
+      margin-bottom: 0.25em;
+    }
+
+    #note-preview blockquote {
+      margin: 1em 0;
+      padding: 0.5em 1em;
+      border-left: 4px solid var(--color-primary);
+      background-color: var(--color-surface);
+      color: var(--color-text-secondary);
+      font-style: italic;
+    }
+
+    #note-preview code {
+      font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+      font-size: 0.9em;
+      background-color: var(--color-surface);
+      padding: 0.15em 0.4em;
+      border-radius: 3px;
+    }
+
+    #note-preview pre {
+      margin: 1em 0;
+      padding: 1em;
+      background-color: var(--color-surface);
+      border-radius: var(--radius);
+      overflow-x: auto;
+    }
+
+    #note-preview pre code {
+      background: none;
+      padding: 0;
+      font-size: 0.85em;
+    }
+
+    #note-preview a {
+      color: var(--color-primary);
+      text-decoration: none;
+    }
+
+    #note-preview a:hover {
+      text-decoration: underline;
+    }
+
+    #note-preview strong {
+      font-weight: 600;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .main {
+        flex-direction: column;
+      }
+
+      .sidebar {
+        width: 100%;
+        min-width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid var(--color-border);
+        flex-shrink: 0;
+      }
+
+      .sidebar-header-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+      }
+
+      .sidebar-menu-toggle {
+        display: flex;
+        padding: 0.5rem;
+      }
+
+      .notes-list {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease, padding 0.3s ease;
+        padding: 0 0.5rem;
+      }
+
+      .notes-list.expanded {
+        max-height: 50vh;
+        overflow-y: auto;
+        padding: 0.5rem;
+      }
+
+      .search-input {
+        width: 100%;
+        flex: 1;
+        min-height: 44px;
+      }
+
+      .header {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 0.75rem 1rem;
+      }
+
+      .header-title {
+        justify-content: center;
+        font-size: 1.1rem;
+      }
+
+      .header-actions {
+        justify-content: center;
+        gap: 0.5rem;
+      }
+
+      .btn {
+        min-height: 44px;
+        min-width: 44px;
+        padding: 0.6rem 0.8rem;
+      }
+
+      .btn-icon {
+        padding: 0.6rem;
+      }
+
+      .editor {
+        padding: 1rem;
+      }
+
+      .editor-actions {
+        flex-direction: column;
+      }
+
+      .editor-actions .btn {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+
+    /* Extra small screens (375px and below) */
+    @media (max-width: 375px) {
+      .header-title span:last-child {
+        font-size: 1rem;
+      }
+
+      .search-input {
+        font-size: 16px; /* Prevents zoom on iOS */
+      }
+
+      .form-input {
+        font-size: 16px; /* Prevents zoom on iOS */
+      }
+
+      .note-item {
+        padding: 0.6rem 0.75rem;
+      }
+    }
+
+    /* Accessibility */
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        transition: none !important;
+        animation: none !important;
+      }
+    }
+
+    /* Scrollbar Styling */
+    .notes-list::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .notes-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .notes-list::-webkit-scrollbar-thumb {
+      background-color: var(--color-border);
+      border-radius: 3px;
+    }
+
+    .notes-list::-webkit-scrollbar-thumb:hover {
+      background-color: var(--color-text-secondary);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header" role="banner">
+      <h1 class="header-title">
+        <span aria-hidden="true">📝</span>
+        <span>Notes App</span>
+      </h1>
+      <div class="header-actions">
+        <label for="search-input" class="sr-only">Search notes</label>
+        <input 
+          type="search" 
+          id="search-input" 
+          class="search-input" 
+          placeholder="Search notes..."
+          aria-label="Search notes"
+        >
+        <button 
+          type="button" 
+          class="btn btn-primary" 
+          id="btn-new-note"
+          aria-label="Create new note"
+        >
+          <span aria-hidden="true">+</span>
+          <span>New Note</span>
+        </button>
+        <button 
+          type="button" 
+          class="btn btn-icon" 
+          id="btn-toggle-theme"
+          aria-label="Toggle dark/light theme"
+          title="Toggle theme"
+        >
+          <svg id="icon-sun" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          <svg id="icon-moon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="display: none;" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
+        <button 
+          type="button" 
+          class="btn btn-icon" 
+          id="btn-export"
+          aria-label="Export notes to JSON"
+          title="Export notes"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+        </button>
+        <button 
+          type="button" 
+          class="btn btn-icon" 
+          id="btn-import"
+          aria-label="Import notes from JSON"
+          title="Import notes"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+        </button>
+        <input type="file" id="file-import" accept=".json,application/json" style="display: none;">
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main" role="main">
+      <!-- Sidebar - Notes List -->
+      <aside class="sidebar" id="sidebar" aria-label="Notes list">
+        <div class="sidebar-header">
+          <div class="sidebar-header-row">
+            <h2 class="sidebar-title">Notes</h2>
+            <button type="button" class="btn btn-icon sidebar-menu-toggle" id="sidebar-menu-toggle" aria-label="Toggle notes list" aria-expanded="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <nav class="notes-list" id="notes-list" aria-label="Notes navigation" role="list">
+          <div class="notes-empty" id="notes-empty">
+            <p>No notes yet.</p>
+            <p>Create your first note!</p>
+          </div>
+        </nav>
+      </aside>
+
+      <!-- Editor Area -->
+      <section class="editor" id="editor" aria-label="Note editor">
+        <div class="editor-empty" id="editor-empty">
+          <div class="editor-empty-icon" aria-hidden="true">📄</div>
+          <h2>Select a note to edit</h2>
+          <p>Or create a new note to get started</p>
+        </div>
+        <form class="editor-form" id="editor-form" style="display: none;" aria-label="Note editor form">
+          <div class="form-group">
+            <label for="note-title" class="form-label">Title</label>
+            <input 
+              type="text" 
+              id="note-title" 
+              class="form-input" 
+              placeholder="Note title..."
+              required
+              aria-required="true"
+            >
+          </div>
+          <div class="form-group">
+            <label for="note-content" class="form-label">Content</label>
+            <textarea 
+              id="note-content" 
+              class="form-input form-textarea" 
+              placeholder="Write your note here..."
+              aria-label="Note content"
+            ></textarea>
+          </div>
+          <div class="editor-actions">
+            <button type="submit" class="btn btn-primary" id="btn-save">
+              <span aria-hidden="true">💾</span>
+              <span>Save</span>
+            </button>
+            <button type="button" class="btn btn-secondary" id="btn-preview">
+              <span aria-hidden="true">👁</span>
+              <span>Preview</span>
+            </button>
+            <button type="button" class="btn btn-danger" id="btn-delete">
+              <span aria-hidden="true">🗑</span>
+              <span>Delete</span>
+            </button>
+          </div>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <!-- Screen reader only class -->
+  <style>
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+  </style>
+
+  <script>
+    /**
+     * Note data model class
+     * Represents a single note with title, content, and timestamps
+     */
+    class Note {
+      constructor({ id = null, title = '', content = '', createdAt = null, modifiedAt = null }) {
+        this.id = id || Note.generateId();
+        this.title = title;
+        this.content = content;
+        this.createdAt = createdAt || new Date().toISOString();
+        this.modifiedAt = modifiedAt || new Date().toISOString();
+      }
+
+      /**
+       * Generate a unique ID for the note
+       * @returns {string} Unique identifier
+       */
+      static generateId() {
+        return 'note-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+      }
+
+      /**
+       * Update the modified timestamp and return this for chaining
+       * @returns {Note} This note instance
+       */
+      touch() {
+        this.modifiedAt = new Date().toISOString();
+        return this;
+      }
+
+      /**
+       * Convert note to plain object for JSON serialization
+       * @returns {Object} Plain object representation
+       */
+      toJSON() {
+        return {
+          id: this.id,
+          title: this.title,
+          content: this.content,
+          createdAt: this.createdAt,
+          modifiedAt: this.modifiedAt
+        };
+      }
+
+      /**
+       * Create a Note instance from a plain object
+       * @param {Object} data - Plain object with note properties
+       * @returns {Note} Note instance
+       */
+      static fromJSON(data) {
+        return new Note({
+          id: data.id,
+          title: data.title || '',
+          content: data.content || '',
+          createdAt: data.createdAt,
+          modifiedAt: data.modifiedAt
+        });
+      }
+    }
+
+    /**
+     * Storage service for managing notes with localStorage
+     * Handles CRUD operations and JSON serialization
+     */
+    class NotesStorage {
+      constructor(storageKey = 'notes-app-data') {
+        this.storageKey = storageKey;
+      }
+
+      /**
+       * Get all notes from localStorage
+       * @returns {Note[]} Array of Note instances
+       */
+      getAllNotes() {
+        try {
+          const data = localStorage.getItem(this.storageKey);
+          if (!data) return [];
+          
+          const parsed = JSON.parse(data);
+          if (!Array.isArray(parsed)) return [];
+          
+          return parsed.map(noteData => Note.fromJSON(noteData));
+        } catch (error) {
+          console.error('Error reading notes from localStorage:', error);
+          return [];
+        }
+      }
+
+      /**
+       * Get a single note by ID
+       * @param {string} id - Note ID to find
+       * @returns {Note|null} Note instance or null if not found
+       */
+      getNote(id) {
+        const notes = this.getAllNotes();
+        return notes.find(note => note.id === id) || null;
+      }
+
+      /**
+       * Create a new note and save to localStorage
+       * @param {Object} data - Note data { title, content }
+       * @returns {Note} Created Note instance
+       */
+      createNote(data) {
+        const note = new Note({
+          title: data.title || 'Untitled',
+          content: data.content || ''
+        });
+        
+        const notes = this.getAllNotes();
+        notes.push(note);
+        this.saveAllNotes(notes);
+        
+        return note;
+      }
+
+      /**
+       * Update an existing note
+       * @param {string} id - Note ID to update
+       * @param {Object} data - Updated data { title, content }
+       * @returns {Note|null} Updated Note instance or null if not found
+       */
+      updateNote(id, data) {
+        const notes = this.getAllNotes();
+        const index = notes.findIndex(note => note.id === id);
+        
+        if (index === -1) return null;
+        
+        const note = notes[index];
+        if (data.title !== undefined) note.title = data.title;
+        if (data.content !== undefined) note.content = data.content;
+        note.touch();
+        
+        notes[index] = note;
+        this.saveAllNotes(notes);
+        
+        return note;
+      }
+
+      /**
+       * Delete a note by ID
+       * @param {string} id - Note ID to delete
+       * @returns {boolean} True if deleted, false if not found
+       */
+      deleteNote(id) {
+        const notes = this.getAllNotes();
+        const index = notes.findIndex(note => note.id === id);
+        
+        if (index === -1) return false;
+        
+        notes.splice(index, 1);
+        this.saveAllNotes(notes);
+        
+        return true;
+      }
+
+      /**
+       * Save all notes to localStorage
+       * @param {Note[]} notes - Array of Note instances
+       */
+      saveAllNotes(notes) {
+        try {
+          const data = notes.map(note => note.toJSON());
+          localStorage.setItem(this.storageKey, JSON.stringify(data));
+        } catch (error) {
+          console.error('Error saving notes to localStorage:', error);
+          throw new Error('Failed to save notes. Storage may be full.');
+        }
+      }
+
+      /**
+       * Export all notes as JSON string
+       * @returns {string} JSON string of all notes
+       */
+      exportNotes() {
+        const notes = this.getAllNotes();
+        return JSON.stringify(notes.map(note => note.toJSON()), null, 2);
+      }
+
+      /**
+       * Import notes from JSON string
+       * @param {string} jsonString - JSON string to parse
+       * @param {boolean} merge - If true, merge with existing notes; if false, replace
+       * @returns {Object} { success: boolean, count: number, error?: string }
+       */
+      importNotes(jsonString, merge = false) {
+        try {
+          const data = JSON.parse(jsonString);
+          
+          if (!Array.isArray(data)) {
+            return { success: false, count: 0, error: 'Invalid format: expected an array of notes' };
+          }
+          
+          const importedNotes = data.map(noteData => {
+            if (!noteData.id || !noteData.title) {
+              throw new Error('Each note must have id and title');
+            }
+            return Note.fromJSON(noteData);
+          });
+          
+          let notes = merge ? this.getAllNotes() : [];
+          
+          // Merge: skip duplicates by ID, add new ones
+          const existingIds = new Set(notes.map(n => n.id));
+          importedNotes.forEach(note => {
+            if (!existingIds.has(note.id)) {
+              notes.push(note);
+            }
+          });
+          
+          this.saveAllNotes(notes);
+          
+          return { success: true, count: importedNotes.length };
+        } catch (error) {
+          return { success: false, count: 0, error: error.message };
+        }
+      }
+
+      /**
+       * Clear all notes from storage
+       */
+      clearAllNotes() {
+        localStorage.removeItem(this.storageKey);
+      }
+    }
+
+    // Initialize the storage instance
+    const storage = new NotesStorage('notes-app-data');
+
+    // Export for use in other parts of the app
+    window.NotesApp = {
+      Note,
+      NotesStorage,
+      storage
+    };
+
+    /**
+     * NotesList UI Controller
+     * Manages the notes list display, selection, and sorting
+     */
+    class NotesList {
+      /**
+       * @param {Object} options - Configuration options
+       * @param {HTMLElement} options.container - Container element for the list
+       * @param {HTMLElement} options.emptyElement - Empty state element
+       * @param {NotesStorage} options.storage - Storage instance
+       * @param {Function} options.onSelect - Callback when note is selected
+       */
+      constructor(options) {
+        this.container = options.container;
+        this.emptyElement = options.emptyElement;
+        this.storage = options.storage;
+        this.onSelect = options.onSelect || (() => {});
+        
+        this.notes = [];
+        this.selectedId = null;
+        this.sortBy = 'modified'; // 'modified' or 'created'
+        this.sortDirection = 'desc'; // 'asc' or 'desc'
+        this.searchQuery = '';
+      }
+
+      /**
+       * Initialize the notes list
+       */
+      init() {
+        this.loadNotes();
+        this.render();
+      }
+
+      /**
+       * Load notes from storage
+       */
+      loadNotes() {
+        this.notes = this.storage.getAllNotes();
+        this.sortNotes();
+      }
+
+      /**
+       * Sort notes by the current sort setting
+       */
+      sortNotes() {
+        const sortKey = this.sortBy === 'modified' ? 'modifiedAt' : 'createdAt';
+        
+        this.notes.sort((a, b) => {
+          const dateA = new Date(a[sortKey]);
+          const dateB = new Date(b[sortKey]);
+          return this.sortDirection === 'desc' ? dateB - dateA : dateA - dateB;
+        });
+      }
+
+      /**
+       * Set the sort field and direction
+       * @param {string} field - 'modified' or 'created'
+       * @param {string} direction - 'asc' or 'desc'
+       */
+      setSort(field, direction = 'desc') {
+        this.sortBy = field;
+        this.sortDirection = direction;
+        this.sortNotes();
+        this.render();
+      }
+
+      /**
+       * Cycle through sort options
+       */
+      cycleSort() {
+        if (this.sortBy === 'modified' && this.sortDirection === 'desc') {
+          this.setSort('created', 'desc');
+        } else if (this.sortBy === 'created' && this.sortDirection === 'desc') {
+          this.setSort('modified', 'asc');
+        } else if (this.sortBy === 'modified' && this.sortDirection === 'asc') {
+          this.setSort('created', 'asc');
+        } else {
+          this.setSort('modified', 'desc');
+        }
+      }
+
+      /**
+       * Set search query to filter notes
+       * @param {string} query - Search query
+       */
+      setSearch(query) {
+        this.searchQuery = query.toLowerCase().trim();
+        this.render();
+      }
+
+      /**
+       * Get filtered notes based on search query
+       * @returns {Note[]} Filtered notes
+       */
+      getFilteredNotes() {
+        if (!this.searchQuery) return this.notes;
+        
+        return this.notes.filter(note => 
+          note.title.toLowerCase().includes(this.searchQuery) ||
+          note.content.toLowerCase().includes(this.searchQuery)
+        );
+      }
+
+      /**
+       * Format date for display
+       * @param {string} dateString - ISO date string
+       * @returns {string} Formatted date string
+       */
+      formatDate(dateString) {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        
+        if (diffDays === 0) {
+          return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } else if (diffDays === 1) {
+          return 'Yesterday';
+        } else if (diffDays < 7) {
+          return date.toLocaleDateString([], { weekday: 'short' });
+        } else {
+          return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        }
+      }
+
+      /**
+       * Render the notes list
+       */
+      render() {
+        const filteredNotes = this.getFilteredNotes();
+        
+        // Show/hide empty state
+        if (filteredNotes.length === 0) {
+          this.emptyElement.style.display = 'block';
+          // Clear existing note items but keep empty state
+          const existingItems = this.container.querySelectorAll('.note-item');
+          existingItems.forEach(item => item.remove());
+          return;
+        }
+        
+        this.emptyElement.style.display = 'none';
+        
+        // Build HTML for notes
+        const notesHtml = filteredNotes.map(note => {
+          const isActive = note.id === this.selectedId;
+          const preview = note.content.substring(0, 60) + (note.content.length > 60 ? '...' : '');
+          const dateDisplay = this.formatDate(note.modifiedAt);
+          
+          return `
+            <article 
+              class="note-item ${isActive ? 'active' : ''}" 
+              data-note-id="${this.escapeHtml(note.id)}"
+              role="listitem"
+              tabindex="0"
+              aria-selected="${isActive}"
+            >
+              <div class="note-item-title">${this.escapeHtml(note.title || 'Untitled')}</div>
+              <div class="note-item-preview">${this.escapeHtml(preview)}</div>
+              <div class="note-item-date">${dateDisplay}</div>
+            </article>
+          `;
+        }).join('');
+        
+        // Update container
+        this.container.innerHTML = notesHtml;
+        
+        // Attach event listeners
+        this.attachEventListeners();
+      }
+
+      /**
+       * Escape HTML to prevent XSS
+       * @param {string} text - Text to escape
+       * @returns {string} Escaped text
+       */
+      escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      /**
+       * Attach click handlers to note items
+       */
+      attachEventListeners() {
+        const items = this.container.querySelectorAll('.note-item');
+        
+        items.forEach(item => {
+          item.addEventListener('click', () => {
+            const noteId = item.dataset.noteId;
+            this.selectNote(noteId);
+          });
+          
+          // Keyboard support
+          item.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              const noteId = item.dataset.noteId;
+              this.selectNote(noteId);
+            }
+          });
+        });
+      }
+
+      /**
+       * Select a note
+       * @param {string} noteId - ID of note to select
+       */
+      selectNote(noteId) {
+        this.selectedId = noteId;
+        this.render();
+        this.onSelect(noteId);
+      }
+
+      /**
+       * Clear selection
+       */
+      clearSelection() {
+        this.selectedId = null;
+        this.render();
+      }
+
+      /**
+       * Refresh the list after data changes
+       */
+      refresh() {
+        this.loadNotes();
+        this.render();
+      }
+
+      /**
+       * Get currently selected note
+       * @returns {Note|null}
+       */
+      getSelectedNote() {
+        if (!this.selectedId) return null;
+        return this.notes.find(n => n.id === this.selectedId) || null;
+      }
+    }
+
+    // Initialize the app
+    const notesList = new NotesList({
+      container: document.getElementById('notes-list'),
+      emptyElement: document.getElementById('notes-empty'),
+      storage: storage,
+      onSelect: (noteId) => {
+        console.log('Note selected:', noteId);
+        // Will be connected to editor in next task
+      }
+    });
+
+    notesList.init();
+
+    // Export for app use
+    window.NotesApp.notesList = notesList;
+
+    /**
+     * Simple markdown parser for preview
+     * Supports: headers, bold, italic, code, links, lists, blockquotes
+     * @param {string} text - Markdown text
+     * @returns {string} HTML string
+     */
+    function parseMarkdown(text) {
+      if (!text) return '';
+      
+      let html = text
+        // Escape HTML first
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        // Code blocks (```...```)
+        .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+        // Inline code (`...`)
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        // Headers (# ## ### #### etc)
+        .replace(/^######\s+(.*)$/gm, '<h6>$1</h6>')
+        .replace(/^#####\s+(.*)$/gm, '<h5>$1</h5>')
+        .replace(/^####\s+(.*)$/gm, '<h4>$1</h4>')
+        .replace(/^###\s+(.*)$/gm, '<h3>$1</h3>')
+        .replace(/^##\s+(.*)$/gm, '<h2>$1</h2>')
+        .replace(/^#\s+(.*)$/gm, '<h1>$1</h1>')
+        // Bold (**...** or __...__)
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/__(.+?)__/g, '<strong>$1</strong>')
+        // Italic (*...* or _..._)
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/_(.+?)_/g, '<em>$1</em>')
+        // Blockquote (> ...)
+        .replace(/^&gt;\s+(.*)$/gm, '<blockquote>$1</blockquote>')
+        // Unordered lists (- or * or +)
+        .replace(/^[\*\-\+]+\s+(.*)$/gm, '<li>$1</li>')
+        // Ordered lists (1. 2. etc)
+        .replace(/^\d+\.\s+(.*)$/gm, '<li>$1</li>')
+        // Wrap consecutive <li> in <ul>
+        .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+        // Links [text](url)
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+        // Line breaks
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/\n/g, '<br>');
+      
+      // Wrap in paragraph if not already wrapped
+      if (!html.startsWith('<')) {
+        html = '<p>' + html + '</p>';
+      }
+      
+      return html;
+    }
+
+    /**
+     * NoteEditor UI Controller
+     * Manages the note editor form, save/delete/preview functionality
+     */
+    class NoteEditor {
+      /**
+       * @param {Object} options - Configuration options
+       * @param {HTMLElement} options.form - Editor form element
+       * @param {HTMLElement} options.emptyState - Empty state element
+       * @param {HTMLInputElement} options.titleInput - Title input element
+       * @param {HTMLTextAreaElement} options.contentInput - Content textarea element
+       * @param {HTMLButtonElement} options.saveBtn - Save button element
+       * @param {HTMLButtonElement} options.deleteBtn - Delete button element
+       * @param {HTMLButtonElement} options.previewBtn - Preview toggle button
+       * @param {HTMLTextAreaElement} options.contentDisplay - Preview display element
+       * @param {NotesStorage} options.storage - Storage instance
+       * @param {NotesList} options.notesList - Notes list instance
+       */
+      constructor(options) {
+        this.form = options.form;
+        this.emptyState = options.emptyState;
+        this.titleInput = options.titleInput;
+        this.contentInput = options.contentInput;
+        this.saveBtn = options.saveBtn;
+        this.deleteBtn = options.deleteBtn;
+        this.previewBtn = options.previewBtn;
+        this.contentDisplay = options.contentDisplay;
+        this.storage = options.storage;
+        this.notesList = options.notesList;
+        
+        this.currentNote = null;
+        this.isPreviewMode = false;
+        this.isNewNote = false;
+        
+        this.init();
+      }
+
+      /**
+       * Initialize the editor
+       */
+      init() {
+        this.attachEventListeners();
+        this.showEmptyState();
+      }
+
+      /**
+       * Attach event listeners to form elements
+       */
+      attachEventListeners() {
+        // Form submission (save)
+        this.form.addEventListener('submit', (e) => {
+          e.preventDefault();
+          this.saveNote();
+        });
+        
+        // Save button
+        this.saveBtn.addEventListener('click', () => {
+          this.saveNote();
+        });
+        
+        // Delete button with confirmation
+        this.deleteBtn.addEventListener('click', () => {
+          this.confirmDelete();
+        });
+        
+        // Preview toggle
+        this.previewBtn.addEventListener('click', () => {
+          this.togglePreview();
+        });
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+          // Ctrl/Cmd + S to save
+          if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            e.preventDefault();
+            this.saveNote();
+          }
+        });
+        
+        // Handle when another note is selected
+        if (this.notesList) {
+          const originalOnSelect = this.notesList.onSelect;
+          this.notesList.onSelect = (noteId) => {
+            if (this.isDirty()) {
+              if (confirm('You have unsaved changes. Discard them?')) {
+                originalOnSelect(noteId);
+                this.loadNote(noteId);
+              }
+            } else {
+              originalOnSelect(noteId);
+              this.loadNote(noteId);
+            }
+          };
+        }
+      }
+
+      /**
+       * Check if the current note has unsaved changes
+       * @returns {boolean}
+       */
+      isDirty() {
+        if (!this.currentNote) return false;
+        return this.titleInput.value !== this.currentNote.title ||
+               this.contentInput.value !== this.currentNote.content;
+      }
+
+      /**
+       * Load a note into the editor
+       * @param {string} noteId - Note ID to load
+       */
+      loadNote(noteId) {
+        const note = this.storage.getNote(noteId);
+        if (!note) {
+          console.error('Note not found:', noteId);
+          return;
+        }
+        
+        this.currentNote = note;
+        this.isNewNote = false;
+        this.isPreviewMode = false;
+        
+        this.titleInput.value = note.title;
+        this.contentInput.value = note.content;
+        
+        this.updatePreviewButton();
+        this.showForm();
+        this.titleInput.focus();
+      }
+
+      /**
+       * Create a new empty note
+       */
+      createNewNote() {
+        this.currentNote = null;
+        this.isNewNote = true;
+        this.isPreviewMode = false;
+        
+        this.titleInput.value = '';
+        this.contentInput.value = '';
+        
+        this.updatePreviewButton();
+        this.showForm();
+        this.titleInput.focus();
+      }
+
+      /**
+       * Show the editor form
+       */
+      showForm() {
+        this.emptyState.style.display = 'none';
+        this.form.style.display = 'flex';
+        this.contentInput.style.display = 'block';
+        if (this.contentDisplay) {
+          this.contentDisplay.style.display = 'none';
+        }
+      }
+
+      /**
+       * Show empty state
+       */
+      showEmptyState() {
+        this.emptyState.style.display = 'flex';
+        this.form.style.display = 'none';
+        this.currentNote = null;
+        this.isNewNote = false;
+      }
+
+      /**
+       * Save the current note
+       */
+      saveNote() {
+        const title = this.titleInput.value.trim() || 'Untitled';
+        const content = this.contentInput.value;
+        
+        if (this.isNewNote) {
+          // Create new note
+          this.currentNote = this.storage.createNote({ title, content });
+          this.isNewNote = false;
+        } else if (this.currentNote) {
+          // Update existing note
+          this.currentNote = this.storage.updateNote(this.currentNote.id, { title, content });
+        } else {
+          // No current note, create new
+          this.currentNote = this.storage.createNote({ title, content });
+          this.isNewNote = false;
+        }
+        
+        // Refresh notes list and select the saved note
+        if (this.notesList) {
+          this.notesList.refresh();
+          this.notesList.selectNote(this.currentNote.id);
+        }
+        
+        console.log('Note saved:', this.currentNote.id);
+      }
+
+      /**
+       * Confirm and delete the current note
+       */
+      confirmDelete() {
+        if (!this.currentNote && !this.isNewNote) return;
+        
+        const noteTitle = this.isNewNote ? 'this new note' : `"${this.titleInput.value || 'Untitled'}"`;
+        
+        if (confirm(`Are you sure you want to delete ${noteTitle}? This action cannot be undone.`)) {
+          this.deleteNote();
+        }
+      }
+
+      /**
+       * Delete the current note
+       */
+      deleteNote() {
+        if (this.currentNote && !this.isNewNote) {
+          const noteId = this.currentNote.id;
+          this.storage.deleteNote(noteId);
+          
+          // Refresh notes list
+          if (this.notesList) {
+            this.notesList.refresh();
+            this.notesList.clearSelection();
+          }
+          
+          console.log('Note deleted:', noteId);
+        }
+        
+        this.showEmptyState();
+      }
+
+      /**
+       * Toggle preview mode
+       */
+      togglePreview() {
+        this.isPreviewMode = !this.isPreviewMode;
+        
+        if (this.isPreviewMode) {
+          // Show preview
+          const markdown = this.contentInput.value;
+          this.contentDisplay.innerHTML = parseMarkdown(markdown);
+          this.contentDisplay.style.display = 'block';
+          this.contentInput.style.display = 'none';
+        } else {
+          // Show editor
+          this.contentDisplay.style.display = 'none';
+          this.contentInput.style.display = 'block';
+        }
+        
+        this.updatePreviewButton();
+      }
+
+      /**
+       * Update preview button text
+       */
+      updatePreviewButton() {
+        if (this.isPreviewMode) {
+          this.previewBtn.innerHTML = '<span aria-hidden="true">✏️</span><span>Edit</span>';
+          this.previewBtn.setAttribute('aria-label', 'Switch to edit mode');
+        } else {
+          this.previewBtn.innerHTML = '<span aria-hidden="true">👁</span><span>Preview</span>';
+          this.previewBtn.setAttribute('aria-label', 'Preview markdown');
+        }
+      }
+    }
+
+    // Initialize the editor
+    const editor = new NoteEditor({
+      form: document.getElementById('editor-form'),
+      emptyState: document.getElementById('editor-empty'),
+      titleInput: document.getElementById('note-title'),
+      contentInput: document.getElementById('note-content'),
+      saveBtn: document.getElementById('btn-save'),
+      deleteBtn: document.getElementById('btn-delete'),
+      previewBtn: document.getElementById('btn-preview'),
+      contentDisplay: null, // Will be created dynamically
+      storage: storage,
+      notesList: notesList
+    });
+
+    // Create preview display element
+    const previewDisplay = document.createElement('div');
+    previewDisplay.id = 'note-preview';
+    previewDisplay.className = 'form-input';
+    previewDisplay.style.cssText = 'min-height: 300px; display: none; overflow-y: auto; white-space: pre-wrap;';
+    previewDisplay.setAttribute('aria-label', 'Note preview');
+    
+    // Insert preview display after content textarea
+    const contentTextarea = document.getElementById('note-content');
+    contentTextarea.parentNode.insertBefore(previewDisplay, contentTextarea.nextSibling);
+    
+    // Update editor with preview display
+    editor.contentDisplay = previewDisplay;
+
+    // Wire up "New Note" button
+    document.getElementById('btn-new-note').addEventListener('click', () => {
+      if (editor.isDirty()) {
+        if (confirm('You have unsaved changes. Discard them?')) {
+          editor.createNewNote();
+        }
+      } else {
+        editor.createNewNote();
+      }
+    });
+
+    // Export for app use
+    window.NotesApp.editor = editor;
+
+    /**
+     * SearchManager - Handles search input with debouncing
+     */
+    class SearchManager {
+      /**
+       * @param {Object} options - Configuration options
+       * @param {HTMLInputElement} options.input - Search input element
+       * @param {NotesList} options.notesList - Notes list instance
+       * @param {number} options.debounceMs - Debounce delay in milliseconds
+       */
+      constructor(options) {
+        this.input = options.input;
+        this.notesList = options.notesList;
+        this.debounceMs = options.debounceMs || 300;
+        this.debounceTimer = null;
+        this.currentQuery = '';
+        
+        this.init();
+      }
+
+      /**
+       * Initialize search functionality
+       */
+      init() {
+        this.input.addEventListener('input', (e) => {
+          this.handleInput(e.target.value);
+        });
+        
+        // Handle clear (X button in search inputs)
+        this.input.addEventListener('search', (e) => {
+          this.handleInput(e.target.value);
+        });
+        
+        // Escape key to clear search
+        this.input.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && this.currentQuery) {
+            this.clearSearch();
+          }
+        });
+      }
+
+      /**
+       * Handle input with debouncing
+       * @param {string} value - Input value
+       */
+      handleInput(value) {
+        // Clear existing timer
+        if (this.debounceTimer) {
+          clearTimeout(this.debounceTimer);
+        }
+        
+        // Debounce the search
+        this.debounceTimer = setTimeout(() => {
+          this.performSearch(value);
+        }, this.debounceMs);
+      }
+
+      /**
+       * Perform the search
+       * @param {string} query - Search query
+       */
+      performSearch(query) {
+        this.currentQuery = query;
+        this.notesList.setSearch(query);
+      }
+
+      /**
+       * Clear the search
+       */
+      clearSearch() {
+        this.input.value = '';
+        this.currentQuery = '';
+        this.notesList.setSearch('');
+        this.input.focus();
+      }
+
+      /**
+       * Get current search query
+       * @returns {string}
+       */
+      getQuery() {
+        return this.currentQuery;
+      }
+
+      /**
+       * Check if currently searching
+       * @returns {boolean}
+       */
+      isSearching() {
+        return this.currentQuery.length > 0;
+      }
+    }
+
+    // Initialize search manager
+    const searchInput = document.getElementById('search-input');
+    const searchManager = new SearchManager({
+      input: searchInput,
+      notesList: notesList,
+      debounceMs: 250
+    });
+
+    // Export for app use
+    window.NotesApp.searchManager = searchManager;
+
+    /**
+     * ThemeManager - Handles dark/light theme toggle with persistence
+     */
+    class ThemeManager {
+      /**
+       * @param {Object} options - Configuration options
+       * @param {HTMLButtonElement} options.toggleButton - Theme toggle button
+       * @param {HTMLElement} options.iconSun - Sun icon element
+       * @param {HTMLElement} options.iconMoon - Moon icon element
+       */
+      constructor(options) {
+        this.toggleButton = options.toggleButton;
+        this.iconSun = options.iconSun;
+        this.iconMoon = options.iconMoon;
+        this.storageKey = 'notes-app-theme';
+        this.currentTheme = 'light';
+        
+        this.init();
+      }
+
+      /**
+       * Initialize theme management
+       */
+      init() {
+        // Load saved theme or default to light
+        this.currentTheme = this.loadTheme();
+        this.applyTheme();
+        
+        // Wire up toggle button
+        this.toggleButton.addEventListener('click', () => {
+          this.toggleTheme();
+        });
+      }
+
+      /**
+       * Load theme from localStorage
+       * @returns {string} Theme name ('light' or 'dark')
+       */
+      loadTheme() {
+        try {
+          const saved = localStorage.getItem(this.storageKey);
+          if (saved === 'dark' || saved === 'light') {
+            return saved;
+          }
+        } catch (e) {
+          console.warn('Could not load theme preference:', e);
+        }
+        return 'light';
+      }
+
+      /**
+       * Save theme to localStorage
+       * @param {string} theme - Theme name
+       */
+      saveTheme(theme) {
+        try {
+          localStorage.setItem(this.storageKey, theme);
+        } catch (e) {
+          console.warn('Could not save theme preference:', e);
+        }
+      }
+
+      /**
+       * Apply theme to the document
+       */
+      applyTheme() {
+        if (this.currentTheme === 'dark') {
+          document.documentElement.setAttribute('data-theme', 'dark');
+          this.iconSun.style.display = 'none';
+          this.iconMoon.style.display = 'block';
+          this.toggleButton.setAttribute('aria-label', 'Switch to light mode');
+          this.toggleButton.setAttribute('title', 'Switch to light mode');
+        } else {
+          document.documentElement.removeAttribute('data-theme');
+          this.iconSun.style.display = 'block';
+          this.iconMoon.style.display = 'none';
+          this.toggleButton.setAttribute('aria-label', 'Switch to dark mode');
+          this.toggleButton.setAttribute('title', 'Switch to dark mode');
+        }
+      }
+
+      /**
+       * Toggle between light and dark themes
+       */
+      toggleTheme() {
+        this.currentTheme = this.currentTheme === 'light' ? 'dark' : 'light';
+        this.saveTheme(this.currentTheme);
+        this.applyTheme();
+      }
+
+      /**
+       * Set a specific theme
+       * @param {string} theme - Theme name ('light' or 'dark')
+       */
+      setTheme(theme) {
+        if (theme !== 'light' && theme !== 'dark') {
+          console.warn('Invalid theme:', theme);
+          return;
+        }
+        this.currentTheme = theme;
+        this.saveTheme(this.currentTheme);
+        this.applyTheme();
+      }
+
+      /**
+       * Get current theme
+       * @returns {string} Current theme name
+       */
+      getTheme() {
+        return this.currentTheme;
+      }
+
+      /**
+       * Check if dark mode is active
+       * @returns {boolean}
+       */
+      isDark() {
+        return this.currentTheme === 'dark';
+      }
+    }
+
+    // Initialize theme manager
+    const themeToggleBtn = document.getElementById('btn-toggle-theme');
+    const iconSun = document.getElementById('icon-sun');
+    const iconMoon = document.getElementById('icon-moon');
+    
+    const themeManager = new ThemeManager({
+      toggleButton: themeToggleBtn,
+      iconSun: iconSun,
+      iconMoon: iconMoon
+    });
+
+    // Export for app use
+    window.NotesApp.themeManager = themeManager;
+
+    /**
+     * ImportExportManager - Handles JSON import/export functionality
+     */
+    class ImportExportManager {
+      /**
+       * @param {Object} options - Configuration options
+       * @param {HTMLButtonElement} options.exportButton - Export button element
+       * @param {HTMLButtonElement} options.importButton - Import button element
+       * @param {HTMLInputElement} options.fileInput - File input element
+       * @param {NotesStorage} options.storage - Storage instance
+       * @param {NotesList} options.notesList - Notes list instance
+       */
+      constructor(options) {
+        this.exportButton = options.exportButton;
+        this.importButton = options.importButton;
+        this.fileInput = options.fileInput;
+        this.storage = options.storage;
+        this.notesList = options.notesList;
+        
+        this.init();
+      }
+
+      /**
+       * Initialize import/export functionality
+       */
+      init() {
+        // Wire up export button
+        this.exportButton.addEventListener('click', () => {
+          this.exportNotes();
+        });
+        
+        // Wire up import button
+        this.importButton.addEventListener('click', () => {
+          this.triggerImport();
+        });
+        
+        // Handle file selection
+        this.fileInput.addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          if (file) {
+            this.importFromFile(file);
+          }
+          // Reset file input so same file can be selected again
+          this.fileInput.value = '';
+        });
+      }
+
+      /**
+       * Export notes to a JSON file
+       */
+      exportNotes() {
+        const notes = this.storage.getAllNotes();
+        
+        if (notes.length === 0) {
+          alert('No notes to export.');
+          return;
+        }
+        
+        const exportData = {
+          version: '1.0',
+          exportedAt: new Date().toISOString(),
+          noteCount: notes.length,
+          notes: notes.map(note => note.toJSON())
+        };
+        
+        const jsonString = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        // Generate filename with date
+        const date = new Date().toISOString().split('T')[0];
+        const filename = `notes-export-${date}.json`;
+        
+        // Create download link and trigger
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        console.log(`Exported ${notes.length} notes to ${filename}`);
+      }
+
+      /**
+       * Trigger the file picker for import
+       */
+      triggerImport() {
+        this.fileInput.click();
+      }
+
+      /**
+       * Import notes from a JSON file
+       * @param {File} file - File object from input
+       */
+      importFromFile(file) {
+        // Validate file type
+        if (!file.name.endsWith('.json') && file.type !== 'application/json') {
+          alert('Invalid file type. Please select a JSON file.');
+          return;
+        }
+        
+        const reader = new FileReader();
+        
+        reader.onload = (e) => {
+          try {
+            const content = e.target.result;
+            this.processImport(content);
+          } catch (error) {
+            alert('Failed to read file: ' + error.message);
+          }
+        };
+        
+        reader.onerror = () => {
+          alert('Failed to read file.');
+        };
+        
+        reader.readAsText(file);
+      }
+
+      /**
+       * Process the import with merge/replace dialog
+       * @param {string} content - JSON string content
+       */
+      processImport(content) {
+        try {
+          const data = JSON.parse(content);
+          
+          // Validate structure
+          let notesToImport = [];
+          
+          if (Array.isArray(data)) {
+            // Simple array format
+            notesToImport = data;
+          } else if (data.notes && Array.isArray(data.notes)) {
+            // Export format with metadata
+            notesToImport = data.notes;
+          } else {
+            throw new Error('Invalid JSON structure. Expected an array of notes or an object with a "notes" array.');
+          }
+          
+          // Validate each note
+          const validNotes = [];
+          for (const note of notesToImport) {
+            if (!note.id || !note.title) {
+              console.warn('Skipping invalid note:', note);
+              continue;
+            }
+            validNotes.push(note);
+          }
+          
+          if (validNotes.length === 0) {
+            alert('No valid notes found in the file.');
+            return;
+          }
+          
+          // Ask user about merge vs replace
+          const existingCount = this.storage.getAllNotes().length;
+          let merge = true;
+          
+          if (existingCount > 0) {
+            const choice = confirm(
+              `You have ${existingCount} existing note${existingCount > 1 ? 's' : ''}.\n\n` +
+              `Click OK to merge (add imported notes without deleting existing).\n` +
+              `Click Cancel to replace all existing notes with imported ones.`
+            );
+            merge = choice; // OK = true (merge), Cancel = false (replace)
+          }
+          
+          // Perform the import
+          const result = this.storage.importNotes(JSON.stringify(validNotes), merge);
+          
+          if (result.success) {
+            // Refresh notes list
+            if (this.notesList) {
+              this.notesList.refresh();
+            }
+            
+            alert(`Successfully imported ${result.count} note${result.count > 1 ? 's' : ''}.`);
+            console.log(`Imported ${result.count} notes (merge: ${merge})`);
+          } else {
+            alert('Import failed: ' + result.error);
+          }
+        } catch (error) {
+          alert('Failed to parse JSON: ' + error.message);
+        }
+      }
+    }
+
+    // Initialize import/export manager
+    const importExportManager = new ImportExportManager({
+      exportButton: document.getElementById('btn-export'),
+      importButton: document.getElementById('btn-import'),
+      fileInput: document.getElementById('file-import'),
+      storage: storage,
+      notesList: notesList
+    });
+
+    // Export for app use
+    window.NotesApp.importExportManager = importExportManager;
+
+    /**
+     * MobileMenuManager - Handles mobile sidebar menu toggle
+     */
+    class MobileMenuManager {
+      /**
+       * @param {Object} options - Configuration options
+       * @param {HTMLElement} options.sidebar - Sidebar element
+       * @param {HTMLButtonElement} options.toggleButton - Toggle button element
+       * @param {HTMLElement} options.notesList - Notes list element
+       */
+      constructor(options) {
+        this.sidebar = options.sidebar;
+        this.toggleButton = options.toggleButton;
+        this.notesList = options.notesList;
+        this.isExpanded = true;
+        
+        this.init();
+      }
+
+      /**
+       * Initialize mobile menu functionality
+       */
+      init() {
+        // Check if we're on mobile
+        this.updateState();
+        
+        // Listen for resize
+        window.addEventListener('resize', () => {
+          this.updateState();
+        });
+        
+        // Wire up toggle button
+        this.toggleButton.addEventListener('click', () => {
+          this.toggle();
+        });
+      }
+
+      /**
+       * Update state based on screen size
+       */
+      updateState() {
+        const isMobile = window.innerWidth <= 768;
+        
+        if (isMobile) {
+          // Collapse on mobile by default
+          if (this.isExpanded) {
+            this.collapse();
+          }
+          this.toggleButton.style.display = 'flex';
+        } else {
+          // Always show on desktop
+          this.expand();
+          this.toggleButton.style.display = 'none';
+        }
+      }
+
+      /**
+       * Toggle the menu
+       */
+      toggle() {
+        if (this.isExpanded) {
+          this.collapse();
+        } else {
+          this.expand();
+        }
+      }
+
+      /**
+       * Expand the notes list
+       */
+      expand() {
+        this.isExpanded = true;
+        this.notesList.classList.add('expanded');
+        this.toggleButton.setAttribute('aria-expanded', 'true');
+      }
+
+      /**
+       * Collapse the notes list
+       */
+      collapse() {
+        this.isExpanded = false;
+        this.notesList.classList.remove('expanded');
+        this.toggleButton.setAttribute('aria-expanded', 'false');
+      }
+
+      /**
+       * Check if menu is expanded
+       * @returns {boolean}
+       */
+      isMenuExpanded() {
+        return this.isExpanded;
+      }
+    }
+
+    // Initialize mobile menu manager
+    const sidebar = document.getElementById('sidebar');
+    const sidebarToggle = document.getElementById('sidebar-menu-toggle');
+    const notesListEl = document.getElementById('notes-list');
+    
+    const mobileMenuManager = new MobileMenuManager({
+      sidebar: sidebar,
+      toggleButton: sidebarToggle,
+      notesList: notesListEl
+    });
+
+    // Export for app use
+    window.NotesApp.mobileMenuManager = mobileMenuManager;
+
+    console.log('Notes App initialized with mobile menu');
+  </script>
+</body>
+</html>
